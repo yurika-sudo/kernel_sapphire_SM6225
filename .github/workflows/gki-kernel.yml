@@ -190,8 +190,7 @@ jobs:
           
           # Common patches
           apply_patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-gki-fixup.patch"
-          apply_patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-scripts-sign-builds.patch"
-
+          
       - name: Clean git tree
         working-directory: common
         run: |
@@ -214,8 +213,7 @@ jobs:
           BUILD_TIME=$(date +'%Y-%m-%d')
           
           # Add local version
-          echo "CONFIG_LOCALVERSION=\"-Wild-KSU-${BUILD_TIME}\"" >> "$CONFIG_FILE"
-          echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
+          echo "CONFIG_LOCALVERSION_AUTO=y" >> "$CONFIG_FILE"
           
           # Add KSU and SUSFS configs
           cat >> "$CONFIG_FILE" << 'EOF'
@@ -239,14 +237,14 @@ jobs:
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
           CONFIG_KSU_SUSFS_SUS_SU=y
-          EOF
-          
-          # Add performance and optimization configs
-          cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KALLSYMS=y
           CONFIG_KALLSYMS_ALL=y
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
+          EOF
+          
+          # Add performance and optimization configs
+          cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
           CONFIG_F2FS_FS=y
           CONFIG_F2FS_FS_SECURITY=y
@@ -275,8 +273,7 @@ jobs:
           CONFIG_DEBUG_FS=n
           CONFIG_DEBUG_BUGVERBOSE=n
           CONFIG_DEBUG_LIST=n
-          CONFIG_KPROBES=n
-          CONFIG_TRACEPOINTS=n
+          CONFIG_TRACING=n
           CONFIG_FTRACE=n
           CONFIG_FUNCTION_TRACER=n
           CONFIG_STACK_TRACER=n
@@ -305,8 +302,7 @@ jobs:
           BUILD_TIME=$(date +'%Y-%m-%d')
           
           # Add local version
-          echo "CONFIG_LOCALVERSION=\"-NoKSU-${BUILD_TIME}\"" >> "$CONFIG_FILE"
-          echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
+          echo "CONFIG_LOCALVERSION_AUTO=y" >> "$CONFIG_FILE"
           
           # Add performance and optimization configs (same as KSU but without KSU stuff)
           cat >> "$CONFIG_FILE" << 'EOF'
@@ -344,6 +340,7 @@ jobs:
           CONFIG_DEBUG_LIST=n
           CONFIG_KPROBES=n
           CONFIG_TRACEPOINTS=n
+          CONFIG_TRACING=n
           CONFIG_FTRACE=n
           CONFIG_FUNCTION_TRACER=n
           CONFIG_STACK_TRACER=n
