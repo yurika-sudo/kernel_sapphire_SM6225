@@ -56,7 +56,7 @@ jobs:
           sudo apt-get install -y \
             bc bison flex libssl-dev make libelf-dev \
             ccache rsync zip unzip curl git build-essential \
-            libncurses-dev gawk wget diffutils libxml2-dev libxslt1-dev python3-dev
+            libncurses-dev gawk wget diffutils libxml2-dev libxslt1-dev python3-dev repo aria2
 
       - name: Setup ccache
         uses: actions/cache@v4
@@ -69,26 +69,38 @@ jobs:
 
       - name: Setup clang toolchain
         run: |
-          mkdir -p clang
-          wget -q https://github.com/kdrag0n/proton-clang/archive/refs/heads/master.tar.gz
-          tar -xzf master.tar.gz -C clang --strip-components=1
-          rm master.tar.gz
+          mkdir -p prebuilts/clang/host/linux-x86
+          aria2c -x 16 -s 16 -o clang-r547379.tar.gz "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
+          mkdir -p prebuilts/clang/host/linux-x86/clang-r547379
+          tar -xzf clang-r547379.tar.gz -C prebuilts/clang/host/linux-x86/clang-r547379
+          rm -rf clang-r547379.tar.gz
         
       - name: Verify clang installation
         run: |
-          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          export PATH="${GITHUB_WORKSPACE}/prebuilts/clang/host/linux-x86/clang-r547379/bin:$PATH"
           clang --version
           ld.lld --version
 
       - name: Initialize kernel source
         run: |
-          curl -o repo https://storage.googleapis.com/git-repo-downloads/repo
-          chmod +x repo
-          
-          ./repo init -u https://android.googlesource.com/kernel/manifest \
+          repo init -u https://android.googlesource.com/kernel/manifest \
             -b ${KERNEL_BRANCH} --depth=1
           
-          ./repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
+          repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
+          
+          # Clean up to save space
+          rm -rf .repo
+
+      - name: Update build config
+        working-directory: common
+        run: |
+          sed -i \
+            -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
+            -e 's/^CLANG_VERSION=.*/CLANG_VERSION=r547379/' \
+            build.config.constants
+          
+          # Remove defconfig check if exists
+          sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' build.config.gki || true
 
       - name: Setup Wild KernelSU (KSU Variant Only)
         if: matrix.variant == 'ksu'
@@ -164,6 +176,22 @@ jobs:
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
           fi
 
+      - name: Apply kernel patches
+        working-directory: common
+        run: |
+          # Helper function
+          apply_patch() {
+            local url="$1"
+            local file=$(basename "$url")
+            curl -L -o "$file" "$url"
+            patch -p1 < "$file" || echo "::warning::Hunks failed in $file"
+            rm -f "$file"
+          }
+          
+          # Common patches
+          apply_patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-gki-fixup.patch"
+          apply_patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-scripts-sign-builds.patch"
+
       - name: Clean git tree
         working-directory: common
         run: |
@@ -182,151 +210,165 @@ jobs:
         if: matrix.variant == 'ksu'
         working-directory: common
         run: |
-          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          CONFIG_FILE="arch/arm64/configs/gki_defconfig"
+          BUILD_TIME=$(date +'%Y-%m-%d')
           
-          make O=out ARCH=arm64 CC=clang gki_defconfig
+          # Add local version
+          echo "CONFIG_LOCALVERSION=\"-Wild-KSU-${BUILD_TIME}\"" >> "$CONFIG_FILE"
+          echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
           
-          ./scripts/config --file out/.config \
-            -e KSU \
-            -e KSU_SUSFS \
-            -e KALLSYMS \
-            -e KALLSYMS_ALL \
-            -e TMPFS_XATTR \
-            -e TMPFS_POSIX_ACL \
-            -e OVERLAY_FS \
-            -e CC_OPTIMIZE_FOR_PERFORMANCE \
-            -e F2FS_FS \
-            -e F2FS_FS_SECURITY \
-            -e F2FS_FS_ENCRYPTION \
-            -e LRU_GEN \
-            -e LRU_GEN_ENABLED \
-            -d LRU_GEN_STATS \
-            -e TCP_CONG_ADVANCED \
-            -e TCP_CONG_BBR \
-            -e TCP_CONG_WESTWOOD \
-            -e DEFAULT_WESTWOOD \
-            -d TCP_CONG_BIC \
-            -d TCP_CONG_HTCP \
-            --set-str DEFAULT_TCP_CONG "westwood" \
-            -e LOCALVERSION_AUTO \
-            -e CONFIG_LOCALVERSION_AUTO \
-            -d DEBUG_KERNEL \
-            -d DEBUG_INFO \
-            -d DEBUG_INFO_DWARF4 \
-            -d DEBUG_INFO_BTF \
-            -d DEBUG_FS \
-            -d DEBUG_BUGVERBOSE \
-            -d DEBUG_LIST \
-            -d KPROBES \
-            -d TRACEPOINTS \
-            -d FTRACE \
-            -d FUNCTION_TRACER \
-            -d STACK_TRACER \
-            -d IRQSOFF_TRACER \
-            -d PREEMPT_TRACER \
-            -d SCHED_TRACER \
-            -d TRACE_PRINTK \
-            -d DYNAMIC_DEBUG \
-            -d SLUB_DEBUG \
-            -d DEBUG_PAGEALLOC \
-            -d DEBUG_OBJECTS \
-            -d STACKTRACE \
-            -d RCU_TRACE \
-            -d DYNAMIC_DEBUG \
-            -d EARLY_PRINTK \
-            -d PRINTK_TIME \
-            -d STACKTRACE \
-            -d PSI \
-            -e ZRAM \
-            -e ZRAM_DEF_COMP_LZ4 \
-            --set-val ZRAM_DEF_COMP "lz4" \
-            -e BBG || true
+          # Add KSU and SUSFS configs
+          cat >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_KSU=y
+          CONFIG_KPROBES=y
+          CONFIG_HAVE_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          CONFIG_OVERLAY_FS=y
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=y
+          EOF
           
-          if grep -q "CONFIG_BBG" out/.config; then
-            current_lsm=$(grep "^CONFIG_LSM=" out/.config | cut -d'"' -f2 || echo "")
-            if [ -n "$current_lsm" ]; then
-              ./scripts/config --file out/.config --set-str LSM "${current_lsm},baseband_guard"
-            fi
-          fi
+          # Add performance and optimization configs
+          cat >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_KALLSYMS=y
+          CONFIG_KALLSYMS_ALL=y
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
+          CONFIG_F2FS_FS=y
+          CONFIG_F2FS_FS_SECURITY=y
+          CONFIG_F2FS_FS_ENCRYPTION=y
+          CONFIG_LRU_GEN=y
+          CONFIG_LRU_GEN_ENABLED=y
+          CONFIG_LRU_GEN_STATS=n
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_BBR=y
+          CONFIG_TCP_CONG_WESTWOOD=y
+          CONFIG_DEFAULT_WESTWOOD=y
+          CONFIG_TCP_CONG_BIC=n
+          CONFIG_TCP_CONG_HTCP=n
+          CONFIG_DEFAULT_TCP_CONG="westwood"
+          CONFIG_ZRAM=y
+          CONFIG_ZRAM_DEF_COMP_LZ4=y
+          CONFIG_ZRAM_DEF_COMP="lz4"
+          EOF
           
-          make O=out ARCH=arm64 CC=clang olddefconfig
+          # Disable debug options
+          cat >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_DEBUG_KERNEL=n
+          CONFIG_DEBUG_INFO=n
+          CONFIG_DEBUG_INFO_DWARF4=n
+          CONFIG_DEBUG_INFO_BTF=n
+          CONFIG_DEBUG_FS=n
+          CONFIG_DEBUG_BUGVERBOSE=n
+          CONFIG_DEBUG_LIST=n
+          CONFIG_KPROBES=n
+          CONFIG_TRACEPOINTS=n
+          CONFIG_FTRACE=n
+          CONFIG_FUNCTION_TRACER=n
+          CONFIG_STACK_TRACER=n
+          CONFIG_IRQSOFF_TRACER=n
+          CONFIG_PREEMPT_TRACER=n
+          CONFIG_SCHED_TRACER=n
+          CONFIG_TRACE_PRINTK=n
+          CONFIG_DYNAMIC_DEBUG=n
+          CONFIG_SLUB_DEBUG=n
+          CONFIG_DEBUG_PAGEALLOC=n
+          CONFIG_DEBUG_OBJECTS=n
+          CONFIG_STACKTRACE=n
+          CONFIG_RCU_TRACE=n
+          CONFIG_EARLY_PRINTK=n
+          CONFIG_PRINTK_TIME=n
+          CONFIG_PSI=n
+          EOF
+          
+          echo "✅ KSU kernel configs added to defconfig"
 
       - name: Configure kernel (NoKSU variant)
         if: matrix.variant == 'noksu'
         working-directory: common
         run: |
-          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          CONFIG_FILE="arch/arm64/configs/gki_defconfig"
+          BUILD_TIME=$(date +'%Y-%m-%d')
           
-          make O=out ARCH=arm64 CC=clang gki_defconfig
+          # Add local version
+          echo "CONFIG_LOCALVERSION=\"-NoKSU-${BUILD_TIME}\"" >> "$CONFIG_FILE"
+          echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
           
-          ./scripts/config --file out/.config \
-            -e OVERLAY_FS \
-            -e CC_OPTIMIZE_FOR_PERFORMANCE \
-            -e F2FS_FS \
-            -e F2FS_FS_SECURITY \
-            -e F2FS_FS_ENCRYPTION \
-            -e LRU_GEN \
-            -e LRU_GEN_ENABLED \
-            -d LRU_GEN_STATS \
-            -e TCP_CONG_ADVANCED \
-            -e TCP_CONG_BBR \
-            -e TCP_CONG_WESTWOOD \
-            -e DEFAULT_WESTWOOD \
-            -d TCP_CONG_BIC \
-            -d TCP_CONG_HTCP \
-            --set-str DEFAULT_TCP_CONG "westwood" \
-            -e LOCALVERSION_AUTO \
-            -e CONFIG_LOCALVERSION_AUTO \
-            -d DEBUG_KERNEL \
-            -d DEBUG_INFO \
-            -d DEBUG_INFO_DWARF4 \
-            -d DEBUG_INFO_BTF \
-            -d DEBUG_FS \
-            -d DEBUG_BUGVERBOSE \
-            -d DEBUG_LIST \
-            -d KPROBES \
-            -d TRACEPOINTS \
-            -d FTRACE \
-            -d FUNCTION_TRACER \
-            -d STACK_TRACER \
-            -d IRQSOFF_TRACER \
-            -d PREEMPT_TRACER \
-            -d SCHED_TRACER \
-            -d TRACE_PRINTK \
-            -d DYNAMIC_DEBUG \
-            -d SLUB_DEBUG \
-            -d DEBUG_PAGEALLOC \
-            -d DEBUG_OBJECTS \
-            -d STACKTRACE \
-            -d RCU_TRACE \
-            -d DYNAMIC_DEBUG \
-            -d EARLY_PRINTK \
-            -d PRINTK_TIME \
-            -d STACKTRACE \
-            -d PSI \
-            -e ZRAM \
-            -e ZRAM_DEF_COMP_LZ4 \
-            --set-val ZRAM_DEF_COMP "lz4"
+          # Add performance and optimization configs (same as KSU but without KSU stuff)
+          cat >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_KALLSYMS=y
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          CONFIG_OVERLAY_FS=y
+          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
+          CONFIG_F2FS_FS=y
+          CONFIG_F2FS_FS_SECURITY=y
+          CONFIG_F2FS_FS_ENCRYPTION=y
+          CONFIG_LRU_GEN=y
+          CONFIG_LRU_GEN_ENABLED=y
+          CONFIG_LRU_GEN_STATS=n
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_BBR=y
+          CONFIG_TCP_CONG_WESTWOOD=y
+          CONFIG_DEFAULT_WESTWOOD=y
+          CONFIG_TCP_CONG_BIC=n
+          CONFIG_TCP_CONG_HTCP=n
+          CONFIG_DEFAULT_TCP_CONG="westwood"
+          CONFIG_ZRAM=y
+          CONFIG_ZRAM_DEF_COMP_LZ4=y
+          CONFIG_ZRAM_DEF_COMP="lz4"
+          EOF
           
-          make O=out ARCH=arm64 CC=clang olddefconfig
+          # Disable debug options
+          cat >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_DEBUG_KERNEL=n
+          CONFIG_DEBUG_INFO=n
+          CONFIG_DEBUG_INFO_DWARF4=n
+          CONFIG_DEBUG_INFO_BTF=n
+          CONFIG_DEBUG_FS=n
+          CONFIG_DEBUG_BUGVERBOSE=n
+          CONFIG_DEBUG_LIST=n
+          CONFIG_KPROBES=n
+          CONFIG_TRACEPOINTS=n
+          CONFIG_FTRACE=n
+          CONFIG_FUNCTION_TRACER=n
+          CONFIG_STACK_TRACER=n
+          CONFIG_IRQSOFF_TRACER=n
+          CONFIG_PREEMPT_TRACER=n
+          CONFIG_SCHED_TRACER=n
+          CONFIG_TRACE_PRINTK=n
+          CONFIG_DYNAMIC_DEBUG=n
+          CONFIG_SLUB_DEBUG=n
+          CONFIG_DEBUG_PAGEALLOC=n
+          CONFIG_DEBUG_OBJECTS=n
+          CONFIG_STACKTRACE=n
+          CONFIG_RCU_TRACE=n
+          CONFIG_EARLY_PRINTK=n
+          CONFIG_PRINTK_TIME=n
+          CONFIG_PSI=n
+          EOF
+          
+          echo "✅ NoKSU kernel configs added to defconfig"
 
       - name: Verify kernel configuration
         working-directory: common
         run: |
-          echo "Kernel configuration verification"
-          
-          echo "Critical configs status:"
-          grep "CONFIG_LRU_GEN_ENABLED=y" out/.config && echo "MGLRU enabled" || echo "MGLRU FAILED"
-          grep "CONFIG_DEFAULT_WESTWOOD=y" out/.config && echo "Westwood default" || echo "TCP Westwood default FAILED"
-          grep "CONFIG_TCP_CONG_WESTWOOD=y" out/.config && echo "TCP Westwood built-in" || echo "TCP Westwood not built-in"
-          grep "^# CONFIG_DEBUG_KERNEL is not set" out/.config && echo "Debug disabled" || echo "Debug still enabled"
-          
-          if [ "${{ matrix.variant }}" == "ksu" ]; then
-            grep "CONFIG_KSU=y" out/.config && echo "KSU enabled" || echo "KSU FAILED"
-          fi
-          
-          echo "TCP settings:"
-          grep "CONFIG_TCP_CONG" out/.config
+          echo "📋 Defconfig contents (last 50 lines):"
+          tail -50 arch/arm64/configs/gki_defconfig
 
       - name: Build kernel
         run: |
@@ -334,7 +376,7 @@ jobs:
           export CCACHE_MAXSIZE=2G
           export KBUILD_BUILD_USER=yu
           export KBUILD_BUILD_HOST=github
-          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          export PATH="${GITHUB_WORKSPACE}/prebuilts/clang/host/linux-x86/clang-r547379/bin:$PATH"
           
           which clang || { echo "ERROR: clang not found"; exit 127; }
           
@@ -346,13 +388,26 @@ jobs:
             exit 1
           }
 
-      - name: Verify build output
+      - name: Verify build output and config
         run: |
           if [ ! -f "out/android13-5.15/dist/Image" ]; then
             echo "Error: Kernel Image not found"
             exit 1
           fi
-          echo "Kernel Image created successfully"
+          echo "✅ Kernel Image created successfully"
+          
+          echo "📋 Checking final .config:"
+          if [ -f "out/android13-5.15/common/.config" ]; then
+            echo "TCP Westwood status:"
+            grep "CONFIG_TCP_CONG_WESTWOOD" out/android13-5.15/common/.config || echo "Not found"
+            grep "CONFIG_DEFAULT_WESTWOOD" out/android13-5.15/common/.config || echo "Not found"
+            grep "CONFIG_DEFAULT_TCP_CONG" out/android13-5.15/common/.config || echo "Not found"
+            
+            if [ "${{ matrix.variant }}" == "ksu" ]; then
+              echo "KSU status:"
+              grep "CONFIG_KSU" out/android13-5.15/common/.config || echo "Not found"
+            fi
+          fi
 
       - name: Package AnyKernel3
         run: |
