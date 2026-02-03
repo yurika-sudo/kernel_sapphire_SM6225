@@ -101,10 +101,7 @@ jobs:
           
           # Remove defconfig check if exists
           sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' build.config.gki || true
-          # Skip ABI compatibility check (custom kernel config)
-          echo 'SKIP_ABI_CHECKS=1' >> build.config.gki.aarch64
-          echo 'KMI_STRICT_MODE_OBJECTS=""' >> build.config.gki.aarch64
-
+          
       - name: Setup Wild KernelSU (KSU Variant Only)
         if: matrix.variant == 'ksu'
         working-directory: common
@@ -371,28 +368,30 @@ jobs:
           tail -50 arch/arm64/configs/gki_defconfig
 
       - name: Build kernel
+        working-directory: ${{ github.workspace }}
+        env:
+         SKIP_ABI_CHECKS: "1"
+         KMI_STRICT_MODE_OBJECTS: ""
+         CCACHE_COMPRESS: "1"
+         CCACHE_MAXSIZE: "2G"
+         KBUILD_BUILD_USER: "yu"
+         KBUILD_BUILD_HOST: "github"
         run: |
-          export CCACHE_COMPRESS=1
-          export CCACHE_MAXSIZE=2G
-          export KBUILD_BUILD_USER=yu
-          export KBUILD_BUILD_HOST=github
-          export PATH="${GITHUB_WORKSPACE}/prebuilts/clang/host/linux-x86/clang-r547379/bin:$PATH"
+         export PATH="${GITHUB_WORKSPACE}/prebuilts/clang/host/linux-x86/clang-r547379/bin:$PATH"
     
-          # CRITICAL: Skip ABI checks via environment
-          export SKIP_ABI_CHECKS=1
-          export KMI_STRICT_MODE_OBJECTS=""
-          export ABI_DEFINITION=
+         which clang || { echo "ERROR: clang not found"; exit 127; }
     
-          which clang || { echo "ERROR: clang not found"; exit 127; }
+         # Verify env vars
+         echo "SKIP_ABI_CHECKS=${SKIP_ABI_CHECKS}"
+         echo "KMI_STRICT_MODE_OBJECTS=${KMI_STRICT_MODE_OBJECTS}"
     
-          BUILD_CONFIG=common/build.config.gki.aarch64 \
-          LTO=thin \
-          SKIP_MRPROPER=1 \
-          SKIP_ABI_CHECKS=1 \
-          build/build.sh -j$(nproc --all) || {
-           echo "Build failed"
-           exit 1
-          }
+         BUILD_CONFIG=common/build.config.gki.aarch64 \
+         LTO=thin \
+         SKIP_MRPROPER=1 \
+         build/build.sh -j$(nproc --all) || {
+          echo "Build failed"
+          exit 1
+         }
 
       - name: Verify build output and config
         run: |
