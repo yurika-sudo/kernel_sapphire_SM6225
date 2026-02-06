@@ -1,229 +1,127 @@
-name: Build GKI Kernel (KSU Only)
+name: Build GKI Kernel (YASK Style)
 
 on:
   workflow_dispatch:
 
-env:
-  ANDROID_VERSION: 13
-  KERNEL_VERSION: 5.15
-  KERNEL_BRANCH: common-android13-5.15-lts
-
 jobs:
   build:
-    name: "Build GKI Kernel with KSU"
+    name: "Build GKI Kernel"
     runs-on: ubuntu-latest
 
     steps:
-      - name: "Setup workspace"
+      - name: "✨ Setup workspace"
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y bc bison flex libssl-dev make libelf-dev \
             rsync zip unzip curl git build-essential libncurses-dev \
             gawk wget diffutils
 
-      - name: "Clone kernel source"
+      - name: "🌟 Clone kernel source"
         run: |
           git clone https://android.googlesource.com/kernel/common \
-            --branch android13-5.15-lts --depth=1 kernel
+            --branch android13-5.15-lts --depth=1 common
 
-      - name: "Setup clang"
-        run: |
-          mkdir -p clang
-          wget -q https://github.com/kdrag0n/proton-clang/archive/refs/heads/master.tar.gz
-          tar -xzf master.tar.gz -C clang --strip-components=1
-          rm master.tar.gz
-
-      - name: "Setup Wild-KSU"
-        working-directory: ./kernel
-        run: |
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
-          
-          if [ -d "Wild_KSU" ]; then
-            ln -sf Wild_KSU drivers/kernelsu
-            echo "✓ Wild-KSU installed"
-          else
-            echo "Error: Wild_KSU not found"
-            exit 1
-          fi
-
-      - name: "Setup SUSFS"
-        working-directory: ./kernel
-        run: |
-          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          
-          # Copy SUSFS files
-          [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ] && \
-            cp susfs4ksu/kernel_patches/fs/susfs.c fs/
-          
-          ls susfs4ksu/kernel_patches/include/linux/susfs*.h 2>/dev/null && \
-            cp susfs4ksu/kernel_patches/include/linux/susfs*.h include/linux/
-          
-          # Integrate with KSU
-          if [ -f "Wild_KSU/kernel/ksu.c" ]; then
-            grep -q "susfs.h" Wild_KSU/kernel/ksu.c || \
-              sed -i '/#include <linux\/fs.h>/a #include <linux/susfs.h>' Wild_KSU/kernel/ksu.c
-            grep -q "susfs_init" Wild_KSU/kernel/ksu.c || \
-              sed -i '/ksu_core_init();/a \\tsusfs_init();' Wild_KSU/kernel/ksu.c
-          fi
-          
-          rm -rf susfs4ksu
-          echo "✓ SUSFS integrated"
-
-      - name: "Setup Baseband Guard"
-        working-directory: ./kernel
-        run: |
-          git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
-          ln -sf ../Baseband-guard security/baseband-guard
-          
-          grep -q "baseband-guard" security/Makefile || \
-            echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
-          
-          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
-          
-          grep -q "baseband-guard/Kconfig" security/Kconfig || \
-            sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
-          
-          echo "✓ Baseband Guard installed"
-
-      - name: "Configure kernel"
-        working-directory: ./kernel
-        run: |
-          # Edit gki_defconfig directly
-          CONFIG_FILE="arch/arm64/configs/gki_defconfig"
-          
-          echo "" >> "$CONFIG_FILE"
-          echo "# KSU configs" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KPROBES=y" >> "$CONFIG_FILE"
-          echo "CONFIG_HAVE_KPROBES=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KPROBE_EVENTS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> "$CONFIG_FILE"
-          echo "CONFIG_BBG=y" >> "$CONFIG_FILE"
-          
-          echo "# Performance configs" >> "$CONFIG_FILE"
-          echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_ADVANCED=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_WESTWOOD=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG_FILE"
-          echo "CONFIG_DEFAULT_WESTWOOD=y" >> "$CONFIG_FILE"
-          echo "CONFIG_OVERLAY_FS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TMPFS_XATTR=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG_FILE"
-          
-          echo "✓ Config added to $CONFIG_FILE"
-
-      - name: "Initialize AOSP build"
+      - name: "📥 Initialize AOSP repo"
         run: |
           curl -o repo https://storage.googleapis.com/git-repo-downloads/repo
           chmod +x repo
-          
-          ./repo init -u https://android.googlesource.com/kernel/manifest \
-            -b common-android13-5.15-lts --depth=1
-          
+          ./repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15-lts --depth=1
           ./repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
-          
-          # Clean up to save space
           rm -rf .repo
-          rm -rf common
-          
-          # Move our kernel to common directory
-          mv kernel common
 
-      - name: "Build kernel"
+      - name: "🔧 Setup clang"
         run: |
-          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          mkdir -p prebuilts/clang/host/linux-x86
+          wget -q https://github.com/kdrag0n/proton-clang/archive/refs/heads/master.tar.gz -O clang.tar.gz
+          tar -xzf clang.tar.gz -C prebuilts/clang/host/linux-x86
+          mv prebuilts/clang/host/linux-x86/proton-clang-master prebuilts/clang/host/linux-x86/clang-proton
+          rm clang.tar.gz
+
+      - name: "🧩 Setup Wild-KSU"
+        working-directory: ./common
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
+          ln -sf Wild_KSU drivers/kernelsu
+
+      - name: "🧩 Setup SUSFS"
+        working-directory: ./common
+        run: |
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+          patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch || true
+          cp susfs4ksu/kernel_patches/fs/susfs.c fs/
+          cp susfs4ksu/kernel_patches/include/linux/susfs*.h include/linux/
+          sed -i '/#include <linux\/fs.h>/a #include <linux/susfs.h>' Wild_KSU/kernel/ksu.c
+          sed -i '/ksu_core_init();/a \\tsusfs_init();' Wild_KSU/kernel/ksu.c
+          rm -rf susfs4ksu
+
+      - name: "🧩 Setup Baseband Guard"
+        working-directory: ./common
+        run: |
+          git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
+          ln -sf ../Baseband-guard security/baseband-guard
+          echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
+          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
+          sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
+
+      - name: "⚙️ Configure kernel"
+        working-directory: ./common
+        run: |
+          CONFIG_FILE="arch/arm64/configs/gki_defconfig"
           
-          # Disable defconfig check
-          sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' common/build.config.gki.aarch64 2>/dev/null || true
-          
+          cat >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_KSU=y
+          CONFIG_KPROBES=y
+          CONFIG_HAVE_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=y
+          CONFIG_BBG=y
+          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_BIC=n
+          CONFIG_TCP_CONG_WESTWOOD=y
+          CONFIG_TCP_CONG_HTCP=n
+          CONFIG_TCP_CONG_BBR=y
+          CONFIG_DEFAULT_WESTWOOD=y
+          CONFIG_OVERLAY_FS=y
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          EOF
+
+      - name: "🔨 Build kernel"
+        run: |
           LTO=thin \
           BUILD_CONFIG=common/build.config.gki.aarch64 \
-          build/build.sh -j$(nproc --all) || {
-            echo "Build failed"
-            exit 1
-          }
-          
-          echo "✓ Build completed"
+          build/build.sh -j$(nproc --all)
 
-      - name: "Extract kernel version"
-        id: kernel_version
-        run: |
-          KERNEL_STRING=$(strings out/android13-5.15/dist/Image | grep "Linux version" | head -1 | cut -d' ' -f3)
-          echo "kernel_version=$KERNEL_STRING" >> $GITHUB_OUTPUT
-          echo "Kernel version: $KERNEL_STRING"
-
-      - name: "Package AnyKernel3"
+      - name: "📦 Package kernel"
         run: |
           git clone --depth=1 https://github.com/superuseryu/AnyKernel3 ak3
           cp out/android13-5.15/dist/Image ak3/
           
-          # Create anykernel.sh
-          cat > ak3/anykernel.sh << 'EOF'
-          #!/system/bin/sh
-          # AnyKernel3 script
-          
-          ## AnyKernel setup
-          block=/dev/block/by-name/boot;
-          is_slot_device=auto;
-          ramdisk_compression=auto;
-          
-          ## AnyKernel methods (DO NOT CHANGE)
-          . tools/ak3-core.sh;
-          
-          # Flash kernel
-          split_boot;
-          flash_boot;
-          ## end install
-          EOF
-          
           cd ak3
-          ZIP_NAME="Kernel-${{ steps.kernel_version.outputs.kernel_version }}-ksu.zip"
-          zip -r9 "../$ZIP_NAME" * -x .git\* -x README.md
+          zip -r9 "../GKI-Kernel-$(date +'%Y%m%d').zip" * -x .git\* -x README.md
           cd ..
-          
-          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
-      - name: "Create Release"
+      - name: "⬆️ Create Release"
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: ${{ env.ZIP_NAME }}
-          tag_name: "kernel-ksu-$(date +'%Y%m%d')"
-          name: "GKI Kernel with KSU $(date +'%Y-%m-%d')"
-          body: |
-            ## GKI Kernel with Wild KernelSU
-            
-            **Build Date:** $(date +'%Y-%m-%d')
-            **Kernel Version:** ${{ steps.kernel_version.outputs.kernel_version }}
-            
-            ### Features:
-            - Wild KernelSU v3.0.0
-            - SUSFS root hiding
-            - Baseband Guard security
-            - TCP Westwood congestion control
-            - Performance optimizations
-            
-            ### Installation:
-            1. Flash in TWRP/OrangeFox recovery
-            2. Reboot system
-            
-            ### Notes:
-            - Android 13 GKI devices only
-            - Unlocked bootloader required
+          files: GKI-Kernel-*.zip
+          tag_name: "gki-kernel"
+          name: "GKI Kernel"
+          body: "GKI Kernel built"
