@@ -1,11 +1,11 @@
-name: Build GKI Kernel (YASK Style)
+name: Build GKI Kernel
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    name: "Build GKI Kernel"
+    name: "Build Kernel"
     runs-on: ubuntu-latest
 
     steps:
@@ -18,24 +18,32 @@ jobs:
 
       - name: "🌟 Clone kernel source"
         run: |
+          rm -rf common kernel_src
           git clone https://android.googlesource.com/kernel/common \
-            --branch android13-5.15-lts --depth=1 common
+            --branch android13-5.15-lts --depth=1 kernel_src
 
       - name: "📥 Initialize AOSP repo"
         run: |
+          rm -rf .repo
           curl -o repo https://storage.googleapis.com/git-repo-downloads/repo
           chmod +x repo
-          ./repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15-lts --depth=1
+          ./repo init -u https://android.googlesource.com/kernel/manifest \
+            -b common-android13-5.15-lts --depth=1
           ./repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
           rm -rf .repo
 
       - name: "🔧 Setup clang"
         run: |
           mkdir -p prebuilts/clang/host/linux-x86
-          wget -q https://github.com/kdrag0n/proton-clang/archive/refs/heads/master.tar.gz -O clang.tar.gz
-          tar -xzf clang.tar.gz -C prebuilts/clang/host/linux-x86
+          wget -q https://github.com/kdrag0n/proton-clang/archive/refs/heads/master.tar.gz
+          tar -xzf master.tar.gz -C prebuilts/clang/host/linux-x86
           mv prebuilts/clang/host/linux-x86/proton-clang-master prebuilts/clang/host/linux-x86/clang-proton
-          rm clang.tar.gz
+          rm -f master.tar.gz
+
+      - name: "📂 Replace common with our kernel"
+        run: |
+          rm -rf common
+          mv kernel_src common
 
       - name: "🧩 Setup Wild-KSU"
         working-directory: ./common
@@ -68,38 +76,42 @@ jobs:
         run: |
           CONFIG_FILE="arch/arm64/configs/gki_defconfig"
           
-          cat >> "$CONFIG_FILE" << 'EOF'
-          CONFIG_KSU=y
-          CONFIG_KPROBES=y
-          CONFIG_HAVE_KPROBES=y
-          CONFIG_KPROBE_EVENTS=y
-          CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_PATH=y
-          CONFIG_KSU_SUSFS_SUS_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_KSTAT=y
-          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-          CONFIG_KSU_SUSFS_ENABLE_LOG=y
-          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=y
-          CONFIG_BBG=y
-          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
-          CONFIG_TCP_CONG_ADVANCED=y
-          CONFIG_TCP_CONG_BIC=n
-          CONFIG_TCP_CONG_WESTWOOD=y
-          CONFIG_TCP_CONG_HTCP=n
-          CONFIG_TCP_CONG_BBR=y
-          CONFIG_DEFAULT_WESTWOOD=y
-          CONFIG_OVERLAY_FS=y
-          CONFIG_TMPFS_XATTR=y
-          CONFIG_TMPFS_POSIX_ACL=y
-          EOF
+          # KSU configs
+          echo "" >> "$CONFIG_FILE"
+          echo "# KSU configs" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KPROBES=y" >> "$CONFIG_FILE"
+          echo "CONFIG_HAVE_KPROBES=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KPROBE_EVENTS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> "$CONFIG_FILE"
+          echo "CONFIG_BBG=y" >> "$CONFIG_FILE"
+          
+          # TCP Congestion Control
+          echo "# Performance configs" >> "$CONFIG_FILE"
+          echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> "$CONFIG_FILE"
+          echo "CONFIG_TCP_CONG_ADVANCED=y" >> "$CONFIG_FILE"
+          echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG_FILE"
+          echo "CONFIG_TCP_CONG_WESTWOOD=y" >> "$CONFIG_FILE"
+          echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG_FILE"
+          echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG_FILE"
+          echo "CONFIG_DEFAULT_WESTWOOD=y" >> "$CONFIG_FILE"
+          echo "CONFIG_OVERLAY_FS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_TMPFS_XATTR=y" >> "$CONFIG_FILE"
+          echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG_FILE"
 
       - name: "🔨 Build kernel"
         run: |
@@ -124,4 +136,12 @@ jobs:
           files: GKI-Kernel-*.zip
           tag_name: "gki-kernel"
           name: "GKI Kernel"
-          body: "GKI Kernel built"
+          body: |
+            ## GKI Kernel with KSU
+            
+            ### Features:
+            - Wild KernelSU
+            - SUSFS root hiding
+            - Baseband Guard
+            - TCP Westwood congestion control
+            - Performance optimizations
