@@ -230,6 +230,8 @@ jobs:
           CONFIG_TCP_CONG_BBR=y
           CONFIG_DEFAULT_WESTWOOD=y
           CONFIG_DEFAULT_TCP_CONG="westwood"
+          # CONFIG_TCP_CONG_BIC is not set
+          # CONFIG_TCP_CONG_HTCP is not set
           CONFIG_LRU_GEN=y
           CONFIG_LRU_GEN_ENABLED=y
           CONFIG_ZRAM=y
