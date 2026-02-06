@@ -250,31 +250,11 @@ jobs:
           CONFIG_F2FS_FS_ENCRYPTION=y
           CONFIG_LRU_GEN=y
           CONFIG_LRU_GEN_ENABLED=y
-          CONFIG_DEFAULT_TCP_CONG="westwood"
           CONFIG_ZRAM=y
           CONFIG_ZRAM_DEF_COMP_LZ4=y
-          CONFIG_ZRAM_DEF_COMP="lz4"
           EOF
           
           make O=out ARCH=arm64 CC=clang gki_defconfig
-          
-          ./scripts/config --file out/.config -d DEBUG_KERNEL
-          ./scripts/config --file out/.config -d DEBUG_INFO
-          ./scripts/config --file out/.config -d DEBUG_FS
-          ./scripts/config --file out/.config -d TRACING_SUPPORT
-          ./scripts/config --file out/.config -d TRACING
-          ./scripts/config --file out/.config -d FTRACE
-          ./scripts/config --file out/.config -d TRACEPOINTS
-          ./scripts/config --file out/.config -d PSI
-          
-          ./scripts/config --file out/.config -e BBG
-          
-          current_lsm=$(grep "^CONFIG_LSM=" out/.config | cut -d'"' -f2 || echo "")
-          if [ -n "$current_lsm" ]; then
-            ./scripts/config --file out/.config --set-str LSM "${current_lsm},baseband_guard"
-          fi
-          
-          make O=out ARCH=arm64 CC=clang olddefconfig
           
           echo "✓ KSU variant config completed"
 
@@ -303,24 +283,11 @@ jobs:
           CONFIG_F2FS_FS_ENCRYPTION=y
           CONFIG_LRU_GEN=y
           CONFIG_LRU_GEN_ENABLED=y
-          CONFIG_DEFAULT_TCP_CONG="westwood"
           CONFIG_ZRAM=y
           CONFIG_ZRAM_DEF_COMP_LZ4=y
-          CONFIG_ZRAM_DEF_COMP="lz4"
           EOF
           
           make O=out ARCH=arm64 CC=clang gki_defconfig
-          
-          ./scripts/config --file out/.config -d DEBUG_KERNEL
-          ./scripts/config --file out/.config -d DEBUG_INFO
-          ./scripts/config --file out/.config -d DEBUG_FS
-          ./scripts/config --file out/.config -d TRACING_SUPPORT
-          ./scripts/config --file out/.config -d TRACING
-          ./scripts/config --file out/.config -d FTRACE
-          ./scripts/config --file out/.config -d TRACEPOINTS
-          ./scripts/config --file out/.config -d PSI
-          
-          make O=out ARCH=arm64 CC=clang olddefconfig
           
           echo "✓ NoKSU variant config completed"
 
@@ -459,9 +426,6 @@ jobs:
             - ✅ TCP BBR + Westwood congestion control (Westwood as default)
             - ✅ F2FS optimization
             - ✅ ZRAM LZ4 compression
-            - ✅ PSI disabled for performance
-            - ✅ All debugging infrastructure disabled
-            - ✅ Proper kernel version string
             
             ### Installation
             1. Boot to recovery (TWRP/OrangeFox)
