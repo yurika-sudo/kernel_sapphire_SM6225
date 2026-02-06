@@ -99,7 +99,7 @@ jobs:
           
           echo "✓ Baseband Guard installed"
 
-      - name: "Configure kernel (YASK style)"
+      - name: "Configure kernel"
         working-directory: ./${{ env.KERNEL_DIR }}/common
         run: |
           CONFIG_FILE="arch/arm64/configs/gki_defconfig"
@@ -137,7 +137,7 @@ jobs:
             CONFIG_KSU_SUSFS_SUS_SU=y
             CONFIG_BBG=y
             EOF
-            fi
+          fi
           
           cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_TCP_CONG_ADVANCED=y
