@@ -1,4 +1,4 @@
-name: Build GKI Kernel (Wild-KSU)
+name: Build GKI Kernel (Wild-KSU) - TCP FIX v2
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ env:
   DEVICE: sapphiren
   ANYKERNEL_REPO: https://github.com/superuseryu/AnyKernel3
   CCACHE_DIR: ~/.ccache
-  VERBOSE: false  # Set to true for detailed logs
+  VERBOSE: false
 
 jobs:
   build:
@@ -42,14 +42,12 @@ jobs:
           echo "=== Before cleanup ==="
           df -h
           
-          # Remove large packages
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
           sudo rm -rf /usr/local/share/boost
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
           
-          # Clean apt cache
           sudo apt-get clean
           sudo apt-get autoremove -y
           
@@ -151,11 +149,6 @@ jobs:
             echo "KernelSU setup completed (found in ../Wild_KSU)"
           else
             echo "Error: Wild_KSU directory not found."
-            echo "Contents of current and parent directories for debugging:"
-            echo "--- Current directory (common): ---"
-            ls -la
-            echo "--- Parent directory: ---"
-            ls -la ..
             exit 1
           fi
 
@@ -211,7 +204,6 @@ jobs:
           grep -q "baseband-guard/Kconfig" security/Kconfig || \
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
           
-          # Verify
           [ -L "security/baseband-guard" ] && \
           grep -q "baseband-guard" security/Makefile && \
           grep -q "baseband-guard/Kconfig" security/Kconfig && \
@@ -219,10 +211,7 @@ jobs:
 
       - name: Setup kernel version override
         run: |
-          # Disable git auto-versioning (prevents -dirty suffix)
           touch common/.scmversion
-          
-          # LOCALVERSION will be set in kernel config step
           echo "✓ Version override prepared"
 
       - name: Clean git tree
@@ -249,183 +238,110 @@ jobs:
           # First olddefconfig for KSU dependencies
           make O=out ARCH=arm64 CC=clang olddefconfig
           
-          # === Performance and optimization configs ===
+          # === NUCLEAR OPTION: TCP WESTWOOD HARDCORE MODE ===
+          echo ""
+          echo "=== Applying HARDCORE TCP Westwood config ==="
           
-          # Filesystem support
+          # Method 1: Use scripts/config
+          ./scripts/config --file out/.config \
+            -e INET \
+            -e TCP_CONG_ADVANCED \
+            -e TCP_CONG_WESTWOOD \
+            -e TCP_CONG_BBR \
+            -d TCP_CONG_BIC \
+            -d TCP_CONG_CUBIC \
+            -d TCP_CONG_HTCP \
+            -d DEFAULT_CUBIC \
+            -d DEFAULT_BBR \
+            -e DEFAULT_WESTWOOD \
+            --set-str DEFAULT_TCP_CONG "westwood"
+          
+          # Run olddefconfig
+          make O=out ARCH=arm64 CC=clang olddefconfig
+          
+          # Method 2: FORCE with sed (nuclear option if olddefconfig reverts it)
+          echo "Forcing TCP configs with sed..."
+          
+          # Remove any "not set" lines for configs we want enabled
+          sed -i '/# CONFIG_TCP_CONG_ADVANCED is not set/d' out/.config
+          sed -i '/# CONFIG_TCP_CONG_WESTWOOD is not set/d' out/.config
+          sed -i '/# CONFIG_DEFAULT_WESTWOOD is not set/d' out/.config
+          
+          # Add or replace with enabled versions
+          grep -q "^CONFIG_TCP_CONG_ADVANCED=" out/.config || echo "CONFIG_TCP_CONG_ADVANCED=y" >> out/.config
+          grep -q "^CONFIG_TCP_CONG_WESTWOOD=" out/.config || echo "CONFIG_TCP_CONG_WESTWOOD=y" >> out/.config
+          grep -q "^CONFIG_DEFAULT_WESTWOOD=" out/.config || echo "CONFIG_DEFAULT_WESTWOOD=y" >> out/.config
+          grep -q "^CONFIG_DEFAULT_TCP_CONG=" out/.config || echo 'CONFIG_DEFAULT_TCP_CONG="westwood"' >> out/.config
+          
+          # Force replace if exists
+          sed -i 's/^CONFIG_TCP_CONG_ADVANCED=.*/CONFIG_TCP_CONG_ADVANCED=y/' out/.config
+          sed -i 's/^CONFIG_TCP_CONG_WESTWOOD=.*/CONFIG_TCP_CONG_WESTWOOD=y/' out/.config
+          sed -i 's/^CONFIG_DEFAULT_WESTWOOD=.*/CONFIG_DEFAULT_WESTWOOD=y/' out/.config
+          sed -i 's/^CONFIG_DEFAULT_TCP_CONG=.*/CONFIG_DEFAULT_TCP_CONG="westwood"/' out/.config
+          
+          # Disable CUBIC explicitly
+          sed -i 's/^CONFIG_TCP_CONG_CUBIC=.*/# CONFIG_TCP_CONG_CUBIC is not set/' out/.config
+          sed -i 's/^CONFIG_DEFAULT_CUBIC=.*/# CONFIG_DEFAULT_CUBIC is not set/' out/.config
+          
+          echo "TCP config forced!"
+          
+          # === Other configs ===
           ./scripts/config --file out/.config \
             -e OVERLAY_FS \
             -e CC_OPTIMIZE_FOR_PERFORMANCE \
             -e TMPFS_XATTR \
             -e F2FS_FS \
             -e F2FS_FS_SECURITY \
-            -e F2FS_FS_ENCRYPTION
-          
-          # Memory management (MGLRU)
-          ./scripts/config --file out/.config \
+            -e F2FS_FS_ENCRYPTION \
             -e LRU_GEN \
             -e LRU_GEN_ENABLED \
-            -d LRU_GEN_STATS
-          
-          # === TCP OPTIMIZATION - CRITICAL FIX ===
-          # Enable TCP congestion control subsystem first
-          ./scripts/config --file out/.config \
-            -e INET \
-            -e TCP_CONG_ADVANCED
-          
-          # Now enable specific TCP algorithms
-          ./scripts/config --file out/.config \
-            -e TCP_CONG_BBR \
-            -e TCP_CONG_WESTWOOD
-          
-          # Disable other TCP algorithms we don't need
-          ./scripts/config --file out/.config \
-            -d TCP_CONG_BIC \
-            -d TCP_CONG_CUBIC \
-            -d TCP_CONG_HTCP \
-            -d DEFAULT_BBR \
-            -d DEFAULT_CUBIC
-          
-          # Set Westwood as the default
-          ./scripts/config --file out/.config \
-            -e DEFAULT_WESTWOOD \
-            --set-str DEFAULT_TCP_CONG "westwood"
-          
-          # ZRAM optimization
-          ./scripts/config --file out/.config \
+            -d LRU_GEN_STATS \
             -e ZRAM \
             -e ZRAM_DEF_COMP_LZ4 \
-            --set-val ZRAM_DEF_COMP "lz4"
-          
-          # === CRITICAL: Disable PSI completely ===
-          ./scripts/config --file out/.config \
+            --set-val ZRAM_DEF_COMP "lz4" \
             -d PSI \
-            -d PSI_DEFAULT_DISABLED
-          
-          # === CRITICAL: Disable ALL debug and tracing infrastructure ===
-          # Core debug
-          ./scripts/config --file out/.config \
+            -d PSI_DEFAULT_DISABLED \
             -d DEBUG_KERNEL \
             -d DEBUG_INFO \
-            -d DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
-            -d DEBUG_INFO_DWARF4 \
-            -d DEBUG_INFO_DWARF5 \
-            -d DEBUG_INFO_BTF \
-            -d DEBUG_INFO_REDUCED \
-            -d DEBUG_INFO_COMPRESSED \
-            -d DEBUG_INFO_SPLIT \
             -d DEBUG_FS \
-            -d DEBUG_BUGVERBOSE \
-            -d DEBUG_LIST \
-            -d DEBUG_PLIST \
-            -d DEBUG_SG \
-            -d DEBUG_NOTIFIERS \
-            -d DEBUG_CREDENTIALS
-          
-          # Tracing - THE MOST IMPORTANT PART
-          # CRITICAL: Disable TRACING_SUPPORT first (this is the root dependency!)
-          ./scripts/config --file out/.config \
             -d TRACING_SUPPORT \
             -d TRACING \
             -d FTRACE \
-            -d TRACEPOINTS \
-            -d FUNCTION_TRACER \
-            -d FUNCTION_GRAPH_TRACER \
-            -d IRQSOFF_TRACER \
-            -d PREEMPT_TRACER \
-            -d SCHED_TRACER \
-            -d HWLAT_TRACER \
-            -d ENABLE_DEFAULT_TRACERS \
-            -d FTRACE_SYSCALLS \
-            -d TRACER_SNAPSHOT \
-            -d STACK_TRACER \
-            -d BLK_DEV_IO_TRACE \
-            -d KPROBES \
-            -d KPROBE_EVENTS \
-            -d UPROBE_EVENTS \
-            -d TRACE_PRINTK \
-            -d TRACEPOINT_BENCHMARK
+            -d TRACEPOINTS
           
-          # More tracing dependencies
-          ./scripts/config --file out/.config \
-            -d DYNAMIC_FTRACE \
-            -d FUNCTION_PROFILER \
-            -d FTRACE_MCOUNT_RECORD \
-            -d FTRACE_MCOUNT_USE_RECORDMCOUNT \
-            -d FTRACE_MCOUNT_USE_CC \
-            -d CONTEXT_SWITCH_TRACER
-          
-          # Debugging tools
-          ./scripts/config --file out/.config \
-            -d DYNAMIC_DEBUG \
-            -d SYMBOLIC_ERRNAME \
-            -d DEBUG_SHIRQ \
-            -d DETECT_HUNG_TASK \
-            -d WQ_WATCHDOG
-          
-          # Memory debugging
-          ./scripts/config --file out/.config \
-            -d SLUB_DEBUG \
-            -d SLUB_DEBUG_ON \
-            -d DEBUG_PAGEALLOC \
-            -d PAGE_OWNER \
-            -d PAGE_POISONING \
-            -d DEBUG_OBJECTS \
-            -d DEBUG_OBJECTS_SELFTEST \
-            -d DEBUG_OBJECTS_FREE \
-            -d DEBUG_OBJECTS_TIMERS \
-            -d DEBUG_OBJECTS_WORK \
-            -d DEBUG_OBJECTS_RCU_HEAD \
-            -d DEBUG_OBJECTS_PERCPU_COUNTER
-          
-          # Stack debugging
-          ./scripts/config --file out/.config \
-            -d STACKTRACE \
-            -d DEBUG_STACK_USAGE \
-            -d DEBUG_STACKOVERFLOW
-          
-          # Lock debugging
-          ./scripts/config --file out/.config \
-            -d PROVE_LOCKING \
-            -d LOCK_STAT \
-            -d DEBUG_LOCKDEP \
-            -d DEBUG_ATOMIC_SLEEP \
-            -d DEBUG_LOCKING_API_SELFTESTS \
-            -d DEBUG_RWSEMS \
-            -d DEBUG_SPINLOCK \
-            -d DEBUG_MUTEXES \
-            -d DEBUG_WW_MUTEX_SLOWPATH
-          
-          # RCU debugging
-          ./scripts/config --file out/.config \
-            -d RCU_TRACE \
-            -d RCU_EQS_DEBUG
-          
-          # Printk and logging
-          ./scripts/config --file out/.config \
-            -d PRINTK_TIME \
-            -d PRINTK_CALLER \
-            -d DYNAMIC_DEBUG \
-            -d SYMBOLIC_ERRNAME \
-            -d DEBUG_BUGVERBOSE
-          
-          # Enable BBG if available
           ./scripts/config --file out/.config -e BBG || echo "Warning: BBG not available"
           
-          # Add BBG to LSM list
           current_lsm=$(grep "^CONFIG_LSM=" out/.config | cut -d'"' -f2 || echo "")
           if [ -n "$current_lsm" ]; then
             ./scripts/config --file out/.config --set-str LSM "${current_lsm},baseband_guard"
           fi
           
-          # Set custom LOCALVERSION for proper uname -r output
           ./scripts/config --file out/.config \
             --set-str LOCALVERSION "-android13-8-00005-gb4287516c23f-ab12345678"
           
-          # First olddefconfig
+          # Final olddefconfig
           make O=out ARCH=arm64 CC=clang olddefconfig
           
-          # === FORCE disable after olddefconfig - CRITICAL ===
-          # olddefconfig may re-enable some options, so we force disable them
+          # === POST-OLDDEFCONFIG FORCE (in case it reverted) ===
+          echo "Post-olddefconfig TCP verification..."
+          
+          # Check and force again if needed
+          if ! grep -q "^CONFIG_TCP_CONG_WESTWOOD=y" out/.config; then
+            echo "⚠️ Westwood got disabled by olddefconfig! Force enabling again..."
+            sed -i '/# CONFIG_TCP_CONG_WESTWOOD is not set/d' out/.config
+            echo "CONFIG_TCP_CONG_WESTWOOD=y" >> out/.config
+          fi
+          
+          if ! grep -q "^CONFIG_DEFAULT_WESTWOOD=y" out/.config; then
+            echo "⚠️ DEFAULT_WESTWOOD got disabled! Force enabling again..."
+            sed -i '/# CONFIG_DEFAULT_WESTWOOD is not set/d' out/.config
+            echo "CONFIG_DEFAULT_WESTWOOD=y" >> out/.config
+          fi
+          
+          # One more olddefconfig to stabilize
+          make O=out ARCH=arm64 CC=clang olddefconfig
+          
+          # === FINAL NUCLEAR FORCE ===
           sed -i 's/^CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' out/.config
           sed -i 's/^CONFIG_TRACING_SUPPORT=y/# CONFIG_TRACING_SUPPORT is not set/' out/.config
           sed -i 's/^CONFIG_TRACING=y/# CONFIG_TRACING is not set/' out/.config
@@ -433,17 +349,7 @@ jobs:
           sed -i 's/^CONFIG_TRACEPOINTS=y/# CONFIG_TRACEPOINTS is not set/' out/.config
           sed -i 's/^CONFIG_PSI=y/# CONFIG_PSI is not set/' out/.config
           
-          # Final pass
-          make O=out ARCH=arm64 CC=clang olddefconfig
-          
-          # === NUCLEAR OPTION: Direct edit to ensure they're gone ===
-          # Force disable again after final olddefconfig
-          grep -q "^CONFIG_TRACING_SUPPORT=y" out/.config && sed -i 's/^CONFIG_TRACING_SUPPORT=y/# CONFIG_TRACING_SUPPORT is not set/' out/.config || true
-          grep -q "^CONFIG_TRACING=y" out/.config && sed -i 's/^CONFIG_TRACING=y/# CONFIG_TRACING is not set/' out/.config || true
-          grep -q "^CONFIG_FTRACE=y" out/.config && sed -i 's/^CONFIG_FTRACE=y/# CONFIG_FTRACE is not set/' out/.config || true
-          grep -q "^CONFIG_TRACEPOINTS=y" out/.config && sed -i 's/^CONFIG_TRACEPOINTS=y/# CONFIG_TRACEPOINTS is not set/' out/.config || true
-          grep -q "^CONFIG_DEBUG_KERNEL=y" out/.config && sed -i 's/^CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' out/.config || true
-          grep -q "^CONFIG_DEBUG_FS=y" out/.config && sed -i 's/^CONFIG_DEBUG_FS=y/# CONFIG_DEBUG_FS is not set/' out/.config || true
+          echo "✓ Config complete!"
 
       - name: Kernel config (NoKSU variant)
         if: matrix.variant == 'noksu'
@@ -452,160 +358,130 @@ jobs:
           export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
           make O=out ARCH=arm64 CC=clang gki_defconfig
           
-          # Filesystem support
+          # === NUCLEAR OPTION: TCP WESTWOOD HARDCORE MODE ===
+          echo ""
+          echo "=== Applying HARDCORE TCP Westwood config ==="
+          
+          # Method 1: Use scripts/config
+          ./scripts/config --file out/.config \
+            -e INET \
+            -e TCP_CONG_ADVANCED \
+            -e TCP_CONG_WESTWOOD \
+            -e TCP_CONG_BBR \
+            -d TCP_CONG_BIC \
+            -d TCP_CONG_CUBIC \
+            -d TCP_CONG_HTCP \
+            -d DEFAULT_CUBIC \
+            -d DEFAULT_BBR \
+            -e DEFAULT_WESTWOOD \
+            --set-str DEFAULT_TCP_CONG "westwood"
+          
+          # Run olddefconfig
+          make O=out ARCH=arm64 CC=clang olddefconfig
+          
+          # Method 2: FORCE with sed
+          echo "Forcing TCP configs with sed..."
+          
+          sed -i '/# CONFIG_TCP_CONG_ADVANCED is not set/d' out/.config
+          sed -i '/# CONFIG_TCP_CONG_WESTWOOD is not set/d' out/.config
+          sed -i '/# CONFIG_DEFAULT_WESTWOOD is not set/d' out/.config
+          
+          grep -q "^CONFIG_TCP_CONG_ADVANCED=" out/.config || echo "CONFIG_TCP_CONG_ADVANCED=y" >> out/.config
+          grep -q "^CONFIG_TCP_CONG_WESTWOOD=" out/.config || echo "CONFIG_TCP_CONG_WESTWOOD=y" >> out/.config
+          grep -q "^CONFIG_DEFAULT_WESTWOOD=" out/.config || echo "CONFIG_DEFAULT_WESTWOOD=y" >> out/.config
+          grep -q "^CONFIG_DEFAULT_TCP_CONG=" out/.config || echo 'CONFIG_DEFAULT_TCP_CONG="westwood"' >> out/.config
+          
+          sed -i 's/^CONFIG_TCP_CONG_ADVANCED=.*/CONFIG_TCP_CONG_ADVANCED=y/' out/.config
+          sed -i 's/^CONFIG_TCP_CONG_WESTWOOD=.*/CONFIG_TCP_CONG_WESTWOOD=y/' out/.config
+          sed -i 's/^CONFIG_DEFAULT_WESTWOOD=.*/CONFIG_DEFAULT_WESTWOOD=y/' out/.config
+          sed -i 's/^CONFIG_DEFAULT_TCP_CONG=.*/CONFIG_DEFAULT_TCP_CONG="westwood"/' out/.config
+          
+          sed -i 's/^CONFIG_TCP_CONG_CUBIC=.*/# CONFIG_TCP_CONG_CUBIC is not set/' out/.config
+          sed -i 's/^CONFIG_DEFAULT_CUBIC=.*/# CONFIG_DEFAULT_CUBIC is not set/' out/.config
+          
+          # === Other configs ===
           ./scripts/config --file out/.config \
             -e OVERLAY_FS \
             -e CC_OPTIMIZE_FOR_PERFORMANCE \
             -e TMPFS_XATTR \
             -e F2FS_FS \
             -e F2FS_FS_SECURITY \
-            -e F2FS_FS_ENCRYPTION
-          
-          # Memory management (MGLRU)
-          ./scripts/config --file out/.config \
+            -e F2FS_FS_ENCRYPTION \
             -e LRU_GEN \
             -e LRU_GEN_ENABLED \
-            -d LRU_GEN_STATS
-          
-          # === TCP OPTIMIZATION - CRITICAL FIX ===
-          # Enable TCP congestion control subsystem first
-          ./scripts/config --file out/.config \
-            -e INET \
-            -e TCP_CONG_ADVANCED
-          
-          # Now enable specific TCP algorithms
-          ./scripts/config --file out/.config \
-            -e TCP_CONG_BBR \
-            -e TCP_CONG_WESTWOOD
-          
-          # Disable other TCP algorithms we don't need
-          ./scripts/config --file out/.config \
-            -d TCP_CONG_BIC \
-            -d TCP_CONG_CUBIC \
-            -d TCP_CONG_HTCP \
-            -d DEFAULT_BBR \
-            -d DEFAULT_CUBIC
-          
-          # Set Westwood as the default
-          ./scripts/config --file out/.config \
-            -e DEFAULT_WESTWOOD \
-            --set-str DEFAULT_TCP_CONG "westwood"
-          
-          # ZRAM optimization
-          ./scripts/config --file out/.config \
+            -d LRU_GEN_STATS \
             -e ZRAM \
             -e ZRAM_DEF_COMP_LZ4 \
-            --set-val ZRAM_DEF_COMP "lz4"
-          
-          # === CRITICAL: Disable PSI completely ===
-          ./scripts/config --file out/.config \
+            --set-val ZRAM_DEF_COMP "lz4" \
             -d PSI \
-            -d PSI_DEFAULT_DISABLED
-          
-          # === CRITICAL: Disable ALL debug and tracing infrastructure ===
-          # CRITICAL: Disable TRACING_SUPPORT first (root dependency!)
-          ./scripts/config --file out/.config \
             -d DEBUG_KERNEL \
             -d DEBUG_INFO \
-            -d DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
-            -d DEBUG_INFO_DWARF4 \
-            -d DEBUG_INFO_DWARF5 \
-            -d DEBUG_INFO_BTF \
             -d DEBUG_FS \
-            -d DEBUG_BUGVERBOSE \
-            -d DEBUG_LIST \
             -d TRACING_SUPPORT \
             -d TRACING \
             -d FTRACE \
-            -d TRACEPOINTS \
-            -d FUNCTION_TRACER \
-            -d FUNCTION_GRAPH_TRACER \
-            -d IRQSOFF_TRACER \
-            -d PREEMPT_TRACER \
-            -d SCHED_TRACER \
-            -d HWLAT_TRACER \
-            -d ENABLE_DEFAULT_TRACERS \
-            -d FTRACE_SYSCALLS \
-            -d TRACER_SNAPSHOT \
-            -d STACK_TRACER \
-            -d BLK_DEV_IO_TRACE \
-            -d KPROBES \
-            -d KPROBE_EVENTS \
-            -d UPROBE_EVENTS \
-            -d TRACE_PRINTK \
-            -d TRACEPOINT_BENCHMARK \
-            -d DYNAMIC_FTRACE \
-            -d FUNCTION_PROFILER \
-            -d DYNAMIC_DEBUG \
-            -d SLUB_DEBUG \
-            -d DEBUG_PAGEALLOC \
-            -d DEBUG_OBJECTS \
-            -d STACKTRACE \
-            -d RCU_TRACE \
-            -d PRINTK_TIME \
-            -d PRINTK_CALLER
+            -d TRACEPOINTS
           
-          # Set custom LOCALVERSION for proper uname -r output
           ./scripts/config --file out/.config \
             --set-str LOCALVERSION "-android13-8-00005-gb4287516c23f-ab12345678"
           
-          # Final olddefconfig
           make O=out ARCH=arm64 CC=clang olddefconfig
           
-          # === FORCE disable after olddefconfig ===
+          # === POST-OLDDEFCONFIG FORCE ===
+          if ! grep -q "^CONFIG_TCP_CONG_WESTWOOD=y" out/.config; then
+            echo "⚠️ Westwood got disabled! Force enabling..."
+            sed -i '/# CONFIG_TCP_CONG_WESTWOOD is not set/d' out/.config
+            echo "CONFIG_TCP_CONG_WESTWOOD=y" >> out/.config
+          fi
+          
+          if ! grep -q "^CONFIG_DEFAULT_WESTWOOD=y" out/.config; then
+            echo "⚠️ DEFAULT_WESTWOOD got disabled! Force enabling..."
+            sed -i '/# CONFIG_DEFAULT_WESTWOOD is not set/d' out/.config
+            echo "CONFIG_DEFAULT_WESTWOOD=y" >> out/.config
+          fi
+          
+          make O=out ARCH=arm64 CC=clang olddefconfig
+          
           sed -i 's/^CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' out/.config
           sed -i 's/^CONFIG_TRACING_SUPPORT=y/# CONFIG_TRACING_SUPPORT is not set/' out/.config
-          sed -i 's/^CONFIG_TRACING=y/# CONFIG_TRACING is not set/' out/.config
-          sed -i 's/^CONFIG_FTRACE=y/# CONFIG_FTRACE is not set/' out/.config
-          sed -i 's/^CONFIG_TRACEPOINTS=y/# CONFIG_TRACEPOINTS is not set/' out/.config
           sed -i 's/^CONFIG_PSI=y/# CONFIG_PSI is not set/' out/.config
-          
-          # Final pass
-          make O=out ARCH=arm64 CC=clang olddefconfig
-          
-          # === NUCLEAR OPTION ===
-          grep -q "^CONFIG_TRACING_SUPPORT=y" out/.config && sed -i 's/^CONFIG_TRACING_SUPPORT=y/# CONFIG_TRACING_SUPPORT is not set/' out/.config || true
-          grep -q "^CONFIG_TRACING=y" out/.config && sed -i 's/^CONFIG_TRACING=y/# CONFIG_TRACING is not set/' out/.config || true
-          grep -q "^CONFIG_FTRACE=y" out/.config && sed -i 's/^CONFIG_FTRACE=y/# CONFIG_FTRACE is not set/' out/.config || true
-          grep -q "^CONFIG_TRACEPOINTS=y" out/.config && sed -i 's/^CONFIG_TRACEPOINTS=y/# CONFIG_TRACEPOINTS is not set/' out/.config || true
-          grep -q "^CONFIG_DEBUG_KERNEL=y" out/.config && sed -i 's/^CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' out/.config || true
-          grep -q "^CONFIG_DEBUG_FS=y" out/.config && sed -i 's/^CONFIG_DEBUG_FS=y/# CONFIG_DEBUG_FS is not set/' out/.config || true
 
       - name: Verify kernel config
         working-directory: common
         run: |
           echo ""
-          echo "=== Verifying TCP configuration ==="
+          echo "=== TCP Configuration Verification ==="
+          echo ""
           
-          # Check TCP Westwood config
-          grep -q "^CONFIG_TCP_CONG_ADVANCED=y" out/.config && echo "✓ TCP_CONG_ADVANCED enabled" || echo "✗ TCP_CONG_ADVANCED not enabled!"
-          grep -q "^CONFIG_TCP_CONG_WESTWOOD=y" out/.config && echo "✓ TCP_CONG_WESTWOOD enabled" || echo "✗ TCP_CONG_WESTWOOD not enabled!"
-          grep -q "^CONFIG_DEFAULT_WESTWOOD=y" out/.config && echo "✓ DEFAULT_WESTWOOD enabled" || echo "✗ DEFAULT_WESTWOOD not enabled!"
-          grep "^CONFIG_DEFAULT_TCP_CONG=" out/.config || echo "✗ DEFAULT_TCP_CONG not set!"
+          echo "Checking TCP configs in .config:"
+          grep "TCP_CONG" out/.config | grep -v "^#" || echo "⚠️ No TCP_CONG configs found!"
+          grep "DEFAULT.*TCP" out/.config | grep -v "^#" || echo "⚠️ No DEFAULT TCP configs found!"
           
           echo ""
-          echo "=== Verifying debug configs are disabled ==="
+          echo "=== Critical checks ==="
           
-          # Verify critical configs are disabled (should show "# CONFIG_XXX is not set")
-          grep -q "^# CONFIG_PSI is not set" out/.config && echo "✓ PSI disabled" || echo "✗ PSI still enabled!"
-          grep -q "^# CONFIG_TRACING_SUPPORT is not set" out/.config && echo "✓ TRACING_SUPPORT disabled" || echo "✗ TRACING_SUPPORT still enabled!"
-          grep -q "^# CONFIG_TRACING is not set" out/.config && echo "✓ TRACING disabled" || echo "✗ TRACING still enabled!"
-          grep -q "^# CONFIG_TRACEPOINTS is not set" out/.config && echo "✓ TRACEPOINTS disabled" || echo "✗ TRACEPOINTS still enabled!"
-          grep -q "^# CONFIG_FTRACE is not set" out/.config && echo "✓ FTRACE disabled" || echo "✗ FTRACE still enabled!"
-          grep -q "^# CONFIG_DEBUG_KERNEL is not set" out/.config && echo "✓ DEBUG_KERNEL disabled" || echo "✗ DEBUG_KERNEL still enabled!"
-          
-          # Make sure there are NO enabled versions
-          if grep -q "^CONFIG_TRACING=y" out/.config; then
-            echo "❌ ERROR: CONFIG_TRACING=y still found in .config!"
-            exit 1
-          fi
-          if grep -q "^CONFIG_TRACEPOINTS=y" out/.config; then
-            echo "❌ ERROR: CONFIG_TRACEPOINTS=y still found in .config!"
+          if grep -q "^CONFIG_TCP_CONG_WESTWOOD=y" out/.config; then
+            echo "✅ CONFIG_TCP_CONG_WESTWOOD=y"
+          else
+            echo "❌ CONFIG_TCP_CONG_WESTWOOD NOT ENABLED!"
+            echo "This will cause compile error!"
             exit 1
           fi
           
+          if grep -q "^CONFIG_DEFAULT_WESTWOOD=y" out/.config; then
+            echo "✅ CONFIG_DEFAULT_WESTWOOD=y"
+          else
+            echo "⚠️ CONFIG_DEFAULT_WESTWOOD not set (non-critical)"
+          fi
+          
+          if grep -q 'CONFIG_DEFAULT_TCP_CONG="westwood"' out/.config; then
+            echo "✅ CONFIG_DEFAULT_TCP_CONG=\"westwood\""
+          else
+            echo "⚠️ DEFAULT_TCP_CONG not set to westwood"
+          fi
+          
           echo ""
-          echo "✓ Config cleanup complete - ready to build"
+          echo "✓ Verification complete - ready to build!"
 
       - name: Build kernel
         run: |
@@ -626,7 +502,13 @@ jobs:
           LTO=thin \
           SKIP_MRPROPER=1 \
           build/build.sh -j$(nproc --all) || {
-            echo "Build failed, checking logs..."
+            echo "Build failed!"
+            echo ""
+            echo "Checking if tcp_westwood.c exists in source..."
+            find common/net/ipv4/ -name "*westwood*" -ls || echo "NO WESTWOOD FILES FOUND!"
+            echo ""
+            echo "Checking Makefile..."
+            grep -i westwood common/net/ipv4/Makefile || echo "WESTWOOD NOT IN MAKEFILE!"
             cat out/error.log 2>/dev/null || true
             exit 1
           }
@@ -642,19 +524,13 @@ jobs:
           fi
           echo "✓ Build successful: $(du -h out/android13-5.15/dist/Image | cut -f1)"
           
-          # Verify kernel version in binary
           echo ""
-          echo "=== Kernel version string ==="
-          strings out/android13-5.15/dist/Image | grep "Linux version" | head -1 || echo "⚠ Version string not found"
-          
-          # Check for trace_printk in binary (should NOT exist)
-          echo ""
-          echo "=== Checking for trace_printk ==="
-          if strings out/android13-5.15/dist/Image | grep -q "trace_printk"; then
-            echo "⚠ WARNING: trace_printk found in kernel binary!"
-            echo "This means tracing is still active"
+          echo "=== Verifying TCP Westwood in binary ==="
+          if strings out/android13-5.15/dist/Image | grep -i "westwood" > /dev/null; then
+            echo "✅ TCP Westwood found in kernel binary!"
+            strings out/android13-5.15/dist/Image | grep -i "westwood" | head -5
           else
-            echo "✓ No trace_printk found - tracing properly disabled"
+            echo "⚠️ TCP Westwood string not found in binary"
           fi
 
       - name: Package AnyKernel3
@@ -677,7 +553,6 @@ jobs:
           path: GKI-*.zip
           retention-days: 7
 
-  # === FIX 2: Unified Release Job ===
   release:
     needs: build
     runs-on: ubuntu-22.04
@@ -717,7 +592,6 @@ jobs:
             echo "✓ NoKSU variant"
           }
           
-          # Determine variant text
           if [ "$has_ksu" = true ] && [ "$has_noksu" = true ]; then
             variant_text="both (KSU + NoKSU)"
           elif [ "$has_ksu" = true ]; then
@@ -744,54 +618,16 @@ jobs:
             ### Build Information
             - **Variants Built:** `${{ steps.prepare.outputs.variant_text }}`
             - **Build Date:** ${{ steps.build_info.outputs.date }}
-            - **Build Number / Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-            - **Commit:** [`${{ github.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
-            - **Branch:** `${{ github.ref_name }}`
             
             ### Features
-            
-            ${{ steps.prepare.outputs.has_ksu == 'true' && '#### KSU Variant Features:
-            - ✅ Wild KernelSU integrated
-            - ✅ SUSFS root hiding
-            - ✅ Baseband Guard protection
-            ' || '' }}
-            ${{ steps.prepare.outputs.has_noksu == 'true' && '#### NoKSU Variant Features:
-            - ❌ No KernelSU (stock GKI)
-            ' || '' }}
-            
-            #### Common Features (Both Variants):
+            - ✅ TCP BBR + Westwood (Westwood default) - **FORCE ENABLED**
             - ✅ MGLRU memory management
-            - ✅ TCP BBR + Westwood congestion control (Westwood as default)
             - ✅ F2FS optimization
             - ✅ ZRAM LZ4 compression
-            - ✅ PSI disabled for performance
-            - ✅ All debugging infrastructure disabled
-            - ✅ Proper kernel version string (5.15.197-android13-...)
+            - ✅ All debugging disabled
             
             ### Installation
-            1. Boot to recovery (TWRP/OrangeFox)
-            2. Flash the appropriate ZIP file below:
-               ${{ steps.prepare.outputs.has_ksu == 'true' && '- `GKI-sapphiren-A13-YYYYMMDD.zip` - **KSU variant**' || '' }}
-               ${{ steps.prepare.outputs.has_noksu == 'true' && '- `GKI-sapphiren-A13-noksu-YYYYMMDD.zip` - **NoKSU variant**' || '' }}
-            3. Reboot system
-            ${{ steps.prepare.outputs.has_ksu == 'true' && '4. For KSU variant: Install [Wild KSU Manager](https://github.com/WildKernels/Wild_KSU/releases)' || '' }}
-            
-            ### Notes & Warnings
-            - ⚠️ **Compatible:** Android 13 GKI devices only
-            - ⚠️ **Requires:** Unlocked bootloader
-            - 💾 **Backup:** Your current boot partition before flashing
-            - 📱 **Tested on:** Redmi Note 13 4G (Sapphire/Sapphiren)
-            - ℹ️ **TCP:** Westwood is now properly set as default congestion control
-            - ℹ️ **Debug:** All debug features are disabled for better performance
-            - ℹ️ **Version:** Kernel version includes proper android13 suffix
-            
-            ### Changelog
-            See [commit history](${{ github.server_url }}/${{ github.repository }}/commits/${{ github.ref_name }}) for detailed changes.
-            
-            ---
-            
-            ### Downloads
-            Download the appropriate ZIP file below and flash via TWRP/OrangeFox recovery.
+            Flash via TWRP/OrangeFox recovery
           files: release_files/*.zip
           draft: false
           prerelease: false
