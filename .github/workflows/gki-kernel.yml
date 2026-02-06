@@ -239,24 +239,56 @@ jobs:
             echo "No changes to commit"
           fi
 
-      - name: "Build kernel"
+      - name: "Patch ABI check script"
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          LTO=thin \
-          SKIP_ABI_CHECKS=true \
-          BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
-          build/build.sh -j$(nproc --all)
+          # Create a patch for ABI check script to skip the check
+          cat > skip_abi_check.patch << 'EOF'
+          --- a/build/abi/compare_to_symbol_list
+          +++ b/build/abi/compare_to_symbol_list
+          @@ -1,4 +1,8 @@
+           #!/bin/bash
+           +
+           +echo "Skipping ABI check for custom kernel build"
+           +exit 0
+           +
+            # This script is used to compare the kernel's ksymtab against a list of
+             # symbols in the KMI symbol list. It is used to enforce that the kernel
+              # maintains ABI stability.
+              EOF
+          
+          # Apply the patch
+          if patch -p1 --forward < skip_abi_check.patch; then
+            echo "ABI check patch applied successfully"
+          else
+            echo "ABI check patch already applied or failed"
+          fi
+          
+          rm -f skip_abi_check.patch
+
+      - name: "Build kernel with ABI check disabled"
+        working-directory: ${{ env.WORK_DIR }}
+        run: |
+          export LTO=thin
+          export SKIP_ABI_CHECKS=1
+          
+          cd build
+          ./build.sh --skip-abi-checks \
+            --config=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
+            -j$(nproc --all)
+          cd ..
 
       - name: "Copy kernel image"
-        working-directory: ${{ env.WORK_DIR }}/out/dist
+        working-directory: ${{ env.WORK_DIR }}/out/android13-5.15/dist
         run: |
           cp Image "Image.gki"
+          echo "Kernel image copied successfully"
 
       - name: "Upload kernel artifact"
         uses: actions/upload-artifact@v4
         with:
           name: gki-kernel
-          path: ${{ env.WORK_DIR }}/out/dist/Image.gki
+          path: ${{ env.WORK_DIR }}/out/android13-5.15/dist/Image.gki
           retention-days: 1
 
   package-kernel:
@@ -275,12 +307,13 @@ jobs:
           git clone --depth=1 https://github.com/superuseryu/AnyKernel3 ak3
           cp ./artifacts/gki-kernel/Image.gki ak3/
           
-          ZIP_NAME="GKI_Kernel_$(date +'%Y%m%d').zip"
+          ZIP_NAME="GKI_Kernel_Wild-KSU_$(date +'%Y%m%d').zip"
           cd ak3
           zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
           
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+          echo "ZIP_SIZE=$(du -h $ZIP_NAME | cut -f1)" >> $GITHUB_ENV
 
       - name: "Create GitHub Release"
         uses: softprops/action-gh-release@v1
@@ -308,6 +341,7 @@ jobs:
             <summary>Notes:</summary>
             - -> In SUS SU Mode 2, it will show as disabled or incompatible, the reason is that non-kprobe hooks were used (when compiling the kernel), and non-kprobe hooks are no longer needed!
             - -> In the latest version of susfs, flashing AK3 compressed package with Kernel Flasher will brick your device, try [Horizon Kernel Flasher](https://github.com/libxzr/HorizonKernelFlasher)!
+            - -> This kernel has ABI checks disabled due to custom modifications (Wild-KSU, SUSFS, BBG, etc.)
             </details>
             
             Modules:
@@ -315,5 +349,7 @@ jobs:
             
             Download Manager:
             -> https://github.com/WildKernels/Wild_KSU/releases/tag/v3.0.0
+            
+            Build Date: $(date +'%Y-%m-%d')
           draft: false
           prerelease: false
