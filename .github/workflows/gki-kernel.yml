@@ -1,201 +1,799 @@
-name: Build GKI Kernel
+name: Build GKI Kernel (Wild-KSU)
 
 on:
   workflow_dispatch:
+    inputs:
+      build_variant:
+        description: 'Build variant'
+        required: true
+        default: 'ksu'
+        type: choice
+        options:
+          - ksu
+          - noksu
+          - both
+
+permissions:
+  contents: write
+
+env:
+  ANDROID_VERSION: android13
+  KERNEL_VERSION: 5.15
+  KERNEL_BRANCH: common-android13-5.15-lts
+  CLANG_VERSION: r547379
+  DEVICE: sapphiren
+  ANYKERNEL_REPO: https://github.com/superuseryu/AnyKernel3
+  CCACHE_DIR: ~/.ccache
+  VERBOSE: false  # Set to true for detailed logs
 
 jobs:
   build:
-    name: "Build Kernel"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        variant: ${{ github.event.inputs.build_variant == 'both' && fromJSON('["ksu", "noksu"]') || fromJSON(format('["{0}"]', github.event.inputs.build_variant)) }}
 
     steps:
-      - name: "✨ Setup workspace"
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev make libelf-dev \
-            rsync zip unzip curl git build-essential libncurses-dev \
-            gawk wget diffutils binutils
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      - name: "🌟 Clone kernel source"
+      - name: Free up disk space
         run: |
-          rm -rf common
-          git clone https://android.googlesource.com/kernel/common \
-            --branch android13-5.15-lts --depth=1 common
+          echo "=== Before cleanup ==="
+          df -h
+          
+          # Remove large packages
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          
+          # Clean apt cache
+          sudo apt-get clean
+          sudo apt-get autoremove -y
+          
+          echo "=== After cleanup ==="
+          df -h
 
-      - name: "📥 Download build tools only"
+      - name: Install minimal deps
         run: |
-          # Download hanya build directory dari repo
-          curl -o repo https://storage.googleapis.com/git-repo-downloads/repo
-          chmod +x repo
-          
-          # Initialize tapi tidak sync common
-          ./repo init -u https://android.googlesource.com/kernel/manifest \
-            -b common-android13-5.15-lts --depth=1
-          
-          # Sync hanya build directory
-          ./repo sync build -c -j$(nproc --all) --no-tags --no-clone-bundle
-          
-          # Hapus .repo untuk menghindari konflik
-          rm -rf .repo
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex libssl-dev make libelf-dev \
+            ccache rsync zip unzip curl git build-essential \
+            libncurses-dev gawk wget diffutils > /dev/null
 
-      - name: "🔧 Setup clang"
+      - name: Setup ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ccache
+            ~/.cache/ccache
+          key: ccache-${{ matrix.variant }}-${{ env.KERNEL_BRANCH }}-${{ github.run_number }}
+          restore-keys: |
+            ccache-${{ matrix.variant }}-${{ env.KERNEL_BRANCH }}-
+            ccache-${{ matrix.variant }}-
+            ccache-
+      
+      - name: Initialize ccache
         run: |
+          mkdir -p ~/.ccache ~/.cache/ccache
+          ccache -M 2G
+          ccache -z
+
+      - name: Cache clang
+        uses: actions/cache@v4
+        id: clang-cache
+        with:
+          path: clang
+          key: proton-clang-master
+          
+      - name: Setup clang
+        if: steps.clang-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p clang
           wget -q https://github.com/kdrag0n/proton-clang/archive/refs/heads/master.tar.gz
-          tar -xzf master.tar.gz
-          mv proton-clang-master clang
-          rm -f master.tar.gz
-
-      - name: "🧩 Setup Wild-KSU"
-        working-directory: ./common
+          tar -xzf master.tar.gz -C clang --strip-components=1
+          rm master.tar.gz
+        
+      - name: Verify clang installation
         run: |
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
-          ln -sf Wild_KSU drivers/kernelsu
+          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          clang --version | head -1
+          echo "✓ Clang ready"
 
-      - name: "🧩 Setup SUSFS"
-        working-directory: ./common
-        run: |
-          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          
-          # Apply patch tanpa error
-          patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch 2>/dev/null || true
-          
-          # Copy files
-          cp susfs4ksu/kernel_patches/fs/susfs.c fs/ 2>/dev/null || true
-          cp susfs4ksu/kernel_patches/include/linux/susfs*.h include/linux/ 2>/dev/null || true
-          
-          # Integrate with KSU
-          sed -i '/#include <linux\/fs.h>/a #include <linux/susfs.h>' Wild_KSU/kernel/ksu.c 2>/dev/null || true
-          sed -i '/ksu_core_init();/a \\tsusfs_init();' Wild_KSU/kernel/ksu.c 2>/dev/null || true
-          
-          rm -rf susfs4ksu
+      - name: Cache kernel source
+        uses: actions/cache@v4
+        id: kernel-cache
+        with:
+          path: |
+            .repo
+            common
+            build
+            prebuilts
+          key: kernel-source-${{ env.KERNEL_BRANCH }}-${{ github.run_number }}
+          restore-keys: |
+            kernel-source-${{ env.KERNEL_BRANCH }}-
 
-      - name: "🧩 Setup Baseband Guard"
-        working-directory: ./common
+      - name: Initialize kernel source
         run: |
-          git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
-          ln -sf ../Baseband-guard security/baseband-guard
+          if [ "${{ steps.kernel-cache.outputs.cache-hit }}" != "true" ]; then
+            echo "=== Cache miss - full repo sync ==="
+            curl -o repo https://storage.googleapis.com/git-repo-downloads/repo
+            chmod +x repo
+            
+            ./repo init -u https://android.googlesource.com/kernel/manifest \
+              -b ${KERNEL_BRANCH} --depth=1
+            
+            ./repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
+          else
+            echo "=== Cache hit - skipping full sync ==="
+            echo "Doing minimal sync to update any changes..."
+            curl -o repo https://storage.googleapis.com/git-repo-downloads/repo
+            chmod +x repo
+            ./repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle --force-sync 2>/dev/null || true
+          fi
           
-          echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
-          
-          if ! grep -q "baseband-guard/Kconfig" security/Kconfig; then
-            sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
+          echo "✓ Kernel source ready"
+
+      - name: Setup Wild KernelSU
+        if: matrix.variant == 'ksu'
+        working-directory: common
+        run: |
+          curl -LSs https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh | bash -s stable
+
+          if [ -d "Wild_KSU" ]; then
+            ln -sf Wild_KSU drivers/kernelsu
+            echo "KernelSU setup completed (found in ./Wild_KSU)"
+          elif [ -d "../Wild_KSU" ]; then
+            ln -sf ../Wild_KSU drivers/kernelsu
+            echo "KernelSU setup completed (found in ../Wild_KSU)"
+          else
+            echo "Error: Wild_KSU directory not found."
+            echo "Contents of current and parent directories for debugging:"
+            echo "--- Current directory (common): ---"
+            ls -la
+            echo "--- Parent directory: ---"
+            ls -la ..
+            exit 1
           fi
 
-      - name: "⚙️ Configure kernel dengan script/config"
-        working-directory: ./common
+      - name: Apply SUSFS
+        if: matrix.variant == 'ksu'
+        working-directory: common
         run: |
-          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          git clone -q --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
           
-          # Buat output directory
-          mkdir -p out
+          [ -f "susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch" ] && \
+            patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch 2>/dev/null || true
           
-          # Buat defconfig
-          make O=out ARCH=arm64 CC=clang LLVM=1 gki_defconfig
+          [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ] && \
+            cp susfs4ksu/kernel_patches/fs/susfs.c fs/
           
-          # KSU configs
-          ./scripts/config --file out/.config -e KSU
-          ./scripts/config --file out/.config -e KPROBES
-          ./scripts/config --file out/.config -e HAVE_KPROBES
-          ./scripts/config --file out/.config -e KPROBE_EVENTS
-          ./scripts/config --file out/.config -e KSU_SUSFS
-          ./scripts/config --file out/.config -e BBG
+          ls susfs4ksu/kernel_patches/include/linux/susfs*.h 2>/dev/null && \
+            cp susfs4ksu/kernel_patches/include/linux/susfs*.h include/linux/
           
-          # Performance configs
-          ./scripts/config --file out/.config -e CC_OPTIMIZE_FOR_PERFORMANCE
-          ./scripts/config --file out/.config -e TCP_CONG_ADVANCED
-          ./scripts/config --file out/.config -d TCP_CONG_BIC
-          ./scripts/config --file out/.config -e TCP_CONG_WESTWOOD
-          ./scripts/config --file out/.config -d TCP_CONG_HTCP
-          ./scripts/config --file out/.config -e TCP_CONG_BBR
-          ./scripts/config --file out/.config -d DEFAULT_BBR
-          ./scripts/config --file out/.config -d DEFAULT_CUBIC
-          ./scripts/config --file out/.config -e DEFAULT_WESTWOOD
-          ./scripts/config --file out/.config --set-str DEFAULT_TCP_CONG "westwood"
+          if [ -f "Wild_KSU/kernel/ksu.c" ]; then
+            grep -q "susfs.h" Wild_KSU/kernel/ksu.c || \
+              sed -i '/#include <linux\/fs.h>/a #include <linux/susfs.h>' Wild_KSU/kernel/ksu.c
+            grep -q "susfs_init" Wild_KSU/kernel/ksu.c || \
+              sed -i '/ksu_core_init();/a \\tsusfs_init();' Wild_KSU/kernel/ksu.c
+          fi
           
-          # Filesystem
-          ./scripts/config --file out/.config -e OVERLAY_FS
-          ./scripts/config --file out/.config -e TMPFS_XATTR
-          ./scripts/config --file out/.config -e TMPFS_POSIX_ACL
-          
-          # Disable debug/tracing
-          ./scripts/config --file out/.config -d DEBUG_KERNEL
-          ./scripts/config --file out/.config -d DEBUG_INFO
-          ./scripts/config --file out/.config -d KASAN
-          ./scripts/config --file out/.config -d DEBUG_FS
-          ./scripts/config --file out/.config -d TRACING_SUPPORT
-          ./scripts/config --file out/.config -d TRACING
-          ./scripts/config --file out/.config -d FTRACE
-          
-          # Jalankan olddefconfig untuk resolve dependencies
-          make O=out ARCH=arm64 CC=clang LLVM=1 olddefconfig
-          
-          echo "✓ Kernel configured"
+          rm -rf susfs4ksu
+          echo "✓ SUSFS applied"
 
-      - name: "🔨 Build kernel dengan make manual"
-        working-directory: ./common
+      - name: Remove debug printk from modules
+        if: matrix.variant == 'ksu'
+        working-directory: common
         run: |
-          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
-          
-          # Build kernel Image saja tanpa modules untuk menghindari ABI check
-          make O=out ARCH=arm64 CC=clang LLVM=1 -j$(nproc --all) Image
-          
-          echo "✓ Build completed"
+          find Wild_KSU/ -type f \( -name "*.c" -o -name "*.h" \) \
+            -exec sed -i 's/trace_printk/pr_debug/g' {} + 2>/dev/null || true
+          find fs/ -path "*/susfs*" -type f \( -name "*.c" -o -name "*.h" \) \
+            -exec sed -i 's/trace_printk/pr_debug/g' {} + 2>/dev/null || true
+          find security/baseband-guard/ -type f \( -name "*.c" -o -name "*.h" \) \
+            -exec sed -i 's/trace_printk/pr_debug/g' {} + 2>/dev/null || true
+          echo "✓ Debug printk cleaned"
 
-      - name: "📦 Package kernel"
+      - name: Apply Baseband Guard
+        if: matrix.variant == 'ksu'
+        working-directory: common
         run: |
-          git clone --depth=1 https://github.com/superuseryu/AnyKernel3 ak3
+          git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
+          ln -sf ../Baseband-guard security/baseband-guard
           
-          # Copy kernel Image
-          cp common/out/arch/arm64/boot/Image ak3/
+          grep -q "baseband-guard" security/Makefile || \
+            echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
           
-          # Buat simple anykernel.sh
-          cat > ak3/anykernel.sh << 'EOF'
-          #!/system/bin/sh
-          # AnyKernel3 script
+          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
           
-          ## AnyKernel setup
-          block=/dev/block/by-name/boot;
-          is_slot_device=auto;
-          ramdisk_compression=auto;
+          grep -q "baseband-guard/Kconfig" security/Kconfig || \
+            sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
           
-          ## AnyKernel methods (DO NOT CHANGE)
-          . tools/ak3-core.sh;
+          # Verify
+          [ -L "security/baseband-guard" ] && \
+          grep -q "baseband-guard" security/Makefile && \
+          grep -q "baseband-guard/Kconfig" security/Kconfig && \
+          echo "✓ BBG setup complete" || { echo "✗ BBG failed"; exit 1; }
+
+      - name: Setup kernel version override
+        run: |
+          # Disable git auto-versioning (prevents -dirty suffix)
+          touch common/.scmversion
           
-          # Flash kernel
-          split_boot;
-          flash_boot;
-          ## end install
-          EOF
+          # LOCALVERSION will be set in kernel config step
+          echo "✓ Version override prepared"
+
+      - name: Clean git tree
+        if: matrix.variant == 'ksu'
+        working-directory: common
+        run: |
+          git config --global user.email "build@github.com"
+          git config --global user.name "GitHub Actions"
+          git add -A 2>/dev/null || true
+          git diff-index --quiet HEAD || \
+            git commit -m "Build: Apply kernel modifications" --no-verify 2>/dev/null || true
+          echo "✓ Git tree cleaned"
+
+      - name: Kernel config (KSU variant)
+        if: matrix.variant == 'ksu'
+        working-directory: common
+        run: |
+          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          make O=out ARCH=arm64 CC=clang gki_defconfig
           
-          chmod +x ak3/anykernel.sh
+          # Enable KernelSU and SUSFS first
+          ./scripts/config --file out/.config -e KSU -e KSU_SUSFS
+          
+          # First olddefconfig for KSU dependencies
+          make O=out ARCH=arm64 CC=clang olddefconfig
+          
+          # === Performance and optimization configs ===
+          
+          # Filesystem support
+          ./scripts/config --file out/.config \
+            -e OVERLAY_FS \
+            -e CC_OPTIMIZE_FOR_PERFORMANCE \
+            -e TMPFS_XATTR \
+            -e F2FS_FS \
+            -e F2FS_FS_SECURITY \
+            -e F2FS_FS_ENCRYPTION
+          
+          # Memory management (MGLRU)
+          ./scripts/config --file out/.config \
+            -e LRU_GEN \
+            -e LRU_GEN_ENABLED \
+            -d LRU_GEN_STATS
+          
+          # === TCP OPTIMIZATION - CRITICAL FIX ===
+          # Enable TCP congestion control subsystem first
+          ./scripts/config --file out/.config \
+            -e INET \
+            -e TCP_CONG_ADVANCED
+          
+          # Now enable specific TCP algorithms
+          ./scripts/config --file out/.config \
+            -e TCP_CONG_BBR \
+            -e TCP_CONG_WESTWOOD
+          
+          # Disable other TCP algorithms we don't need
+          ./scripts/config --file out/.config \
+            -d TCP_CONG_BIC \
+            -d TCP_CONG_CUBIC \
+            -d TCP_CONG_HTCP \
+            -d DEFAULT_BBR \
+            -d DEFAULT_CUBIC
+          
+          # Set Westwood as the default
+          ./scripts/config --file out/.config \
+            -e DEFAULT_WESTWOOD \
+            --set-str DEFAULT_TCP_CONG "westwood"
+          
+          # ZRAM optimization
+          ./scripts/config --file out/.config \
+            -e ZRAM \
+            -e ZRAM_DEF_COMP_LZ4 \
+            --set-val ZRAM_DEF_COMP "lz4"
+          
+          # === CRITICAL: Disable PSI completely ===
+          ./scripts/config --file out/.config \
+            -d PSI \
+            -d PSI_DEFAULT_DISABLED
+          
+          # === CRITICAL: Disable ALL debug and tracing infrastructure ===
+          # Core debug
+          ./scripts/config --file out/.config \
+            -d DEBUG_KERNEL \
+            -d DEBUG_INFO \
+            -d DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
+            -d DEBUG_INFO_DWARF4 \
+            -d DEBUG_INFO_DWARF5 \
+            -d DEBUG_INFO_BTF \
+            -d DEBUG_INFO_REDUCED \
+            -d DEBUG_INFO_COMPRESSED \
+            -d DEBUG_INFO_SPLIT \
+            -d DEBUG_FS \
+            -d DEBUG_BUGVERBOSE \
+            -d DEBUG_LIST \
+            -d DEBUG_PLIST \
+            -d DEBUG_SG \
+            -d DEBUG_NOTIFIERS \
+            -d DEBUG_CREDENTIALS
+          
+          # Tracing - THE MOST IMPORTANT PART
+          # CRITICAL: Disable TRACING_SUPPORT first (this is the root dependency!)
+          ./scripts/config --file out/.config \
+            -d TRACING_SUPPORT \
+            -d TRACING \
+            -d FTRACE \
+            -d TRACEPOINTS \
+            -d FUNCTION_TRACER \
+            -d FUNCTION_GRAPH_TRACER \
+            -d IRQSOFF_TRACER \
+            -d PREEMPT_TRACER \
+            -d SCHED_TRACER \
+            -d HWLAT_TRACER \
+            -d ENABLE_DEFAULT_TRACERS \
+            -d FTRACE_SYSCALLS \
+            -d TRACER_SNAPSHOT \
+            -d STACK_TRACER \
+            -d BLK_DEV_IO_TRACE \
+            -d KPROBES \
+            -d KPROBE_EVENTS \
+            -d UPROBE_EVENTS \
+            -d TRACE_PRINTK \
+            -d TRACEPOINT_BENCHMARK
+          
+          # More tracing dependencies
+          ./scripts/config --file out/.config \
+            -d DYNAMIC_FTRACE \
+            -d FUNCTION_PROFILER \
+            -d FTRACE_MCOUNT_RECORD \
+            -d FTRACE_MCOUNT_USE_RECORDMCOUNT \
+            -d FTRACE_MCOUNT_USE_CC \
+            -d CONTEXT_SWITCH_TRACER
+          
+          # Debugging tools
+          ./scripts/config --file out/.config \
+            -d DYNAMIC_DEBUG \
+            -d SYMBOLIC_ERRNAME \
+            -d DEBUG_SHIRQ \
+            -d DETECT_HUNG_TASK \
+            -d WQ_WATCHDOG
+          
+          # Memory debugging
+          ./scripts/config --file out/.config \
+            -d SLUB_DEBUG \
+            -d SLUB_DEBUG_ON \
+            -d DEBUG_PAGEALLOC \
+            -d PAGE_OWNER \
+            -d PAGE_POISONING \
+            -d DEBUG_OBJECTS \
+            -d DEBUG_OBJECTS_SELFTEST \
+            -d DEBUG_OBJECTS_FREE \
+            -d DEBUG_OBJECTS_TIMERS \
+            -d DEBUG_OBJECTS_WORK \
+            -d DEBUG_OBJECTS_RCU_HEAD \
+            -d DEBUG_OBJECTS_PERCPU_COUNTER
+          
+          # Stack debugging
+          ./scripts/config --file out/.config \
+            -d STACKTRACE \
+            -d DEBUG_STACK_USAGE \
+            -d DEBUG_STACKOVERFLOW
+          
+          # Lock debugging
+          ./scripts/config --file out/.config \
+            -d PROVE_LOCKING \
+            -d LOCK_STAT \
+            -d DEBUG_LOCKDEP \
+            -d DEBUG_ATOMIC_SLEEP \
+            -d DEBUG_LOCKING_API_SELFTESTS \
+            -d DEBUG_RWSEMS \
+            -d DEBUG_SPINLOCK \
+            -d DEBUG_MUTEXES \
+            -d DEBUG_WW_MUTEX_SLOWPATH
+          
+          # RCU debugging
+          ./scripts/config --file out/.config \
+            -d RCU_TRACE \
+            -d RCU_EQS_DEBUG
+          
+          # Printk and logging
+          ./scripts/config --file out/.config \
+            -d PRINTK_TIME \
+            -d PRINTK_CALLER \
+            -d DYNAMIC_DEBUG \
+            -d SYMBOLIC_ERRNAME \
+            -d DEBUG_BUGVERBOSE
+          
+          # Enable BBG if available
+          ./scripts/config --file out/.config -e BBG || echo "Warning: BBG not available"
+          
+          # Add BBG to LSM list
+          current_lsm=$(grep "^CONFIG_LSM=" out/.config | cut -d'"' -f2 || echo "")
+          if [ -n "$current_lsm" ]; then
+            ./scripts/config --file out/.config --set-str LSM "${current_lsm},baseband_guard"
+          fi
+          
+          # Set custom LOCALVERSION for proper uname -r output
+          ./scripts/config --file out/.config \
+            --set-str LOCALVERSION "-android13-8-00005-gb4287516c23f-ab12345678"
+          
+          # First olddefconfig
+          make O=out ARCH=arm64 CC=clang olddefconfig
+          
+          # === FORCE disable after olddefconfig - CRITICAL ===
+          # olddefconfig may re-enable some options, so we force disable them
+          sed -i 's/^CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' out/.config
+          sed -i 's/^CONFIG_TRACING_SUPPORT=y/# CONFIG_TRACING_SUPPORT is not set/' out/.config
+          sed -i 's/^CONFIG_TRACING=y/# CONFIG_TRACING is not set/' out/.config
+          sed -i 's/^CONFIG_FTRACE=y/# CONFIG_FTRACE is not set/' out/.config
+          sed -i 's/^CONFIG_TRACEPOINTS=y/# CONFIG_TRACEPOINTS is not set/' out/.config
+          sed -i 's/^CONFIG_PSI=y/# CONFIG_PSI is not set/' out/.config
+          
+          # Final pass
+          make O=out ARCH=arm64 CC=clang olddefconfig
+          
+          # === NUCLEAR OPTION: Direct edit to ensure they're gone ===
+          # Force disable again after final olddefconfig
+          grep -q "^CONFIG_TRACING_SUPPORT=y" out/.config && sed -i 's/^CONFIG_TRACING_SUPPORT=y/# CONFIG_TRACING_SUPPORT is not set/' out/.config || true
+          grep -q "^CONFIG_TRACING=y" out/.config && sed -i 's/^CONFIG_TRACING=y/# CONFIG_TRACING is not set/' out/.config || true
+          grep -q "^CONFIG_FTRACE=y" out/.config && sed -i 's/^CONFIG_FTRACE=y/# CONFIG_FTRACE is not set/' out/.config || true
+          grep -q "^CONFIG_TRACEPOINTS=y" out/.config && sed -i 's/^CONFIG_TRACEPOINTS=y/# CONFIG_TRACEPOINTS is not set/' out/.config || true
+          grep -q "^CONFIG_DEBUG_KERNEL=y" out/.config && sed -i 's/^CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' out/.config || true
+          grep -q "^CONFIG_DEBUG_FS=y" out/.config && sed -i 's/^CONFIG_DEBUG_FS=y/# CONFIG_DEBUG_FS is not set/' out/.config || true
+
+      - name: Kernel config (NoKSU variant)
+        if: matrix.variant == 'noksu'
+        working-directory: common
+        run: |
+          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          make O=out ARCH=arm64 CC=clang gki_defconfig
+          
+          # Filesystem support
+          ./scripts/config --file out/.config \
+            -e OVERLAY_FS \
+            -e CC_OPTIMIZE_FOR_PERFORMANCE \
+            -e TMPFS_XATTR \
+            -e F2FS_FS \
+            -e F2FS_FS_SECURITY \
+            -e F2FS_FS_ENCRYPTION
+          
+          # Memory management (MGLRU)
+          ./scripts/config --file out/.config \
+            -e LRU_GEN \
+            -e LRU_GEN_ENABLED \
+            -d LRU_GEN_STATS
+          
+          # === TCP OPTIMIZATION - CRITICAL FIX ===
+          # Enable TCP congestion control subsystem first
+          ./scripts/config --file out/.config \
+            -e INET \
+            -e TCP_CONG_ADVANCED
+          
+          # Now enable specific TCP algorithms
+          ./scripts/config --file out/.config \
+            -e TCP_CONG_BBR \
+            -e TCP_CONG_WESTWOOD
+          
+          # Disable other TCP algorithms we don't need
+          ./scripts/config --file out/.config \
+            -d TCP_CONG_BIC \
+            -d TCP_CONG_CUBIC \
+            -d TCP_CONG_HTCP \
+            -d DEFAULT_BBR \
+            -d DEFAULT_CUBIC
+          
+          # Set Westwood as the default
+          ./scripts/config --file out/.config \
+            -e DEFAULT_WESTWOOD \
+            --set-str DEFAULT_TCP_CONG "westwood"
+          
+          # ZRAM optimization
+          ./scripts/config --file out/.config \
+            -e ZRAM \
+            -e ZRAM_DEF_COMP_LZ4 \
+            --set-val ZRAM_DEF_COMP "lz4"
+          
+          # === CRITICAL: Disable PSI completely ===
+          ./scripts/config --file out/.config \
+            -d PSI \
+            -d PSI_DEFAULT_DISABLED
+          
+          # === CRITICAL: Disable ALL debug and tracing infrastructure ===
+          # CRITICAL: Disable TRACING_SUPPORT first (root dependency!)
+          ./scripts/config --file out/.config \
+            -d DEBUG_KERNEL \
+            -d DEBUG_INFO \
+            -d DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
+            -d DEBUG_INFO_DWARF4 \
+            -d DEBUG_INFO_DWARF5 \
+            -d DEBUG_INFO_BTF \
+            -d DEBUG_FS \
+            -d DEBUG_BUGVERBOSE \
+            -d DEBUG_LIST \
+            -d TRACING_SUPPORT \
+            -d TRACING \
+            -d FTRACE \
+            -d TRACEPOINTS \
+            -d FUNCTION_TRACER \
+            -d FUNCTION_GRAPH_TRACER \
+            -d IRQSOFF_TRACER \
+            -d PREEMPT_TRACER \
+            -d SCHED_TRACER \
+            -d HWLAT_TRACER \
+            -d ENABLE_DEFAULT_TRACERS \
+            -d FTRACE_SYSCALLS \
+            -d TRACER_SNAPSHOT \
+            -d STACK_TRACER \
+            -d BLK_DEV_IO_TRACE \
+            -d KPROBES \
+            -d KPROBE_EVENTS \
+            -d UPROBE_EVENTS \
+            -d TRACE_PRINTK \
+            -d TRACEPOINT_BENCHMARK \
+            -d DYNAMIC_FTRACE \
+            -d FUNCTION_PROFILER \
+            -d DYNAMIC_DEBUG \
+            -d SLUB_DEBUG \
+            -d DEBUG_PAGEALLOC \
+            -d DEBUG_OBJECTS \
+            -d STACKTRACE \
+            -d RCU_TRACE \
+            -d PRINTK_TIME \
+            -d PRINTK_CALLER
+          
+          # Set custom LOCALVERSION for proper uname -r output
+          ./scripts/config --file out/.config \
+            --set-str LOCALVERSION "-android13-8-00005-gb4287516c23f-ab12345678"
+          
+          # Final olddefconfig
+          make O=out ARCH=arm64 CC=clang olddefconfig
+          
+          # === FORCE disable after olddefconfig ===
+          sed -i 's/^CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' out/.config
+          sed -i 's/^CONFIG_TRACING_SUPPORT=y/# CONFIG_TRACING_SUPPORT is not set/' out/.config
+          sed -i 's/^CONFIG_TRACING=y/# CONFIG_TRACING is not set/' out/.config
+          sed -i 's/^CONFIG_FTRACE=y/# CONFIG_FTRACE is not set/' out/.config
+          sed -i 's/^CONFIG_TRACEPOINTS=y/# CONFIG_TRACEPOINTS is not set/' out/.config
+          sed -i 's/^CONFIG_PSI=y/# CONFIG_PSI is not set/' out/.config
+          
+          # Final pass
+          make O=out ARCH=arm64 CC=clang olddefconfig
+          
+          # === NUCLEAR OPTION ===
+          grep -q "^CONFIG_TRACING_SUPPORT=y" out/.config && sed -i 's/^CONFIG_TRACING_SUPPORT=y/# CONFIG_TRACING_SUPPORT is not set/' out/.config || true
+          grep -q "^CONFIG_TRACING=y" out/.config && sed -i 's/^CONFIG_TRACING=y/# CONFIG_TRACING is not set/' out/.config || true
+          grep -q "^CONFIG_FTRACE=y" out/.config && sed -i 's/^CONFIG_FTRACE=y/# CONFIG_FTRACE is not set/' out/.config || true
+          grep -q "^CONFIG_TRACEPOINTS=y" out/.config && sed -i 's/^CONFIG_TRACEPOINTS=y/# CONFIG_TRACEPOINTS is not set/' out/.config || true
+          grep -q "^CONFIG_DEBUG_KERNEL=y" out/.config && sed -i 's/^CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' out/.config || true
+          grep -q "^CONFIG_DEBUG_FS=y" out/.config && sed -i 's/^CONFIG_DEBUG_FS=y/# CONFIG_DEBUG_FS is not set/' out/.config || true
+
+      - name: Verify kernel config
+        working-directory: common
+        run: |
+          echo ""
+          echo "=== Verifying TCP configuration ==="
+          
+          # Check TCP Westwood config
+          grep -q "^CONFIG_TCP_CONG_ADVANCED=y" out/.config && echo "✓ TCP_CONG_ADVANCED enabled" || echo "✗ TCP_CONG_ADVANCED not enabled!"
+          grep -q "^CONFIG_TCP_CONG_WESTWOOD=y" out/.config && echo "✓ TCP_CONG_WESTWOOD enabled" || echo "✗ TCP_CONG_WESTWOOD not enabled!"
+          grep -q "^CONFIG_DEFAULT_WESTWOOD=y" out/.config && echo "✓ DEFAULT_WESTWOOD enabled" || echo "✗ DEFAULT_WESTWOOD not enabled!"
+          grep "^CONFIG_DEFAULT_TCP_CONG=" out/.config || echo "✗ DEFAULT_TCP_CONG not set!"
+          
+          echo ""
+          echo "=== Verifying debug configs are disabled ==="
+          
+          # Verify critical configs are disabled (should show "# CONFIG_XXX is not set")
+          grep -q "^# CONFIG_PSI is not set" out/.config && echo "✓ PSI disabled" || echo "✗ PSI still enabled!"
+          grep -q "^# CONFIG_TRACING_SUPPORT is not set" out/.config && echo "✓ TRACING_SUPPORT disabled" || echo "✗ TRACING_SUPPORT still enabled!"
+          grep -q "^# CONFIG_TRACING is not set" out/.config && echo "✓ TRACING disabled" || echo "✗ TRACING still enabled!"
+          grep -q "^# CONFIG_TRACEPOINTS is not set" out/.config && echo "✓ TRACEPOINTS disabled" || echo "✗ TRACEPOINTS still enabled!"
+          grep -q "^# CONFIG_FTRACE is not set" out/.config && echo "✓ FTRACE disabled" || echo "✗ FTRACE still enabled!"
+          grep -q "^# CONFIG_DEBUG_KERNEL is not set" out/.config && echo "✓ DEBUG_KERNEL disabled" || echo "✗ DEBUG_KERNEL still enabled!"
+          
+          # Make sure there are NO enabled versions
+          if grep -q "^CONFIG_TRACING=y" out/.config; then
+            echo "❌ ERROR: CONFIG_TRACING=y still found in .config!"
+            exit 1
+          fi
+          if grep -q "^CONFIG_TRACEPOINTS=y" out/.config; then
+            echo "❌ ERROR: CONFIG_TRACEPOINTS=y still found in .config!"
+            exit 1
+          fi
+          
+          echo ""
+          echo "✓ Config cleanup complete - ready to build"
+
+      - name: Build kernel
+        run: |
+          export CCACHE_COMPRESS=1
+          export CCACHE_MAXSIZE=2G
+          export USE_CCACHE=1
+          export CCACHE_DIR=~/.ccache
+          export KBUILD_BUILD_USER=yu
+          export KBUILD_BUILD_HOST=github
+          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          
+          which clang || { echo "ERROR: clang not found in PATH"; exit 127; }
+          
+          echo "=== Ccache stats before build ==="
+          ccache -s
+          
+          BUILD_CONFIG=common/build.config.gki.aarch64 \
+          LTO=thin \
+          SKIP_MRPROPER=1 \
+          build/build.sh -j$(nproc --all) || {
+            echo "Build failed, checking logs..."
+            cat out/error.log 2>/dev/null || true
+            exit 1
+          }
+          
+          echo "=== Ccache stats after build ==="
+          ccache -s
+
+      - name: Verify build output
+        run: |
+          if [ ! -f "out/android13-5.15/dist/Image" ]; then
+            echo "✗ Kernel Image not found!"
+            exit 1
+          fi
+          echo "✓ Build successful: $(du -h out/android13-5.15/dist/Image | cut -f1)"
+          
+          # Verify kernel version in binary
+          echo ""
+          echo "=== Kernel version string ==="
+          strings out/android13-5.15/dist/Image | grep "Linux version" | head -1 || echo "⚠ Version string not found"
+          
+          # Check for trace_printk in binary (should NOT exist)
+          echo ""
+          echo "=== Checking for trace_printk ==="
+          if strings out/android13-5.15/dist/Image | grep -q "trace_printk"; then
+            echo "⚠ WARNING: trace_printk found in kernel binary!"
+            echo "This means tracing is still active"
+          else
+            echo "✓ No trace_printk found - tracing properly disabled"
+          fi
+
+      - name: Package AnyKernel3
+        run: |
+          git clone -q --depth=1 $ANYKERNEL_REPO ak3
+          cp out/android13-5.15/dist/Image ak3/
+          [ -f out/android13-5.15/dist/dtb ] && cp out/android13-5.15/dist/dtb ak3/ || true
+          [ -f out/android13-5.15/dist/dtbo.img ] && cp out/android13-5.15/dist/dtbo.img ak3/ || true
           
           cd ak3
-          zip -r9 "../GKI-Kernel-$(date +'%Y%m%d').zip" * -x .git\* -x README.md
-          cd ..
+          VARIANT_SUFFIX=""
+          [ "${{ matrix.variant }}" == "noksu" ] && VARIANT_SUFFIX="-noksu"
+          zip -q -r9 ../GKI-${DEVICE}-A13${VARIANT_SUFFIX}-$(date +%Y%m%d).zip * -x .git\* -x README.md
+          echo "✓ Package created"
 
-      - name: "⬆️ Upload artifact"
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-build
-          path: GKI-Kernel-*.zip
+          name: GKI-${{ env.DEVICE }}-${{ matrix.variant }}-${{ github.run_number }}
+          path: GKI-*.zip
           retention-days: 7
 
-      - name: "📤 Create Release"
-        uses: softprops/action-gh-release@v1
+  # === FIX 2: Unified Release Job ===
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    if: always()
+    steps:
+      - name: Get build info
+        id: build_info
+        run: |
+          date_full="$(date '+%Y-%m-%d %H:%M:%S UTC')"
+          date_short="$(date +%Y%m%d)"
+          tag="v${{ github.run_number }}-${date_short}"
+          echo "date=${date_full}" >> $GITHUB_OUTPUT
+          echo "date_short=${date_short}" >> $GITHUB_OUTPUT
+          echo "tag=${tag}" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        id: prepare
+        run: |
+          mkdir -p release_files
+          has_ksu=false
+          has_noksu=false
+          
+          [ -d "artifacts/GKI-${{ env.DEVICE }}-ksu-${{ github.run_number }}" ] && {
+            cp artifacts/GKI-${{ env.DEVICE }}-ksu-${{ github.run_number }}/*.zip release_files/
+            has_ksu=true
+            echo "✓ KSU variant"
+          }
+          
+          [ -d "artifacts/GKI-${{ env.DEVICE }}-noksu-${{ github.run_number }}" ] && {
+            cp artifacts/GKI-${{ env.DEVICE }}-noksu-${{ github.run_number }}/*.zip release_files/
+            has_noksu=true
+            echo "✓ NoKSU variant"
+          }
+          
+          # Determine variant text
+          if [ "$has_ksu" = true ] && [ "$has_noksu" = true ]; then
+            variant_text="both (KSU + NoKSU)"
+          elif [ "$has_ksu" = true ]; then
+            variant_text="ksu"
+          elif [ "$has_noksu" = true ]; then
+            variant_text="noksu"
+          else
+            variant_text="unknown"
+          fi
+          
+          echo "variant_text=${variant_text}" >> $GITHUB_OUTPUT
+          echo "has_ksu=${has_ksu}" >> $GITHUB_OUTPUT
+          echo "has_noksu=${has_noksu}" >> $GITHUB_OUTPUT
+
+      - name: Create Unified Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.build_info.outputs.tag }}
+          name: GKI Kernel - Build #${{ github.run_number }} (${{ steps.build_info.outputs.date_short }})
+          body: |
+            ## GKI Kernel for Redmi Note 13 4G / NFC
+            **Android 13 • Kernel 5.15 • Build #${{ github.run_number }}**
+            
+            ### Build Information
+            - **Variants Built:** `${{ steps.prepare.outputs.variant_text }}`
+            - **Build Date:** ${{ steps.build_info.outputs.date }}
+            - **Build Number / Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - **Commit:** [`${{ github.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+            - **Branch:** `${{ github.ref_name }}`
+            
+            ### Features
+            
+            ${{ steps.prepare.outputs.has_ksu == 'true' && '#### KSU Variant Features:
+            - ✅ Wild KernelSU integrated
+            - ✅ SUSFS root hiding
+            - ✅ Baseband Guard protection
+            ' || '' }}
+            ${{ steps.prepare.outputs.has_noksu == 'true' && '#### NoKSU Variant Features:
+            - ❌ No KernelSU (stock GKI)
+            ' || '' }}
+            
+            #### Common Features (Both Variants):
+            - ✅ MGLRU memory management
+            - ✅ TCP BBR + Westwood congestion control (Westwood as default)
+            - ✅ F2FS optimization
+            - ✅ ZRAM LZ4 compression
+            - ✅ PSI disabled for performance
+            - ✅ All debugging infrastructure disabled
+            - ✅ Proper kernel version string (5.15.197-android13-...)
+            
+            ### Installation
+            1. Boot to recovery (TWRP/OrangeFox)
+            2. Flash the appropriate ZIP file below:
+               ${{ steps.prepare.outputs.has_ksu == 'true' && '- `GKI-sapphiren-A13-YYYYMMDD.zip` - **KSU variant**' || '' }}
+               ${{ steps.prepare.outputs.has_noksu == 'true' && '- `GKI-sapphiren-A13-noksu-YYYYMMDD.zip` - **NoKSU variant**' || '' }}
+            3. Reboot system
+            ${{ steps.prepare.outputs.has_ksu == 'true' && '4. For KSU variant: Install [Wild KSU Manager](https://github.com/WildKernels/Wild_KSU/releases)' || '' }}
+            
+            ### Notes & Warnings
+            - ⚠️ **Compatible:** Android 13 GKI devices only
+            - ⚠️ **Requires:** Unlocked bootloader
+            - 💾 **Backup:** Your current boot partition before flashing
+            - 📱 **Tested on:** Redmi Note 13 4G (Sapphire/Sapphiren)
+            - ℹ️ **TCP:** Westwood is now properly set as default congestion control
+            - ℹ️ **Debug:** All debug features are disabled for better performance
+            - ℹ️ **Version:** Kernel version includes proper android13 suffix
+            
+            ### Changelog
+            See [commit history](${{ github.server_url }}/${{ github.repository }}/commits/${{ github.ref_name }}) for detailed changes.
+            
+            ---
+            
+            ### Downloads
+            Download the appropriate ZIP file below and flash via TWRP/OrangeFox recovery.
+          files: release_files/*.zip
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          files: GKI-Kernel-*.zip
-          tag_name: "kernel-$(date +'%Y%m%d')"
-          name: "GKI Kernel $(date +'%Y-%m-%d')"
-          body: |
-            ## GKI Kernel with KSU
-            
-            Built using manual approach to avoid GKI build system issues.
-            
-            ### Features:
-            - Wild KernelSU
-            - SUSFS root hiding
-            - Baseband Guard
-            - TCP Westwood congestion control
-            - Performance optimizations
