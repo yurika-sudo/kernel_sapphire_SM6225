@@ -252,10 +252,10 @@ jobs:
            +echo "Skipping ABI check for custom kernel build"
            +exit 0
            +
-            # This script is used to compare the kernel's ksymtab against a list of
-             # symbols in the KMI symbol list. It is used to enforce that the kernel
-              # maintains ABI stability.
-              EOF
+           # This script is used to compare the kernel's ksymtab against a list of
+           # symbols in the KMI symbol list. It is used to enforce that the kernel
+           # maintains ABI stability.
+           EOF
           
           # Apply the patch
           if patch -p1 --forward < skip_abi_check.patch; then
