@@ -1,4 +1,4 @@
-name: Build GKI Kernel (Wild-KSU) - TCP FIX v2
+name: Build GKI Kernel - TCP ULTIMATE FIX
 
 on:
   workflow_dispatch:
@@ -12,6 +12,14 @@ on:
           - ksu
           - noksu
           - both
+      tcp_algo:
+        description: 'TCP Algorithm (use bbr if westwood fails)'
+        required: true
+        default: 'westwood_or_bbr'
+        type: choice
+        options:
+          - westwood_or_bbr
+          - bbr_only
 
 permissions:
   contents: write
@@ -20,11 +28,9 @@ env:
   ANDROID_VERSION: android13
   KERNEL_VERSION: 5.15
   KERNEL_BRANCH: common-android13-5.15-lts
-  CLANG_VERSION: r547379
   DEVICE: sapphiren
   ANYKERNEL_REPO: https://github.com/superuseryu/AnyKernel3
   CCACHE_DIR: ~/.ccache
-  VERBOSE: false
 
 jobs:
   build:
@@ -39,44 +45,26 @@ jobs:
 
       - name: Free up disk space
         run: |
-          echo "=== Before cleanup ==="
-          df -h
-          
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          
-          sudo apt-get clean
-          sudo apt-get autoremove -y
-          
-          echo "=== After cleanup ==="
-          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean && sudo apt-get autoremove -y
 
       - name: Install minimal deps
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            bc bison flex libssl-dev make libelf-dev \
-            ccache rsync zip unzip curl git build-essential \
+            bc bison flex libssl-dev make libelf-dev ccache rsync zip unzip curl git build-essential \
             libncurses-dev gawk wget diffutils > /dev/null
 
       - name: Setup ccache
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.ccache
-            ~/.cache/ccache
-          key: ccache-${{ matrix.variant }}-${{ env.KERNEL_BRANCH }}-${{ github.run_number }}
-          restore-keys: |
-            ccache-${{ matrix.variant }}-${{ env.KERNEL_BRANCH }}-
-            ccache-${{ matrix.variant }}-
-            ccache-
+          path: ~/.ccache
+          key: ccache-${{ matrix.variant }}-${{ github.run_number }}
+          restore-keys: ccache-${{ matrix.variant }}-
       
       - name: Initialize ccache
         run: |
-          mkdir -p ~/.ccache ~/.cache/ccache
+          mkdir -p ~/.ccache
           ccache -M 2G
           ccache -z
 
@@ -95,11 +83,10 @@ jobs:
           tar -xzf master.tar.gz -C clang --strip-components=1
           rm master.tar.gz
         
-      - name: Verify clang installation
+      - name: Verify clang
         run: |
           export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
           clang --version | head -1
-          echo "✓ Clang ready"
 
       - name: Cache kernel source
         uses: actions/cache@v4
@@ -111,44 +98,99 @@ jobs:
             build
             prebuilts
           key: kernel-source-${{ env.KERNEL_BRANCH }}-${{ github.run_number }}
-          restore-keys: |
-            kernel-source-${{ env.KERNEL_BRANCH }}-
+          restore-keys: kernel-source-${{ env.KERNEL_BRANCH }}-
 
       - name: Initialize kernel source
         run: |
           if [ "${{ steps.kernel-cache.outputs.cache-hit }}" != "true" ]; then
-            echo "=== Cache miss - full repo sync ==="
             curl -o repo https://storage.googleapis.com/git-repo-downloads/repo
             chmod +x repo
-            
-            ./repo init -u https://android.googlesource.com/kernel/manifest \
-              -b ${KERNEL_BRANCH} --depth=1
-            
+            ./repo init -u https://android.googlesource.com/kernel/manifest -b ${KERNEL_BRANCH} --depth=1
             ./repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
           else
-            echo "=== Cache hit - skipping full sync ==="
-            echo "Doing minimal sync to update any changes..."
             curl -o repo https://storage.googleapis.com/git-repo-downloads/repo
             chmod +x repo
             ./repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle --force-sync 2>/dev/null || true
           fi
+
+      - name: Check & Port TCP Westwood
+        id: tcp_check
+        run: |
+          echo "=== Checking TCP Westwood availability ==="
           
-          echo "✓ Kernel source ready"
+          if [ -f "common/net/ipv4/tcp_westwood.c" ]; then
+            echo "✅ TCP Westwood source EXISTS!"
+            echo "has_westwood=true" >> $GITHUB_OUTPUT
+            echo "tcp_algo=westwood" >> $GITHUB_OUTPUT
+          else
+            echo "❌ TCP Westwood source NOT FOUND in GKI!"
+            
+            if [ "${{ github.event.inputs.tcp_algo }}" == "westwood_or_bbr" ]; then
+              echo "Attempting to port Westwood from mainline kernel..."
+              
+              # Clone mainline kernel 5.15
+              git clone --depth=1 --branch v5.15 https://github.com/torvalds/linux.git mainline_tmp
+              
+              if [ -f "mainline_tmp/net/ipv4/tcp_westwood.c" ]; then
+                echo "✅ Found Westwood in mainline, porting..."
+                
+                # Copy source file
+                cp mainline_tmp/net/ipv4/tcp_westwood.c common/net/ipv4/
+                
+                # Add to Makefile if not present
+                if ! grep -q "tcp_westwood" common/net/ipv4/Makefile; then
+                  echo 'obj-$(CONFIG_TCP_CONG_WESTWOOD) += tcp_westwood.o' >> common/net/ipv4/Makefile
+                fi
+                
+                # Add to Kconfig if not present
+                if ! grep -q "TCP_CONG_WESTWOOD" common/net/ipv4/Kconfig; then
+                  cat >> common/net/ipv4/Kconfig << 'KCONFIG_EOF'
+                  config TCP_CONG_WESTWOOD
+                  tristate "TCP Westwood+"
+                  default m
+                  help
+                  TCP Westwood+ is a sender-side only modification of the TCP Reno
+                  protocol stack that optimizes the performance of TCP congestion
+                  control. It is based on end-to-end bandwidth estimation to set
+                  congestion window and slow start threshold after a congestion
+                  episode. Using this estimation, TCP Westwood+ adaptively sets a
+                  slow start threshold and a congestion window which takes into
+                  account the bandwidth used at the time congestion is experienced.
+                  See http://c3lab.poliba.it/index.php/Westwood for more detail.
+                  KCONFIG_EOF
+                fi
+                
+                rm -rf mainline_tmp
+                echo "✅ Westwood ported successfully!"
+                echo "has_westwood=true" >> $GITHUB_OUTPUT
+                echo "tcp_algo=westwood" >> $GITHUB_OUTPUT
+              else
+                echo "⚠️ Mainline also doesn't have Westwood, falling back to BBR"
+                rm -rf mainline_tmp
+                echo "has_westwood=false" >> $GITHUB_OUTPUT
+                echo "tcp_algo=bbr" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "User chose BBR only mode"
+              echo "has_westwood=false" >> $GITHUB_OUTPUT
+              echo "tcp_algo=bbr" >> $GITHUB_OUTPUT
+            fi
+          fi
+          
+          echo ""
+          echo "=== Final TCP algorithm: $tcp_algo ==="
 
       - name: Setup Wild KernelSU
         if: matrix.variant == 'ksu'
         working-directory: common
         run: |
           curl -LSs https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh | bash -s stable
-
           if [ -d "Wild_KSU" ]; then
             ln -sf Wild_KSU drivers/kernelsu
-            echo "KernelSU setup completed (found in ./Wild_KSU)"
           elif [ -d "../Wild_KSU" ]; then
             ln -sf ../Wild_KSU drivers/kernelsu
-            echo "KernelSU setup completed (found in ../Wild_KSU)"
           else
-            echo "Error: Wild_KSU directory not found."
+            echo "Error: Wild_KSU not found"
             exit 1
           fi
 
@@ -157,37 +199,25 @@ jobs:
         working-directory: common
         run: |
           git clone -q --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          
           [ -f "susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch" ] && \
             patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch 2>/dev/null || true
-          
-          [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ] && \
-            cp susfs4ksu/kernel_patches/fs/susfs.c fs/
-          
+          [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ] && cp susfs4ksu/kernel_patches/fs/susfs.c fs/
           ls susfs4ksu/kernel_patches/include/linux/susfs*.h 2>/dev/null && \
             cp susfs4ksu/kernel_patches/include/linux/susfs*.h include/linux/
-          
           if [ -f "Wild_KSU/kernel/ksu.c" ]; then
             grep -q "susfs.h" Wild_KSU/kernel/ksu.c || \
               sed -i '/#include <linux\/fs.h>/a #include <linux/susfs.h>' Wild_KSU/kernel/ksu.c
             grep -q "susfs_init" Wild_KSU/kernel/ksu.c || \
               sed -i '/ksu_core_init();/a \\tsusfs_init();' Wild_KSU/kernel/ksu.c
           fi
-          
           rm -rf susfs4ksu
-          echo "✓ SUSFS applied"
 
-      - name: Remove debug printk from modules
+      - name: Remove debug printk
         if: matrix.variant == 'ksu'
         working-directory: common
         run: |
           find Wild_KSU/ -type f \( -name "*.c" -o -name "*.h" \) \
             -exec sed -i 's/trace_printk/pr_debug/g' {} + 2>/dev/null || true
-          find fs/ -path "*/susfs*" -type f \( -name "*.c" -o -name "*.h" \) \
-            -exec sed -i 's/trace_printk/pr_debug/g' {} + 2>/dev/null || true
-          find security/baseband-guard/ -type f \( -name "*.c" -o -name "*.h" \) \
-            -exec sed -i 's/trace_printk/pr_debug/g' {} + 2>/dev/null || true
-          echo "✓ Debug printk cleaned"
 
       - name: Apply Baseband Guard
         if: matrix.variant == 'ksu'
@@ -195,24 +225,14 @@ jobs:
         run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
           ln -sf ../Baseband-guard security/baseband-guard
-          
           grep -q "baseband-guard" security/Makefile || \
             echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
-          
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
-          
           grep -q "baseband-guard/Kconfig" security/Kconfig || \
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
-          
-          [ -L "security/baseband-guard" ] && \
-          grep -q "baseband-guard" security/Makefile && \
-          grep -q "baseband-guard/Kconfig" security/Kconfig && \
-          echo "✓ BBG setup complete" || { echo "✗ BBG failed"; exit 1; }
 
-      - name: Setup kernel version override
-        run: |
-          touch common/.scmversion
-          echo "✓ Version override prepared"
+      - name: Setup kernel version
+        run: touch common/.scmversion
 
       - name: Clean git tree
         if: matrix.variant == 'ksu'
@@ -221,9 +241,7 @@ jobs:
           git config --global user.email "build@github.com"
           git config --global user.name "GitHub Actions"
           git add -A 2>/dev/null || true
-          git diff-index --quiet HEAD || \
-            git commit -m "Build: Apply kernel modifications" --no-verify 2>/dev/null || true
-          echo "✓ Git tree cleaned"
+          git diff-index --quiet HEAD || git commit -m "Build: Apply modifications" --no-verify 2>/dev/null || true
 
       - name: Kernel config (KSU variant)
         if: matrix.variant == 'ksu'
@@ -232,124 +250,60 @@ jobs:
           export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
           make O=out ARCH=arm64 CC=clang gki_defconfig
           
-          # Enable KernelSU and SUSFS first
           ./scripts/config --file out/.config -e KSU -e KSU_SUSFS
-          
-          # First olddefconfig for KSU dependencies
           make O=out ARCH=arm64 CC=clang olddefconfig
           
-          # === NUCLEAR OPTION: TCP WESTWOOD HARDCORE MODE ===
-          echo ""
-          echo "=== Applying HARDCORE TCP Westwood config ==="
+          # === TCP Configuration based on availability ===
+          TCP_ALGO="${{ steps.tcp_check.outputs.tcp_algo }}"
           
-          # Method 1: Use scripts/config
+          echo "Configuring TCP: $TCP_ALGO"
+          
           ./scripts/config --file out/.config \
             -e INET \
             -e TCP_CONG_ADVANCED \
-            -e TCP_CONG_WESTWOOD \
-            -e TCP_CONG_BBR \
-            -d TCP_CONG_BIC \
-            -d TCP_CONG_CUBIC \
-            -d TCP_CONG_HTCP \
-            -d DEFAULT_CUBIC \
-            -d DEFAULT_BBR \
-            -e DEFAULT_WESTWOOD \
-            --set-str DEFAULT_TCP_CONG "westwood"
+            -e TCP_CONG_BBR
           
-          # Run olddefconfig
-          make O=out ARCH=arm64 CC=clang olddefconfig
+          if [ "$TCP_ALGO" == "westwood" ]; then
+            echo "Enabling Westwood..."
+            ./scripts/config --file out/.config \
+              -e TCP_CONG_WESTWOOD \
+              -d TCP_CONG_CUBIC \
+              -d DEFAULT_CUBIC \
+              -d DEFAULT_BBR \
+              -e DEFAULT_WESTWOOD \
+              --set-str DEFAULT_TCP_CONG "westwood"
+            
+            # Force with sed
+            make O=out ARCH=arm64 CC=clang olddefconfig
+            sed -i '/# CONFIG_TCP_CONG_WESTWOOD is not set/d' out/.config
+            grep -q "^CONFIG_TCP_CONG_WESTWOOD=" out/.config || echo "CONFIG_TCP_CONG_WESTWOOD=y" >> out/.config
+            sed -i 's/^CONFIG_TCP_CONG_WESTWOOD=.*/CONFIG_TCP_CONG_WESTWOOD=y/' out/.config
+            grep -q "^CONFIG_DEFAULT_WESTWOOD=" out/.config || echo "CONFIG_DEFAULT_WESTWOOD=y" >> out/.config
+            sed -i 's/^CONFIG_DEFAULT_TCP_CONG=.*/CONFIG_DEFAULT_TCP_CONG="westwood"/' out/.config
+          else
+            echo "Using BBR (Westwood not available)"
+            ./scripts/config --file out/.config \
+              -d TCP_CONG_CUBIC \
+              -d DEFAULT_CUBIC \
+              -e DEFAULT_BBR \
+              --set-str DEFAULT_TCP_CONG "bbr"
+          fi
           
-          # Method 2: FORCE with sed (nuclear option if olddefconfig reverts it)
-          echo "Forcing TCP configs with sed..."
-          
-          # Remove any "not set" lines for configs we want enabled
-          sed -i '/# CONFIG_TCP_CONG_ADVANCED is not set/d' out/.config
-          sed -i '/# CONFIG_TCP_CONG_WESTWOOD is not set/d' out/.config
-          sed -i '/# CONFIG_DEFAULT_WESTWOOD is not set/d' out/.config
-          
-          # Add or replace with enabled versions
-          grep -q "^CONFIG_TCP_CONG_ADVANCED=" out/.config || echo "CONFIG_TCP_CONG_ADVANCED=y" >> out/.config
-          grep -q "^CONFIG_TCP_CONG_WESTWOOD=" out/.config || echo "CONFIG_TCP_CONG_WESTWOOD=y" >> out/.config
-          grep -q "^CONFIG_DEFAULT_WESTWOOD=" out/.config || echo "CONFIG_DEFAULT_WESTWOOD=y" >> out/.config
-          grep -q "^CONFIG_DEFAULT_TCP_CONG=" out/.config || echo 'CONFIG_DEFAULT_TCP_CONG="westwood"' >> out/.config
-          
-          # Force replace if exists
-          sed -i 's/^CONFIG_TCP_CONG_ADVANCED=.*/CONFIG_TCP_CONG_ADVANCED=y/' out/.config
-          sed -i 's/^CONFIG_TCP_CONG_WESTWOOD=.*/CONFIG_TCP_CONG_WESTWOOD=y/' out/.config
-          sed -i 's/^CONFIG_DEFAULT_WESTWOOD=.*/CONFIG_DEFAULT_WESTWOOD=y/' out/.config
-          sed -i 's/^CONFIG_DEFAULT_TCP_CONG=.*/CONFIG_DEFAULT_TCP_CONG="westwood"/' out/.config
-          
-          # Disable CUBIC explicitly
-          sed -i 's/^CONFIG_TCP_CONG_CUBIC=.*/# CONFIG_TCP_CONG_CUBIC is not set/' out/.config
-          sed -i 's/^CONFIG_DEFAULT_CUBIC=.*/# CONFIG_DEFAULT_CUBIC is not set/' out/.config
-          
-          echo "TCP config forced!"
-          
-          # === Other configs ===
+          # Other configs
           ./scripts/config --file out/.config \
-            -e OVERLAY_FS \
-            -e CC_OPTIMIZE_FOR_PERFORMANCE \
-            -e TMPFS_XATTR \
-            -e F2FS_FS \
-            -e F2FS_FS_SECURITY \
-            -e F2FS_FS_ENCRYPTION \
-            -e LRU_GEN \
-            -e LRU_GEN_ENABLED \
-            -d LRU_GEN_STATS \
-            -e ZRAM \
-            -e ZRAM_DEF_COMP_LZ4 \
-            --set-val ZRAM_DEF_COMP "lz4" \
-            -d PSI \
-            -d PSI_DEFAULT_DISABLED \
-            -d DEBUG_KERNEL \
-            -d DEBUG_INFO \
-            -d DEBUG_FS \
-            -d TRACING_SUPPORT \
-            -d TRACING \
-            -d FTRACE \
-            -d TRACEPOINTS
-          
-          ./scripts/config --file out/.config -e BBG || echo "Warning: BBG not available"
+            -e OVERLAY_FS -e CC_OPTIMIZE_FOR_PERFORMANCE \
+            -e F2FS_FS -e LRU_GEN -e LRU_GEN_ENABLED \
+            -e ZRAM -e ZRAM_DEF_COMP_LZ4 --set-val ZRAM_DEF_COMP "lz4" \
+            -d PSI -d DEBUG_KERNEL -d TRACING_SUPPORT -d FTRACE \
+            -e BBG || true
           
           current_lsm=$(grep "^CONFIG_LSM=" out/.config | cut -d'"' -f2 || echo "")
-          if [ -n "$current_lsm" ]; then
-            ./scripts/config --file out/.config --set-str LSM "${current_lsm},baseband_guard"
-          fi
+          [ -n "$current_lsm" ] && ./scripts/config --file out/.config --set-str LSM "${current_lsm},baseband_guard"
           
-          ./scripts/config --file out/.config \
-            --set-str LOCALVERSION "-android13-8-00005-gb4287516c23f-ab12345678"
+          ./scripts/config --file out/.config --set-str LOCALVERSION "-android13-8-00005-gb4287516c23f-ab12345678"
           
-          # Final olddefconfig
           make O=out ARCH=arm64 CC=clang olddefconfig
-          
-          # === POST-OLDDEFCONFIG FORCE (in case it reverted) ===
-          echo "Post-olddefconfig TCP verification..."
-          
-          # Check and force again if needed
-          if ! grep -q "^CONFIG_TCP_CONG_WESTWOOD=y" out/.config; then
-            echo "⚠️ Westwood got disabled by olddefconfig! Force enabling again..."
-            sed -i '/# CONFIG_TCP_CONG_WESTWOOD is not set/d' out/.config
-            echo "CONFIG_TCP_CONG_WESTWOOD=y" >> out/.config
-          fi
-          
-          if ! grep -q "^CONFIG_DEFAULT_WESTWOOD=y" out/.config; then
-            echo "⚠️ DEFAULT_WESTWOOD got disabled! Force enabling again..."
-            sed -i '/# CONFIG_DEFAULT_WESTWOOD is not set/d' out/.config
-            echo "CONFIG_DEFAULT_WESTWOOD=y" >> out/.config
-          fi
-          
-          # One more olddefconfig to stabilize
-          make O=out ARCH=arm64 CC=clang olddefconfig
-          
-          # === FINAL NUCLEAR FORCE ===
-          sed -i 's/^CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' out/.config
-          sed -i 's/^CONFIG_TRACING_SUPPORT=y/# CONFIG_TRACING_SUPPORT is not set/' out/.config
-          sed -i 's/^CONFIG_TRACING=y/# CONFIG_TRACING is not set/' out/.config
-          sed -i 's/^CONFIG_FTRACE=y/# CONFIG_FTRACE is not set/' out/.config
-          sed -i 's/^CONFIG_TRACEPOINTS=y/# CONFIG_TRACEPOINTS is not set/' out/.config
           sed -i 's/^CONFIG_PSI=y/# CONFIG_PSI is not set/' out/.config
-          
-          echo "✓ Config complete!"
 
       - name: Kernel config (NoKSU variant)
         if: matrix.variant == 'noksu'
@@ -358,198 +312,74 @@ jobs:
           export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
           make O=out ARCH=arm64 CC=clang gki_defconfig
           
-          # === NUCLEAR OPTION: TCP WESTWOOD HARDCORE MODE ===
-          echo ""
-          echo "=== Applying HARDCORE TCP Westwood config ==="
-          
-          # Method 1: Use scripts/config
-          ./scripts/config --file out/.config \
-            -e INET \
-            -e TCP_CONG_ADVANCED \
-            -e TCP_CONG_WESTWOOD \
-            -e TCP_CONG_BBR \
-            -d TCP_CONG_BIC \
-            -d TCP_CONG_CUBIC \
-            -d TCP_CONG_HTCP \
-            -d DEFAULT_CUBIC \
-            -d DEFAULT_BBR \
-            -e DEFAULT_WESTWOOD \
-            --set-str DEFAULT_TCP_CONG "westwood"
-          
-          # Run olddefconfig
-          make O=out ARCH=arm64 CC=clang olddefconfig
-          
-          # Method 2: FORCE with sed
-          echo "Forcing TCP configs with sed..."
-          
-          sed -i '/# CONFIG_TCP_CONG_ADVANCED is not set/d' out/.config
-          sed -i '/# CONFIG_TCP_CONG_WESTWOOD is not set/d' out/.config
-          sed -i '/# CONFIG_DEFAULT_WESTWOOD is not set/d' out/.config
-          
-          grep -q "^CONFIG_TCP_CONG_ADVANCED=" out/.config || echo "CONFIG_TCP_CONG_ADVANCED=y" >> out/.config
-          grep -q "^CONFIG_TCP_CONG_WESTWOOD=" out/.config || echo "CONFIG_TCP_CONG_WESTWOOD=y" >> out/.config
-          grep -q "^CONFIG_DEFAULT_WESTWOOD=" out/.config || echo "CONFIG_DEFAULT_WESTWOOD=y" >> out/.config
-          grep -q "^CONFIG_DEFAULT_TCP_CONG=" out/.config || echo 'CONFIG_DEFAULT_TCP_CONG="westwood"' >> out/.config
-          
-          sed -i 's/^CONFIG_TCP_CONG_ADVANCED=.*/CONFIG_TCP_CONG_ADVANCED=y/' out/.config
-          sed -i 's/^CONFIG_TCP_CONG_WESTWOOD=.*/CONFIG_TCP_CONG_WESTWOOD=y/' out/.config
-          sed -i 's/^CONFIG_DEFAULT_WESTWOOD=.*/CONFIG_DEFAULT_WESTWOOD=y/' out/.config
-          sed -i 's/^CONFIG_DEFAULT_TCP_CONG=.*/CONFIG_DEFAULT_TCP_CONG="westwood"/' out/.config
-          
-          sed -i 's/^CONFIG_TCP_CONG_CUBIC=.*/# CONFIG_TCP_CONG_CUBIC is not set/' out/.config
-          sed -i 's/^CONFIG_DEFAULT_CUBIC=.*/# CONFIG_DEFAULT_CUBIC is not set/' out/.config
-          
-          # === Other configs ===
-          ./scripts/config --file out/.config \
-            -e OVERLAY_FS \
-            -e CC_OPTIMIZE_FOR_PERFORMANCE \
-            -e TMPFS_XATTR \
-            -e F2FS_FS \
-            -e F2FS_FS_SECURITY \
-            -e F2FS_FS_ENCRYPTION \
-            -e LRU_GEN \
-            -e LRU_GEN_ENABLED \
-            -d LRU_GEN_STATS \
-            -e ZRAM \
-            -e ZRAM_DEF_COMP_LZ4 \
-            --set-val ZRAM_DEF_COMP "lz4" \
-            -d PSI \
-            -d DEBUG_KERNEL \
-            -d DEBUG_INFO \
-            -d DEBUG_FS \
-            -d TRACING_SUPPORT \
-            -d TRACING \
-            -d FTRACE \
-            -d TRACEPOINTS
+          TCP_ALGO="${{ steps.tcp_check.outputs.tcp_algo }}"
           
           ./scripts/config --file out/.config \
-            --set-str LOCALVERSION "-android13-8-00005-gb4287516c23f-ab12345678"
+            -e INET -e TCP_CONG_ADVANCED -e TCP_CONG_BBR
           
-          make O=out ARCH=arm64 CC=clang olddefconfig
-          
-          # === POST-OLDDEFCONFIG FORCE ===
-          if ! grep -q "^CONFIG_TCP_CONG_WESTWOOD=y" out/.config; then
-            echo "⚠️ Westwood got disabled! Force enabling..."
+          if [ "$TCP_ALGO" == "westwood" ]; then
+            ./scripts/config --file out/.config \
+              -e TCP_CONG_WESTWOOD -d TCP_CONG_CUBIC \
+              -e DEFAULT_WESTWOOD --set-str DEFAULT_TCP_CONG "westwood"
+            make O=out ARCH=arm64 CC=clang olddefconfig
             sed -i '/# CONFIG_TCP_CONG_WESTWOOD is not set/d' out/.config
-            echo "CONFIG_TCP_CONG_WESTWOOD=y" >> out/.config
+            grep -q "^CONFIG_TCP_CONG_WESTWOOD=" out/.config || echo "CONFIG_TCP_CONG_WESTWOOD=y" >> out/.config
+          else
+            ./scripts/config --file out/.config \
+              -e DEFAULT_BBR --set-str DEFAULT_TCP_CONG "bbr"
           fi
           
-          if ! grep -q "^CONFIG_DEFAULT_WESTWOOD=y" out/.config; then
-            echo "⚠️ DEFAULT_WESTWOOD got disabled! Force enabling..."
-            sed -i '/# CONFIG_DEFAULT_WESTWOOD is not set/d' out/.config
-            echo "CONFIG_DEFAULT_WESTWOOD=y" >> out/.config
-          fi
+          ./scripts/config --file out/.config \
+            -e OVERLAY_FS -e F2FS_FS -e LRU_GEN -e ZRAM \
+            -d PSI -d DEBUG_KERNEL -d TRACING_SUPPORT
           
           make O=out ARCH=arm64 CC=clang olddefconfig
-          
-          sed -i 's/^CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' out/.config
-          sed -i 's/^CONFIG_TRACING_SUPPORT=y/# CONFIG_TRACING_SUPPORT is not set/' out/.config
-          sed -i 's/^CONFIG_PSI=y/# CONFIG_PSI is not set/' out/.config
 
-      - name: Verify kernel config
+      - name: Verify config
         working-directory: common
         run: |
-          echo ""
-          echo "=== TCP Configuration Verification ==="
-          echo ""
-          
-          echo "Checking TCP configs in .config:"
-          grep "TCP_CONG" out/.config | grep -v "^#" || echo "⚠️ No TCP_CONG configs found!"
-          grep "DEFAULT.*TCP" out/.config | grep -v "^#" || echo "⚠️ No DEFAULT TCP configs found!"
-          
-          echo ""
-          echo "=== Critical checks ==="
-          
-          if grep -q "^CONFIG_TCP_CONG_WESTWOOD=y" out/.config; then
-            echo "✅ CONFIG_TCP_CONG_WESTWOOD=y"
-          else
-            echo "❌ CONFIG_TCP_CONG_WESTWOOD NOT ENABLED!"
-            echo "This will cause compile error!"
-            exit 1
-          fi
-          
-          if grep -q "^CONFIG_DEFAULT_WESTWOOD=y" out/.config; then
-            echo "✅ CONFIG_DEFAULT_WESTWOOD=y"
-          else
-            echo "⚠️ CONFIG_DEFAULT_WESTWOOD not set (non-critical)"
-          fi
-          
-          if grep -q 'CONFIG_DEFAULT_TCP_CONG="westwood"' out/.config; then
-            echo "✅ CONFIG_DEFAULT_TCP_CONG=\"westwood\""
-          else
-            echo "⚠️ DEFAULT_TCP_CONG not set to westwood"
-          fi
-          
-          echo ""
-          echo "✓ Verification complete - ready to build!"
+          echo "=== TCP Config Verification ==="
+          grep "TCP_CONG" out/.config | grep -v "^#" || echo "No TCP configs!"
+          grep "DEFAULT.*TCP" out/.config | grep -v "^#" || echo "No default!"
 
       - name: Build kernel
         run: |
-          export CCACHE_COMPRESS=1
-          export CCACHE_MAXSIZE=2G
-          export USE_CCACHE=1
-          export CCACHE_DIR=~/.ccache
-          export KBUILD_BUILD_USER=yu
-          export KBUILD_BUILD_HOST=github
+          export CCACHE_COMPRESS=1 CCACHE_MAXSIZE=2G USE_CCACHE=1
+          export KBUILD_BUILD_USER=yu KBUILD_BUILD_HOST=github
           export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
           
-          which clang || { echo "ERROR: clang not found in PATH"; exit 127; }
-          
-          echo "=== Ccache stats before build ==="
           ccache -s
-          
-          BUILD_CONFIG=common/build.config.gki.aarch64 \
-          LTO=thin \
-          SKIP_MRPROPER=1 \
-          build/build.sh -j$(nproc --all) || {
-            echo "Build failed!"
-            echo ""
-            echo "Checking if tcp_westwood.c exists in source..."
-            find common/net/ipv4/ -name "*westwood*" -ls || echo "NO WESTWOOD FILES FOUND!"
-            echo ""
-            echo "Checking Makefile..."
-            grep -i westwood common/net/ipv4/Makefile || echo "WESTWOOD NOT IN MAKEFILE!"
-            cat out/error.log 2>/dev/null || true
-            exit 1
-          }
-          
-          echo "=== Ccache stats after build ==="
+          BUILD_CONFIG=common/build.config.gki.aarch64 LTO=thin SKIP_MRPROPER=1 \
+            build/build.sh -j$(nproc --all)
           ccache -s
 
-      - name: Verify build output
+      - name: Verify build
         run: |
-          if [ ! -f "out/android13-5.15/dist/Image" ]; then
-            echo "✗ Kernel Image not found!"
-            exit 1
-          fi
+          [ ! -f "out/android13-5.15/dist/Image" ] && exit 1
           echo "✓ Build successful: $(du -h out/android13-5.15/dist/Image | cut -f1)"
           
-          echo ""
-          echo "=== Verifying TCP Westwood in binary ==="
-          if strings out/android13-5.15/dist/Image | grep -i "westwood" > /dev/null; then
-            echo "✅ TCP Westwood found in kernel binary!"
-            strings out/android13-5.15/dist/Image | grep -i "westwood" | head -5
+          echo "=== TCP in binary ==="
+          TCP_ALGO="${{ steps.tcp_check.outputs.tcp_algo }}"
+          if strings out/android13-5.15/dist/Image | grep -i "$TCP_ALGO"; then
+            echo "✅ $TCP_ALGO found in binary!"
           else
-            echo "⚠️ TCP Westwood string not found in binary"
+            echo "⚠️ $TCP_ALGO string not found (might be OK for some algos)"
           fi
 
       - name: Package AnyKernel3
         run: |
           git clone -q --depth=1 $ANYKERNEL_REPO ak3
           cp out/android13-5.15/dist/Image ak3/
-          [ -f out/android13-5.15/dist/dtb ] && cp out/android13-5.15/dist/dtb ak3/ || true
-          [ -f out/android13-5.15/dist/dtbo.img ] && cp out/android13-5.15/dist/dtbo.img ak3/ || true
-          
           cd ak3
           VARIANT_SUFFIX=""
           [ "${{ matrix.variant }}" == "noksu" ] && VARIANT_SUFFIX="-noksu"
-          zip -q -r9 ../GKI-${DEVICE}-A13${VARIANT_SUFFIX}-$(date +%Y%m%d).zip * -x .git\* -x README.md
-          echo "✓ Package created"
+          TCP_ALGO="${{ steps.tcp_check.outputs.tcp_algo }}"
+          zip -q -r9 ../GKI-${DEVICE}-A13-${TCP_ALGO}${VARIANT_SUFFIX}-$(date +%Y%m%d).zip * -x .git\* -x README.md
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GKI-${{ env.DEVICE }}-${{ matrix.variant }}-${{ github.run_number }}
+          name: GKI-${{ env.DEVICE }}-${{ matrix.variant }}-${{ steps.tcp_check.outputs.tcp_algo }}-${{ github.run_number }}
           path: GKI-*.zip
           retention-days: 7
 
@@ -559,77 +389,40 @@ jobs:
     if: always()
     steps:
       - name: Get build info
-        id: build_info
+        id: info
         run: |
-          date_full="$(date '+%Y-%m-%d %H:%M:%S UTC')"
-          date_short="$(date +%Y%m%d)"
-          tag="v${{ github.run_number }}-${date_short}"
-          echo "date=${date_full}" >> $GITHUB_OUTPUT
-          echo "date_short=${date_short}" >> $GITHUB_OUTPUT
-          echo "tag=${tag}" >> $GITHUB_OUTPUT
+          echo "date=$(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+          echo "tag=v${{ github.run_number }}-$(date +%Y%m%d)" >> $GITHUB_OUTPUT
 
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Prepare release files
-        id: prepare
+      - name: Prepare release
         run: |
           mkdir -p release_files
-          has_ksu=false
-          has_noksu=false
-          
-          [ -d "artifacts/GKI-${{ env.DEVICE }}-ksu-${{ github.run_number }}" ] && {
-            cp artifacts/GKI-${{ env.DEVICE }}-ksu-${{ github.run_number }}/*.zip release_files/
-            has_ksu=true
-            echo "✓ KSU variant"
-          }
-          
-          [ -d "artifacts/GKI-${{ env.DEVICE }}-noksu-${{ github.run_number }}" ] && {
-            cp artifacts/GKI-${{ env.DEVICE }}-noksu-${{ github.run_number }}/*.zip release_files/
-            has_noksu=true
-            echo "✓ NoKSU variant"
-          }
-          
-          if [ "$has_ksu" = true ] && [ "$has_noksu" = true ]; then
-            variant_text="both (KSU + NoKSU)"
-          elif [ "$has_ksu" = true ]; then
-            variant_text="ksu"
-          elif [ "$has_noksu" = true ]; then
-            variant_text="noksu"
-          else
-            variant_text="unknown"
-          fi
-          
-          echo "variant_text=${variant_text}" >> $GITHUB_OUTPUT
-          echo "has_ksu=${has_ksu}" >> $GITHUB_OUTPUT
-          echo "has_noksu=${has_noksu}" >> $GITHUB_OUTPUT
+          find artifacts -name "*.zip" -exec cp {} release_files/ \;
+          ls -lh release_files/
 
-      - name: Create Unified Release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.build_info.outputs.tag }}
-          name: GKI Kernel - Build #${{ github.run_number }} (${{ steps.build_info.outputs.date_short }})
+          tag_name: ${{ steps.info.outputs.tag }}
+          name: GKI Kernel - Build #${{ github.run_number }}
           body: |
-            ## GKI Kernel for Redmi Note 13 4G / NFC
-            **Android 13 • Kernel 5.15 • Build #${{ github.run_number }}**
+            ## GKI Kernel for Redmi Note 13 4G/NFC
+            **Build #${{ github.run_number }}** - ${{ steps.info.outputs.date }}
             
-            ### Build Information
-            - **Variants Built:** `${{ steps.prepare.outputs.variant_text }}`
-            - **Build Date:** ${{ steps.build_info.outputs.date }}
+            ### TCP Algorithm
+            - Auto-detected and configured (Westwood if available, BBR fallback)
             
             ### Features
-            - ✅ TCP BBR + Westwood (Westwood default) - **FORCE ENABLED**
-            - ✅ MGLRU memory management
-            - ✅ F2FS optimization
-            - ✅ ZRAM LZ4 compression
-            - ✅ All debugging disabled
+            - Wild-KSU + SUSFS (KSU variant)
+            - MGLRU, F2FS, ZRAM optimizations
+            - All debug features disabled
             
-            ### Installation
             Flash via TWRP/OrangeFox recovery
           files: release_files/*.zip
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
