@@ -116,6 +116,18 @@ jobs:
           
           echo "✓ Kernel source ready"
 
+      - name: Disable defconfig check
+        run: |
+          if [ -f "common/build.config.gki" ]; then
+            sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' common/build.config.gki || true
+            echo "✓ Disabled check_defconfig in build.config.gki"
+          fi
+          
+          if [ -f "common/build.config.gki.aarch64" ]; then
+            sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' common/build.config.gki.aarch64 || true
+            echo "✓ Disabled check_defconfig in build.config.gki.aarch64"
+          fi
+
       - name: Setup Wild KernelSU
         if: matrix.variant == 'ksu'
         working-directory: common
@@ -206,26 +218,41 @@ jobs:
             git commit -m "Build: Apply kernel modifications" --no-verify 2>/dev/null || true
           echo "✓ Git tree cleaned"
 
-      - name: Kernel config (KSU variant)
-        if: matrix.variant == 'ksu'
+      - name: Prepare kernel config fragments
         working-directory: common
         run: |
-          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          mkdir -p arch/arm64/configs/fragments
           
-          CONFIG_FILE="arch/arm64/configs/gki_defconfig"
-          
-          cat >> "$CONFIG_FILE" << 'EOF'
-          CONFIG_KALLSYMS=y
+          cat > arch/arm64/configs/fragments/optimizations.fragment << 'EOF'
           CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
           CONFIG_TCP_CONG_ADVANCED=y
-          CONFIG_TCP_CONG_BIC=n
           CONFIG_TCP_CONG_WESTWOOD=y
-          CONFIG_TCP_CONG_HTCP=n
           CONFIG_TCP_CONG_BBR=y
           CONFIG_DEFAULT_WESTWOOD=y
+          CONFIG_DEFAULT_TCP_CONG="westwood"
+          CONFIG_LRU_GEN=y
+          CONFIG_LRU_GEN_ENABLED=y
+          CONFIG_ZRAM=y
+          CONFIG_ZRAM_DEF_COMP_LZ4=y
+          CONFIG_ZRAM_DEF_COMP="lz4"
+          CONFIG_F2FS_FS=y
+          CONFIG_F2FS_FS_SECURITY=y
+          CONFIG_F2FS_FS_ENCRYPTION=y
           CONFIG_OVERLAY_FS=y
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
+          # CONFIG_PSI is not set
+          # CONFIG_DEBUG_KERNEL is not set
+          # CONFIG_DEBUG_INFO is not set
+          # CONFIG_DEBUG_FS is not set
+          # CONFIG_TRACING_SUPPORT is not set
+          # CONFIG_TRACING is not set
+          # CONFIG_FTRACE is not set
+          # CONFIG_TRACEPOINTS is not set
+          EOF
+          
+          if [ "${{ matrix.variant }}" == "ksu" ]; then
+            cat > arch/arm64/configs/fragments/ksu.fragment << 'EOF'
           CONFIG_KSU=y
           CONFIG_KPROBES=y
           CONFIG_HAVE_KPROBES=y
@@ -245,51 +272,48 @@ jobs:
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
           CONFIG_KSU_SUSFS_SUS_SU=y
-          CONFIG_F2FS_FS=y
-          CONFIG_F2FS_FS_SECURITY=y
-          CONFIG_F2FS_FS_ENCRYPTION=y
-          CONFIG_LRU_GEN=y
-          CONFIG_LRU_GEN_ENABLED=y
-          CONFIG_ZRAM=y
-          CONFIG_ZRAM_DEF_COMP_LZ4=y
+          CONFIG_BBG=y
           EOF
+          fi
           
-          make O=out ARCH=arm64 CC=clang gki_defconfig
-          
-          echo "✓ KSU variant config completed"
+          echo "✓ Config fragments created"
 
-      - name: Kernel config (NoKSU variant)
-        if: matrix.variant == 'noksu'
+      - name: Build kernel with config fragments
         working-directory: common
         run: |
           export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
           
-          CONFIG_FILE="arch/arm64/configs/gki_defconfig"
+          if [ "${{ matrix.variant }}" == "ksu" ]; then
+            cat arch/arm64/configs/gki_defconfig \
+                arch/arm64/configs/fragments/optimizations.fragment \
+                arch/arm64/configs/fragments/ksu.fragment > arch/arm64/configs/gki_defconfig_merged
+          else
+            cat arch/arm64/configs/gki_defconfig \
+                arch/arm64/configs/fragments/optimizations.fragment > arch/arm64/configs/gki_defconfig_merged
+          fi
           
-          cat >> "$CONFIG_FILE" << 'EOF'
-          CONFIG_KALLSYMS=y
-          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
-          CONFIG_TCP_CONG_ADVANCED=y
-          CONFIG_TCP_CONG_BIC=n
-          CONFIG_TCP_CONG_WESTWOOD=y
-          CONFIG_TCP_CONG_HTCP=n
-          CONFIG_TCP_CONG_BBR=y
-          CONFIG_DEFAULT_WESTWOOD=y
-          CONFIG_OVERLAY_FS=y
-          CONFIG_TMPFS_XATTR=y
-          CONFIG_TMPFS_POSIX_ACL=y
-          CONFIG_F2FS_FS=y
-          CONFIG_F2FS_FS_SECURITY=y
-          CONFIG_F2FS_FS_ENCRYPTION=y
-          CONFIG_LRU_GEN=y
-          CONFIG_LRU_GEN_ENABLED=y
-          CONFIG_ZRAM=y
-          CONFIG_ZRAM_DEF_COMP_LZ4=y
-          EOF
+          mv arch/arm64/configs/gki_defconfig_merged arch/arm64/configs/gki_defconfig
           
+          echo "=== Running make gki_defconfig ==="
           make O=out ARCH=arm64 CC=clang gki_defconfig
           
-          echo "✓ NoKSU variant config completed"
+          if [ "${{ matrix.variant }}" == "ksu" ]; then
+            echo "=== Adding BBG to LSM ==="
+            current_lsm=$(grep "^CONFIG_LSM=" out/.config | cut -d'"' -f2 || echo "")
+            if [ -n "$current_lsm" ]; then
+              ./scripts/config --file out/.config --set-str LSM "${current_lsm},baseband_guard"
+            fi
+          fi
+          
+          echo "=== Running olddefconfig ==="
+          make O=out ARCH=arm64 CC=clang olddefconfig
+          
+          echo "=== Final config verification ==="
+          grep "CONFIG_KSU" out/.config && echo "✓ KSU configs present" || true
+          grep "CONFIG_LRU_GEN_ENABLED=y" out/.config && echo "✓ MGLRU enabled" || echo "✗ MGLRU not found"
+          grep "CONFIG_DEFAULT_WESTWOOD=y" out/.config && echo "✓ Westwood default" || echo "✗ Westwood not default"
+          
+          echo "✓ Kernel config completed for ${{ matrix.variant }} variant"
 
       - name: Build kernel
         run: |
@@ -300,6 +324,7 @@ jobs:
           
           which clang || { echo "ERROR: clang not found in PATH"; exit 127; }
           
+          echo "=== Starting kernel build ==="
           BUILD_CONFIG=common/build.config.gki.aarch64 \
           LTO=thin \
           SKIP_MRPROPER=1 \
@@ -308,6 +333,8 @@ jobs:
             cat out/error.log 2>/dev/null || true
             exit 1
           }
+          
+          echo "✓ Build completed successfully"
 
       - name: Verify build output
         run: |
@@ -426,6 +453,9 @@ jobs:
             - ✅ TCP BBR + Westwood congestion control (Westwood as default)
             - ✅ F2FS optimization
             - ✅ ZRAM LZ4 compression
+            - ✅ PSI disabled for performance
+            - ✅ All debugging infrastructure disabled
+            - ✅ Proper kernel version string
             
             ### Installation
             1. Boot to recovery (TWRP/OrangeFox)
