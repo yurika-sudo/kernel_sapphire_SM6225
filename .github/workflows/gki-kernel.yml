@@ -17,8 +17,6 @@ permissions:
   contents: write
 
 env:
-  ANDROID_VERSION: android13
-  KERNEL_VERSION: 5.15
   KERNEL_BRANCH: common-android13-5.15-lts
   DEVICE: sapphiren
   ANYKERNEL_REPO: https://github.com/superuseryu/AnyKernel3
@@ -51,7 +49,7 @@ jobs:
           echo "=== After cleanup ==="
           df -h
 
-      - name: Install minimal deps
+      - name: Install dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
@@ -65,16 +63,10 @@ jobs:
           wget -q https://github.com/kdrag0n/proton-clang/archive/refs/heads/master.tar.gz
           tar -xzf master.tar.gz -C clang --strip-components=1
           rm master.tar.gz
-        
-      - name: Verify clang installation
-        run: |
-          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
-          clang --version | head -1
-          echo "✓ Clang ready"
+          echo "✓ Clang setup completed"
 
       - name: Initialize kernel source
         run: |
-          echo "=== Full repo sync ==="
           curl -o repo https://storage.googleapis.com/git-repo-downloads/repo
           chmod +x repo
           
@@ -82,35 +74,24 @@ jobs:
             -b ${KERNEL_BRANCH} --depth=1
           
           ./repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
-          
           echo "✓ Kernel source ready"
 
       - name: Disable defconfig check
         run: |
-          if [ -f "common/build.config.gki" ]; then
-            sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' common/build.config.gki || true
-            echo "✓ Disabled check_defconfig in build.config.gki"
-          fi
-          
-          if [ -f "common/build.config.gki.aarch64" ]; then
-            sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' common/build.config.gki.aarch64 || true
-            echo "✓ Disabled check_defconfig in build.config.gki.aarch64"
-          fi
+          sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' common/build.config.gki.aarch64 || true
+          echo "✓ Disabled check_defconfig"
 
       - name: Setup Wild KernelSU
         if: matrix.variant == 'ksu'
         working-directory: common
         run: |
           curl -LSs https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh | bash -s stable
-
+          
           if [ -d "Wild_KSU" ]; then
             ln -sf Wild_KSU drivers/kernelsu
-            echo "KernelSU setup completed (found in ./Wild_KSU)"
-          elif [ -d "../Wild_KSU" ]; then
-            ln -sf ../Wild_KSU drivers/kernelsu
-            echo "KernelSU setup completed (found in ../Wild_KSU)"
+            echo "✓ KSU setup completed"
           else
-            echo "Error: Wild_KSU directory not found."
+            echo "Error: Wild_KSU directory not found"
             exit 1
           fi
 
@@ -139,158 +120,114 @@ jobs:
           rm -rf susfs4ksu
           echo "✓ SUSFS applied"
 
-      - name: Setup kernel version override
-        run: |
-          touch common/.scmversion
-          echo "✓ Version override prepared"
-
-      - name: Kernel config (KSU variant)
+      - name: Apply Baseband Guard
         if: matrix.variant == 'ksu'
         working-directory: common
         run: |
-          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
           
-          echo "=== Creating KSU variant config ==="
+          # Create symlink
+          ln -sf ../Baseband-guard security/baseband-guard
           
-          cat > ksu_config.fragment << 'EOF'
-          CONFIG_KSU=y
-          CONFIG_KPROBES=y
-          CONFIG_HAVE_KPROBES=y
-          CONFIG_KPROBE_EVENTS=y
-          CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_PATH=y
-          CONFIG_KSU_SUSFS_SUS_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_KSTAT=y
-          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-          CONFIG_KSU_SUSFS_ENABLE_LOG=y
-          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=y
-          CONFIG_LRU_GEN=y
-          CONFIG_LRU_GEN_ENABLED=y
-          CONFIG_TCP_CONG_ADVANCED=y
-          CONFIG_TCP_CONG_WESTWOOD=y
-          CONFIG_TCP_CONG_BBR=y
-          CONFIG_DEFAULT_TCP_CONG="westwood"
-          CONFIG_DEFAULT_WESTWOOD=y
-          CONFIG_ZRAM=y
-          CONFIG_ZRAM_DEF_COMP_LZ4=y
-          EOF
+          # Update security/Makefile
+          grep -q "baseband-guard" security/Makefile || \
+            echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
           
-          make O=out ARCH=arm64 CC=clang gki_defconfig
+          # Update security/Kconfig to add BBG to LSM defaults
+          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
           
-          while IFS= read -r line; do
-            if [[ "$line" == CONFIG_*=y ]]; then
-              config_name=$(echo "$line" | cut -d'=' -f1)
-              ./scripts/config --file out/.config -e "${config_name#CONFIG_}"
-            elif [[ "$line" == CONFIG_*=n ]] || [[ "$line" == "# CONFIG_"*" is not set" ]]; then
-              config_name=$(echo "$line" | sed 's/# CONFIG_//;s/ is not set//')
-              ./scripts/config --file out/.config -d "${config_name}"
-            elif [[ "$line" == CONFIG_*=\"*\" ]]; then
-              config_name=$(echo "$line" | cut -d'=' -f1)
-              config_value=$(echo "$line" | cut -d'"' -f2)
-              ./scripts/config --file out/.config --set-str "${config_name#CONFIG_}" "$config_value"
-            fi
-          done < ksu_config.fragment
+          # Add BBG Kconfig source
+          grep -q "baseband-guard/Kconfig" security/Kconfig || \
+            sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
           
-          ./scripts/config --file out/.config -d TCP_CONG_BIC
-          ./scripts/config --file out/.config -d TCP_CONG_HTCP
-          ./scripts/config --file out/.config -d DEFAULT_BBR
-          ./scripts/config --file out/.config -d DEFAULT_CUBIC
-          
-          ./scripts/config --file out/.config -d DEBUG_KERNEL
-          ./scripts/config --file out/.config -d DEBUG_INFO
-          ./scripts/config --file out/.config -d DEBUG_FS
-          ./scripts/config --file out/.config -d TRACING_SUPPORT
-          ./scripts/config --file out/.config -d TRACING
-          ./scripts/config --file out/.config -d FTRACE
-          ./scripts/config --file out/.config -d TRACEPOINTS
-          ./scripts/config --file out/.config -d PSI
-          ./scripts/config --file out/.config -d KASAN
-          
-          echo "=== Running olddefconfig ==="
-          make O=out ARCH=arm64 CC=clang olddefconfig
-          
-          echo "=== Verifying Westwood config ==="
-          grep "CONFIG_TCP_CONG_WESTWOOD" out/.config || echo "Westwood not found"
-          grep "CONFIG_DEFAULT_TCP_CONG" out/.config || echo "Default TCP cong not found"
-          
-          echo "✓ KSU variant config completed"
+          echo "✓ Baseband Guard applied"
 
-      - name: Kernel config (NoKSU variant)
-        if: matrix.variant == 'noksu'
+      - name: Apply basic kernel patches
+        working-directory: common
+        run: |
+          # Apply essential patches
+          curl -s https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-gki-fixup.patch | patch -p1 --no-backup-if-mismatch || true
+          echo "✓ Basic patches applied"
+
+      - name: Configure kernel
         working-directory: common
         run: |
           export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
           
-          echo "=== Creating NoKSU variant config ==="
-          
-          cat > noksu_config.fragment << 'EOF'
-          CONFIG_LRU_GEN=y
-          CONFIG_LRU_GEN_ENABLED=y
-          CONFIG_TCP_CONG_ADVANCED=y
-          CONFIG_TCP_CONG_WESTWOOD=y
-          CONFIG_TCP_CONG_BBR=y
-          CONFIG_DEFAULT_TCP_CONG="westwood"
-          CONFIG_DEFAULT_WESTWOOD=y
-          CONFIG_ZRAM=y
-          CONFIG_ZRAM_DEF_COMP_LZ4=y
-          EOF
-          
+          # Start with gki_defconfig
           make O=out ARCH=arm64 CC=clang gki_defconfig
           
-          while IFS= read -r line; do
-            if [[ "$line" == CONFIG_*=y ]]; then
-              config_name=$(echo "$line" | cut -d'=' -f1)
-              ./scripts/config --file out/.config -e "${config_name#CONFIG_}"
-            elif [[ "$line" == CONFIG_*=n ]] || [[ "$line" == "# CONFIG_"*" is not set" ]]; then
-              config_name=$(echo "$line" | sed 's/# CONFIG_//;s/ is not set//')
-              ./scripts/config --file out/.config -d "${config_name}"
-            elif [[ "$line" == CONFIG_*=\"*\" ]]; then
-              config_name=$(echo "$line" | cut -d'=' -f1)
-              config_value=$(echo "$line" | cut -d'"' -f2)
-              ./scripts/config --file out/.config --set-str "${config_name#CONFIG_}" "$config_value"
-            fi
-          done < noksu_config.fragment
+          # Basic performance configs
+          ./scripts/config --file out/.config -e CC_OPTIMIZE_FOR_PERFORMANCE
+          ./scripts/config --file out/.config -e LRU_GEN
+          ./scripts/config --file out/.config -e LRU_GEN_ENABLED
           
+          # TCP Congestion Control
+          ./scripts/config --file out/.config -e TCP_CONG_ADVANCED
+          ./scripts/config --file out/.config -e TCP_CONG_WESTWOOD
+          ./scripts/config --file out/.config -e TCP_CONG_BBR
           ./scripts/config --file out/.config -d TCP_CONG_BIC
           ./scripts/config --file out/.config -d TCP_CONG_HTCP
           ./scripts/config --file out/.config -d DEFAULT_BBR
           ./scripts/config --file out/.config -d DEFAULT_CUBIC
+          ./scripts/config --file out/.config -e DEFAULT_WESTWOOD
+          ./scripts/config --file out/.config --set-str DEFAULT_TCP_CONG "westwood"
           
+          # ZRAM
+          ./scripts/config --file out/.config -e ZRAM
+          ./scripts/config --file out/.config -e ZRAM_DEF_COMP_LZ4
+          ./scripts/config --file out/.config --set-val ZRAM_DEF_COMP "lz4"
+          
+          # Filesystem support
+          ./scripts/config --file out/.config -e OVERLAY_FS
+          ./scripts/config --file out/.config -e F2FS_FS
+          ./scripts/config --file out/.config -e F2FS_FS_SECURITY
+          ./scripts/config --file out/.config -e F2FS_FS_ENCRYPTION
+          
+          # Disable PSI
+          ./scripts/config --file out/.config -d PSI
+          
+          # For KSU variant
+          if [ "${{ matrix.variant }}" == "ksu" ]; then
+            ./scripts/config --file out/.config -e KSU
+            ./scripts/config --file out/.config -e KPROBES
+            ./scripts/config --file out/.config -e KSU_SUSFS
+            ./scripts/config --file out/.config -e BBG
+            
+            # Add BBG to LSM
+            current_lsm=$(grep "^CONFIG_LSM=" out/.config | cut -d'"' -f2 || echo "")
+            if [ -n "$current_lsm" ]; then
+              ./scripts/config --file out/.config --set-str LSM "${current_lsm},baseband_guard"
+            fi
+          fi
+          
+          # Disable debug/tracing to avoid ABI issues
           ./scripts/config --file out/.config -d DEBUG_KERNEL
           ./scripts/config --file out/.config -d DEBUG_INFO
+          ./scripts/config --file out/.config -d KASAN
+          ./scripts/config --file out/.config -d GCOV_KERNEL
           ./scripts/config --file out/.config -d DEBUG_FS
           ./scripts/config --file out/.config -d TRACING_SUPPORT
           ./scripts/config --file out/.config -d TRACING
           ./scripts/config --file out/.config -d FTRACE
-          ./scripts/config --file out/.config -d TRACEPOINTS
-          ./scripts/config --file out/.config -d PSI
-          ./scripts/config --file out/.config -d KASAN
           
-          echo "=== Running olddefconfig ==="
           make O=out ARCH=arm64 CC=clang olddefconfig
           
-          echo "=== Verifying Westwood config ==="
-          grep "CONFIG_TCP_CONG_WESTWOOD" out/.config || echo "Westwood not found"
-          grep "CONFIG_DEFAULT_TCP_CONG" out/.config || echo "Default TCP cong not found"
+          # Final verification
+          echo "=== Config verification ==="
+          grep "CONFIG_LRU_GEN_ENABLED=y" out/.config && echo "✓ MGLRU enabled" || echo "✗ MGLRU not found"
+          grep "CONFIG_DEFAULT_WESTWOOD=y" out/.config && echo "✓ Westwood default" || echo "✗ Westwood not default"
           
-          echo "✓ NoKSU variant config completed"
+          if [ "${{ matrix.variant }}" == "ksu" ]; then
+            grep "CONFIG_KSU=y" out/.config && echo "✓ KSU enabled" || echo "✗ KSU not found"
+            grep "CONFIG_BBG=y" out/.config && echo "✓ BBG enabled" || echo "✗ BBG not found"
+          fi
+          
+          echo "✓ Kernel configured for ${{ matrix.variant }} variant"
 
       - name: Build kernel
         run: |
-          export USE_CCACHE=0
-          export KBUILD_BUILD_USER=yu
-          export KBUILD_BUILD_HOST=github
           export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
-          
-          which clang || { echo "ERROR: clang not found in PATH"; exit 127; }
           
           echo "=== Starting kernel build ==="
           BUILD_CONFIG=common/build.config.gki.aarch64 \
@@ -304,36 +241,48 @@ jobs:
           
           echo "✓ Build completed successfully"
 
-      - name: Verify build output
+      - name: Extract kernel version
+        id: kernel_version
         run: |
-          if [ ! -f "out/android13-5.15/dist/Image" ]; then
-            echo "✗ Kernel Image not found!"
-            exit 1
-          fi
-          echo "✓ Build successful: $(du -h out/android13-5.15/dist/Image | cut -f1)"
+          # Extract kernel version from Image
+          KERNEL_STRING=$(strings out/android13-5.15/dist/Image | grep "Linux version" | head -1 | cut -d' ' -f3)
+          echo "Kernel version string: $KERNEL_STRING"
           
-          echo ""
-          echo "=== Kernel version string ==="
-          strings out/android13-5.15/dist/Image | grep "Linux version" | head -1 || echo "⚠ Version string not found"
+          # Clean up the version string for filename
+          VERSION_FILENAME=$(echo "$KERNEL_STRING" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          echo "version=$VERSION_FILENAME" >> $GITHUB_OUTPUT
+          echo "raw_version=$KERNEL_STRING" >> $GITHUB_OUTPUT
 
       - name: Package AnyKernel3
         run: |
           git clone -q --depth=1 $ANYKERNEL_REPO ak3
           cp out/android13-5.15/dist/Image ak3/
+          
+          # Copy additional files if they exist
           [ -f out/android13-5.15/dist/dtb ] && cp out/android13-5.15/dist/dtb ak3/ || true
           [ -f out/android13-5.15/dist/dtbo.img ] && cp out/android13-5.15/dist/dtbo.img ak3/ || true
           
           cd ak3
-          VARIANT_SUFFIX=""
-          [ "${{ matrix.variant }}" == "noksu" ] && VARIANT_SUFFIX="-noksu"
-          zip -q -r9 ../GKI-${DEVICE}-A13${VARIANT_SUFFIX}-$(date +%Y%m%d).zip * -x .git\* -x README.md
-          echo "✓ Package created"
+          
+          # Create ZIP with kernel version in name
+          if [ "${{ matrix.variant }}" == "ksu" ]; then
+            ZIP_NAME="Kernel-${{ steps.kernel_version.outputs.version }}-ksu.zip"
+          else
+            ZIP_NAME="Kernel-${{ steps.kernel_version.outputs.version }}-noksu.zip"
+          fi
+          
+          zip -q -r9 ../$ZIP_NAME * -x .git\* -x README.md
+          echo "✓ Package created: $ZIP_NAME"
+          
+          # Save ZIP name for upload
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GKI-${{ env.DEVICE }}-${{ matrix.variant }}-${{ github.run_number }}
-          path: GKI-*.zip
+          name: ${{ matrix.variant }}-kernel
+          path: |
+            Kernel-*.zip
           retention-days: 7
 
   release:
@@ -346,7 +295,7 @@ jobs:
         run: |
           date_full="$(date '+%Y-%m-%d %H:%M:%S UTC')"
           date_short="$(date +%Y%m%d)"
-          tag="v${{ github.run_number }}-${date_short}"
+          tag="build-${{ github.run_number }}"
           echo "date=${date_full}" >> $GITHUB_OUTPUT
           echo "date_short=${date_short}" >> $GITHUB_OUTPUT
           echo "tag=${tag}" >> $GITHUB_OUTPUT
@@ -357,93 +306,56 @@ jobs:
           path: artifacts
 
       - name: Prepare release files
-        id: prepare
         run: |
           mkdir -p release_files
-          has_ksu=false
-          has_noksu=false
           
-          [ -d "artifacts/GKI-${{ env.DEVICE }}-ksu-${{ github.run_number }}" ] && {
-            cp artifacts/GKI-${{ env.DEVICE }}-ksu-${{ github.run_number }}/*.zip release_files/
-            has_ksu=true
-            echo "✓ KSU variant"
-          }
+          # Find and copy all kernel zip files
+          find artifacts -name "*.zip" -exec cp {} release_files/ \;
           
-          [ -d "artifacts/GKI-${{ env.DEVICE }}-noksu-${{ github.run_number }}" ] && {
-            cp artifacts/GKI-${{ env.DEVICE }}-noksu-${{ github.run_number }}/*.zip release_files/
-            has_noksu=true
-            echo "✓ NoKSU variant"
-          }
-          
-          if [ "$has_ksu" = true ] && [ "$has_noksu" = true ]; then
-            variant_text="both (KSU + NoKSU)"
-          elif [ "$has_ksu" = true ]; then
-            variant_text="ksu"
-          elif [ "$has_noksu" = true ]; then
-            variant_text="noksu"
-          else
-            variant_text="unknown"
-          fi
-          
-          echo "variant_text=${variant_text}" >> $GITHUB_OUTPUT
-          echo "has_ksu=${has_ksu}" >> $GITHUB_OUTPUT
-          echo "has_noksu=${has_noksu}" >> $GITHUB_OUTPUT
+          echo "=== Release files ==="
+          ls -la release_files/
 
-      - name: Create Unified Release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.build_info.outputs.tag }}
-          name: GKI Kernel - Build #${{ github.run_number }} (${{ steps.build_info.outputs.date_short }})
+          name: GKI Kernel Build #${{ github.run_number }}
           body: |
-            ## GKI Kernel for Redmi Note 13 4G / NFC
-            **Android 13 • Kernel 5.15 • Build #${{ github.run_number }}**
+            ## GKI Kernel Build #${{ github.run_number }}
             
-            ### Build Information
-            - **Variants Built:** `${{ steps.prepare.outputs.variant_text }}`
-            - **Build Date:** ${{ steps.build_info.outputs.date }}
-            - **Build Number / Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-            - **Commit:** [`${{ github.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
-            - **Branch:** `${{ github.ref_name }}`
+            **Build Date:** ${{ steps.build_info.outputs.date }}
             
-            ### Features
+            ### Variants Available:
+            - **KSU Variant**: Wild KernelSU + SUSFS + BBG + Performance optimizations
+            - **NoKSU Variant**: Stock GKI with performance optimizations only
             
-            ${{ steps.prepare.outputs.has_ksu == 'true' && '#### KSU Variant Features:
-            - ✅ Wild KernelSU integrated
-            - ✅ SUSFS root hiding
-            ' || '' }}
-            ${{ steps.prepare.outputs.has_noksu == 'true' && '#### NoKSU Variant Features:
-            - ❌ No KernelSU (stock GKI)
-            ' || '' }}
-            
-            #### Common Features (Both Variants):
+            ### Common Features:
             - ✅ MGLRU memory management
-            - ✅ TCP Westwood congestion control (Westwood as default)
+            - ✅ TCP Westwood congestion control
             - ✅ ZRAM LZ4 compression
             - ✅ PSI disabled for performance
             - ✅ All debugging infrastructure disabled
-            - ✅ Proper kernel version string
             
-            ### Installation
-            1. Boot to recovery (TWRP/OrangeFox)
-            2. Flash the appropriate ZIP file below:
-               ${{ steps.prepare.outputs.has_ksu == 'true' && '- `GKI-sapphiren-A13-YYYYMMDD.zip` - **KSU variant**' || '' }}
-               ${{ steps.prepare.outputs.has_noksu == 'true' && '- `GKI-sapphiren-A13-noksu-YYYYMMDD.zip` - **NoKSU variant**' || '' }}
+            ### KSU Variant Exclusive:
+            - ✅ Wild KernelSU v3.0.0
+            - ✅ SUSFS v2.0.0 root hiding
+            - ✅ Baseband Guard security protection
+            
+            ### Installation:
+            1. Boot to custom recovery (TWRP/OrangeFox)
+            2. Flash the appropriate kernel ZIP
             3. Reboot system
-            ${{ steps.prepare.outputs.has_ksu == 'true' && '4. For KSU variant: Install [Wild KSU Manager](https://github.com/WildKernels/Wild_KSU/releases)' || '' }}
             
-            ### Notes & Warnings
-            - ⚠️ **Compatible:** Android 13 GKI devices only
-            - ⚠️ **Requires:** Unlocked bootloader
-            - 💾 **Backup:** Your current boot partition before flashing
-            - 📱 **Tested on:** Redmi Note 13 4G (Sapphire/Sapphiren)
+            ### Notes:
+            - Requires unlocked bootloader
+            - Backup boot partition before flashing
+            - Tested on Redmi Note 13 4G/NFC (Sapphire/Sapphiren)
+            - Android 13 GKI compatible only
             
-            ### Changelog
-            See [commit history](${{ github.server_url }}/${{ github.repository }}/commits/${{ github.ref_name }}) for detailed changes.
-            
-            ---
-            
-            ### Downloads
-            Download the appropriate ZIP file below and flash via TWRP/OrangeFox recovery.
+            ### Build Info:
+            - **Commit:** [`${{ github.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+            - **Branch:** `${{ github.ref_name }}`
+            - **Build Log:** [View](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
           files: release_files/*.zip
           draft: false
           prerelease: false
