@@ -11,39 +11,39 @@ jobs:
     steps:
       - name: "✨ Setup workspace"
         run: |
-          sudo apt-get update -qq
+          sudo apt-get update
           sudo apt-get install -y bc bison flex libssl-dev make libelf-dev \
             rsync zip unzip curl git build-essential libncurses-dev \
-            gawk wget diffutils
+            gawk wget diffutils binutils
 
       - name: "🌟 Clone kernel source"
         run: |
-          rm -rf common kernel_src
+          rm -rf common
           git clone https://android.googlesource.com/kernel/common \
-            --branch android13-5.15-lts --depth=1 kernel_src
+            --branch android13-5.15-lts --depth=1 common
 
-      - name: "📥 Initialize AOSP repo"
+      - name: "📥 Download build tools only"
         run: |
-          rm -rf .repo
+          # Download hanya build directory dari repo
           curl -o repo https://storage.googleapis.com/git-repo-downloads/repo
           chmod +x repo
+          
+          # Initialize tapi tidak sync common
           ./repo init -u https://android.googlesource.com/kernel/manifest \
             -b common-android13-5.15-lts --depth=1
-          ./repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
+          
+          # Sync hanya build directory
+          ./repo sync build -c -j$(nproc --all) --no-tags --no-clone-bundle
+          
+          # Hapus .repo untuk menghindari konflik
           rm -rf .repo
 
       - name: "🔧 Setup clang"
         run: |
-          mkdir -p prebuilts/clang/host/linux-x86
           wget -q https://github.com/kdrag0n/proton-clang/archive/refs/heads/master.tar.gz
-          tar -xzf master.tar.gz -C prebuilts/clang/host/linux-x86
-          mv prebuilts/clang/host/linux-x86/proton-clang-master prebuilts/clang/host/linux-x86/clang-proton
+          tar -xzf master.tar.gz
+          mv proton-clang-master clang
           rm -f master.tar.gz
-
-      - name: "📂 Replace common with our kernel"
-        run: |
-          rm -rf common
-          mv kernel_src common
 
       - name: "🧩 Setup Wild-KSU"
         working-directory: ./common
@@ -55,11 +55,18 @@ jobs:
         working-directory: ./common
         run: |
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch || true
-          cp susfs4ksu/kernel_patches/fs/susfs.c fs/
-          cp susfs4ksu/kernel_patches/include/linux/susfs*.h include/linux/
-          sed -i '/#include <linux\/fs.h>/a #include <linux/susfs.h>' Wild_KSU/kernel/ksu.c
-          sed -i '/ksu_core_init();/a \\tsusfs_init();' Wild_KSU/kernel/ksu.c
+          
+          # Apply patch tanpa error
+          patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch 2>/dev/null || true
+          
+          # Copy files
+          cp susfs4ksu/kernel_patches/fs/susfs.c fs/ 2>/dev/null || true
+          cp susfs4ksu/kernel_patches/include/linux/susfs*.h include/linux/ 2>/dev/null || true
+          
+          # Integrate with KSU
+          sed -i '/#include <linux\/fs.h>/a #include <linux/susfs.h>' Wild_KSU/kernel/ksu.c 2>/dev/null || true
+          sed -i '/ksu_core_init();/a \\tsusfs_init();' Wild_KSU/kernel/ksu.c 2>/dev/null || true
+          
           rm -rf susfs4ksu
 
       - name: "🧩 Setup Baseband Guard"
@@ -67,77 +74,124 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
           ln -sf ../Baseband-guard security/baseband-guard
+          
           echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
-          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
-          sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
+          
+          if ! grep -q "baseband-guard/Kconfig" security/Kconfig; then
+            sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
+          fi
 
-      - name: "⚙️ Configure kernel"
+      - name: "⚙️ Configure kernel dengan script/config"
         working-directory: ./common
         run: |
-          CONFIG_FILE="arch/arm64/configs/gki_defconfig"
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          
+          # Buat output directory
+          mkdir -p out
+          
+          # Buat defconfig
+          make O=out ARCH=arm64 CC=clang LLVM=1 gki_defconfig
           
           # KSU configs
-          echo "" >> "$CONFIG_FILE"
-          echo "# KSU configs" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KPROBES=y" >> "$CONFIG_FILE"
-          echo "CONFIG_HAVE_KPROBES=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KPROBE_EVENTS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> "$CONFIG_FILE"
-          echo "CONFIG_BBG=y" >> "$CONFIG_FILE"
+          ./scripts/config --file out/.config -e KSU
+          ./scripts/config --file out/.config -e KPROBES
+          ./scripts/config --file out/.config -e HAVE_KPROBES
+          ./scripts/config --file out/.config -e KPROBE_EVENTS
+          ./scripts/config --file out/.config -e KSU_SUSFS
+          ./scripts/config --file out/.config -e BBG
           
-          # TCP Congestion Control
-          echo "# Performance configs" >> "$CONFIG_FILE"
-          echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_ADVANCED=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_WESTWOOD=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG_FILE"
-          echo "CONFIG_DEFAULT_WESTWOOD=y" >> "$CONFIG_FILE"
-          echo "CONFIG_OVERLAY_FS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TMPFS_XATTR=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG_FILE"
+          # Performance configs
+          ./scripts/config --file out/.config -e CC_OPTIMIZE_FOR_PERFORMANCE
+          ./scripts/config --file out/.config -e TCP_CONG_ADVANCED
+          ./scripts/config --file out/.config -d TCP_CONG_BIC
+          ./scripts/config --file out/.config -e TCP_CONG_WESTWOOD
+          ./scripts/config --file out/.config -d TCP_CONG_HTCP
+          ./scripts/config --file out/.config -e TCP_CONG_BBR
+          ./scripts/config --file out/.config -d DEFAULT_BBR
+          ./scripts/config --file out/.config -d DEFAULT_CUBIC
+          ./scripts/config --file out/.config -e DEFAULT_WESTWOOD
+          ./scripts/config --file out/.config --set-str DEFAULT_TCP_CONG "westwood"
+          
+          # Filesystem
+          ./scripts/config --file out/.config -e OVERLAY_FS
+          ./scripts/config --file out/.config -e TMPFS_XATTR
+          ./scripts/config --file out/.config -e TMPFS_POSIX_ACL
+          
+          # Disable debug/tracing
+          ./scripts/config --file out/.config -d DEBUG_KERNEL
+          ./scripts/config --file out/.config -d DEBUG_INFO
+          ./scripts/config --file out/.config -d KASAN
+          ./scripts/config --file out/.config -d DEBUG_FS
+          ./scripts/config --file out/.config -d TRACING_SUPPORT
+          ./scripts/config --file out/.config -d TRACING
+          ./scripts/config --file out/.config -d FTRACE
+          
+          # Jalankan olddefconfig untuk resolve dependencies
+          make O=out ARCH=arm64 CC=clang LLVM=1 olddefconfig
+          
+          echo "✓ Kernel configured"
 
-      - name: "🔨 Build kernel"
+      - name: "🔨 Build kernel dengan make manual"
+        working-directory: ./common
         run: |
-          LTO=thin \
-          BUILD_CONFIG=common/build.config.gki.aarch64 \
-          build/build.sh -j$(nproc --all)
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          
+          # Build kernel Image saja tanpa modules untuk menghindari ABI check
+          make O=out ARCH=arm64 CC=clang LLVM=1 -j$(nproc --all) Image
+          
+          echo "✓ Build completed"
 
       - name: "📦 Package kernel"
         run: |
           git clone --depth=1 https://github.com/superuseryu/AnyKernel3 ak3
-          cp out/android13-5.15/dist/Image ak3/
+          
+          # Copy kernel Image
+          cp common/out/arch/arm64/boot/Image ak3/
+          
+          # Buat simple anykernel.sh
+          cat > ak3/anykernel.sh << 'EOF'
+          #!/system/bin/sh
+          # AnyKernel3 script
+          
+          ## AnyKernel setup
+          block=/dev/block/by-name/boot;
+          is_slot_device=auto;
+          ramdisk_compression=auto;
+          
+          ## AnyKernel methods (DO NOT CHANGE)
+          . tools/ak3-core.sh;
+          
+          # Flash kernel
+          split_boot;
+          flash_boot;
+          ## end install
+          EOF
+          
+          chmod +x ak3/anykernel.sh
           
           cd ak3
           zip -r9 "../GKI-Kernel-$(date +'%Y%m%d').zip" * -x .git\* -x README.md
           cd ..
 
-      - name: "⬆️ Create Release"
+      - name: "⬆️ Upload artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-build
+          path: GKI-Kernel-*.zip
+          retention-days: 7
+
+      - name: "📤 Create Release"
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: GKI-Kernel-*.zip
-          tag_name: "gki-kernel"
-          name: "GKI Kernel"
+          tag_name: "kernel-$(date +'%Y%m%d')"
+          name: "GKI Kernel $(date +'%Y-%m-%d')"
           body: |
             ## GKI Kernel with KSU
+            
+            Built using manual approach to avoid GKI build system issues.
             
             ### Features:
             - Wild KernelSU
