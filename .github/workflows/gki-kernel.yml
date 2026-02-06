@@ -174,7 +174,11 @@ jobs:
           CONFIG_KSU_SUSFS_SUS_SU=y
           CONFIG_LRU_GEN=y
           CONFIG_LRU_GEN_ENABLED=y
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_WESTWOOD=y
+          CONFIG_TCP_CONG_BBR=y
           CONFIG_DEFAULT_TCP_CONG="westwood"
+          CONFIG_DEFAULT_WESTWOOD=y
           CONFIG_ZRAM=y
           CONFIG_ZRAM_DEF_COMP_LZ4=y
           EOF
@@ -195,6 +199,11 @@ jobs:
             fi
           done < ksu_config.fragment
           
+          ./scripts/config --file out/.config -d TCP_CONG_BIC
+          ./scripts/config --file out/.config -d TCP_CONG_HTCP
+          ./scripts/config --file out/.config -d DEFAULT_BBR
+          ./scripts/config --file out/.config -d DEFAULT_CUBIC
+          
           ./scripts/config --file out/.config -d DEBUG_KERNEL
           ./scripts/config --file out/.config -d DEBUG_INFO
           ./scripts/config --file out/.config -d DEBUG_FS
@@ -207,6 +216,10 @@ jobs:
           
           echo "=== Running olddefconfig ==="
           make O=out ARCH=arm64 CC=clang olddefconfig
+          
+          echo "=== Verifying Westwood config ==="
+          grep "CONFIG_TCP_CONG_WESTWOOD" out/.config || echo "Westwood not found"
+          grep "CONFIG_DEFAULT_TCP_CONG" out/.config || echo "Default TCP cong not found"
           
           echo "✓ KSU variant config completed"
 
@@ -221,7 +234,11 @@ jobs:
           cat > noksu_config.fragment << 'EOF'
           CONFIG_LRU_GEN=y
           CONFIG_LRU_GEN_ENABLED=y
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_WESTWOOD=y
+          CONFIG_TCP_CONG_BBR=y
           CONFIG_DEFAULT_TCP_CONG="westwood"
+          CONFIG_DEFAULT_WESTWOOD=y
           CONFIG_ZRAM=y
           CONFIG_ZRAM_DEF_COMP_LZ4=y
           EOF
@@ -242,6 +259,11 @@ jobs:
             fi
           done < noksu_config.fragment
           
+          ./scripts/config --file out/.config -d TCP_CONG_BIC
+          ./scripts/config --file out/.config -d TCP_CONG_HTCP
+          ./scripts/config --file out/.config -d DEFAULT_BBR
+          ./scripts/config --file out/.config -d DEFAULT_CUBIC
+          
           ./scripts/config --file out/.config -d DEBUG_KERNEL
           ./scripts/config --file out/.config -d DEBUG_INFO
           ./scripts/config --file out/.config -d DEBUG_FS
@@ -254,6 +276,10 @@ jobs:
           
           echo "=== Running olddefconfig ==="
           make O=out ARCH=arm64 CC=clang olddefconfig
+          
+          echo "=== Verifying Westwood config ==="
+          grep "CONFIG_TCP_CONG_WESTWOOD" out/.config || echo "Westwood not found"
+          grep "CONFIG_DEFAULT_TCP_CONG" out/.config || echo "Default TCP cong not found"
           
           echo "✓ NoKSU variant config completed"
 
