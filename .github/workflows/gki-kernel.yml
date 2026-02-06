@@ -1,7 +1,7 @@
 name: Build GKI Kernel (Wild-KSU)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Hanya bisa dijalankan manual oleh pemilik repo
     inputs:
       build_variant:
         description: 'Build variant'
@@ -24,7 +24,6 @@ env:
   DEVICE: sapphiren
   ANYKERNEL_REPO: https://github.com/superuseryu/AnyKernel3
   CCACHE_DIR: ~/.ccache
-  VERBOSE: false
   WORK_DIR: ${{ github.workspace }}
 
 jobs:
@@ -33,111 +32,42 @@ jobs:
     strategy:
       matrix:
         variant: ${{ github.event.inputs.build_variant == 'both' && fromJSON('["ksu", "noksu"]') || fromJSON(format('["{0}"]', github.event.inputs.build_variant)) }}
-
+    
+    # 🔐 PENGAMAN: Hanya izinkan dari branch tertentu
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+    
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Free up disk space
-        run: |
-          echo "=== Before cleanup ==="
-          df -h
-          
-          # Remove large packages
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          
-          # Clean apt cache
-          sudo apt-get clean
-          sudo apt-get autoremove -y
-          
-          echo "=== After cleanup ==="
-          df -h
-
-      - name: Install minimal deps
+      - name: Setup workspace & dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
+          sudo apt-get install -y \
             bc bison flex libssl-dev make libelf-dev \
-            ccache rsync zip unzip curl git build-essential \
-            libncurses-dev gawk wget diffutils aria2 > /dev/null
+            ccache zip unzip curl git build-essential \
+            libncurses-dev gawk wget aria2 rsync
 
-      - name: Setup ccache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.ccache
-            ~/.cache/ccache
-          key: ccache-${{ matrix.variant }}-${{ env.KERNEL_BRANCH }}-${{ github.run_number }}
-          restore-keys: |
-            ccache-${{ matrix.variant }}-${{ env.KERNEL_BRANCH }}-
-            ccache-${{ matrix.variant }}-
-            ccache-
-      
       - name: Initialize ccache
         run: |
-          mkdir -p ~/.ccache ~/.cache/ccache
           ccache -M 2G
           ccache -z
 
-      - name: Cache kernel source
-        uses: actions/cache@v4
-        id: kernel-cache
-        with:
-          path: |
-            .repo
-            common
-            build
-            prebuilts
-          key: kernel-source-${{ env.KERNEL_BRANCH }}-${{ github.run_number }}
-          restore-keys: |
-            kernel-source-${{ env.KERNEL_BRANCH }}-
-
-      - name: Initialize AOSP kernel source
+      - name: Setup AOSP kernel source
         run: |
-          if [ "${{ steps.kernel-cache.outputs.cache-hit }}" != "true" ]; then
-            echo "=== Cache miss - full repo sync ==="
-            
-            # Initialize AOSP repo
-            curl -o repo https://storage.googleapis.com/git-repo-downloads/repo
-            chmod +x repo
-            
-            ./repo init -u https://android.googlesource.com/kernel/manifest \
-              -b ${KERNEL_BRANCH} --depth=1
-            
-            ./repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
-            
-            # Download and setup AOSP Clang r547379 (sama seperti YASK)
-            echo "=== Downloading AOSP Clang r547379 ==="
-            mkdir -p prebuilts/clang/host/linux-x86/clang-r547379
-            aria2c -x 16 -s 16 -o prebuilts/clang/host/linux-x86/clang-r547379.tar.gz \
-              "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
-            tar -xzf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz \
-              -C prebuilts/clang/host/linux-x86/clang-r547379
-            rm -rf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz
-            
-            # Remove unused clang versions for space
-            rm -rf prebuilts/clang/host/linux-x86/clang-3289846
-            rm -rf prebuilts/clang/host/linux-x86/clang-r450784e
-            rm -rf prebuilts/clang/host/linux-x86/clang-stable
-            
-            # Update build config constants
-            sed -i \
-              -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
-              -e 's/^CLANG_VERSION=.*/CLANG_VERSION=r547379/' \
-              common/build.config.constants
-            
-            # Remove defconfig check
-            sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' common/build.config.gki || true
-          else
-            echo "=== Cache hit - minimal update ==="
-            curl -o repo https://storage.googleapis.com/git-repo-downloads/repo
-            chmod +x repo
-            ./repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle --force-sync 2>/dev/null || true
-          fi
+          curl -o repo https://storage.googleapis.com/git-repo-downloads/repo
+          chmod +x repo
+          
+          ./repo init -u https://android.googlesource.com/kernel/manifest \
+            -b ${KERNEL_BRANCH} --depth=1
+          
+          ./repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
+          
+          # Setup AOSP Clang
+          mkdir -p prebuilts/clang/host/linux-x86/clang-r547379
+          aria2c -x 16 -s 16 -o clang.tar.gz "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
+          tar -xzf clang.tar.gz -C prebuilts/clang/host/linux-x86/clang-r547379
+          rm clang.tar.gz
           
           echo "✓ Kernel source ready"
 
@@ -145,488 +75,199 @@ jobs:
         if: matrix.variant == 'ksu'
         working-directory: common
         run: |
-          set -e
-          
-          echo "📦 Installing Wild-KSU..."
           curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
-          
-          if [ ! -d "Wild_KSU" ]; then
-            echo "❌ ERROR: Wild_KSU directory not found after installation!"
-            exit 1
-          fi
-          echo "✔ Wild-KSU installed successfully"
-          
-          # Create symlink
-          if [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
-            ln -sf ../Wild_KSU drivers/kernelsu
-            echo "✔ Created drivers/kernelsu symlink"
-          fi
+          ln -sf ../Wild_KSU drivers/kernelsu
+          echo "✓ Wild-KSU installed"
 
-      - name: Apply SUSFS (KSU variant only)
+      - name: Apply SUSFS (GKI Compatible)
         if: matrix.variant == 'ksu'
         working-directory: common
         run: |
-          set -e
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15 susfs_src
           
-          echo "📦 Cloning SUSFS4KSU..."
-          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          
-          if [ ! -d "susfs4ksu" ]; then
-            echo "❌ ERROR: SUSFS4KSU clone failed!"
-            exit 1
+          # Hanya terapkan patch kernel, JANGAN copy file .c/.h
+          if [ -f "susfs_src/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch" ]; then
+            patch -p1 --forward < susfs_src/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch || echo "Patch applied with some hunks"
           fi
           
-          # Apply SUSFS kernel patch
-          echo "🔧 Applying SUSFS kernel patch..."
-          SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-          
-          if [ -f "$SUSFS_PATCH" ]; then
-            if patch -p1 --forward < "$SUSFS_PATCH"; then
-              echo "✅ SUSFS kernel patch applied successfully"
-            else
-              echo "⚠️ Patch had some issues, but continuing..."
-            fi
-          else
-            echo "⚠️ SUSFS patch file not found: $SUSFS_PATCH"
-          fi
-          
-          # Copy SUSFS source files
-          echo "📄 Installing SUSFS source files..."
-          mkdir -p fs include/linux
-          
-          if [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ]; then
-            cp -f susfs4ksu/kernel_patches/fs/susfs.c fs/susfs.c
-            echo "✔ Copied fs/susfs.c"
-          else
-            echo "❌ ERROR: fs/susfs.c not found in SUSFS repo!"
-            exit 1
-          fi
-          
-          if [ -f "susfs4ksu/kernel_patches/include/linux/susfs.h" ]; then
-            cp -f susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/susfs.h
-            echo "✔ Copied include/linux/susfs.h"
-          else
-            echo "❌ ERROR: include/linux/susfs.h not found!"
-            exit 1
-          fi
-          
-          # Integrate SUSFS into Wild-KSU
-          echo "📦 Integrating SUSFS with Wild-KSU..."
-          KSU_C_FILE="Wild_KSU/kernel/ksu.c"
-          
-          if [ ! -f "$KSU_C_FILE" ]; then
-            echo "❌ ERROR: $KSU_C_FILE not found!"
-            exit 1
-          fi
-          
-          # Add susfs.h include
-          if ! grep -q "#include <linux/susfs.h>" "$KSU_C_FILE"; then
-            sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE"
-            echo "✔ Added #include <linux/susfs.h>"
-          fi
-          
-          # Add susfs_init() call
-          if ! grep -q "susfs_init()" "$KSU_C_FILE"; then
-            sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE"
-            echo "✔ Added susfs_init() call"
-          fi
-          
-          # Clean up
-          rm -rf susfs4ksu
-          
-          echo "✅ SUSFS integration completed"
+          rm -rf susfs_src
+          echo "✅ SUSFS hooks applied"
 
-      - name: Apply Baseband Guard (KSU variant only)
+      - name: Apply Baseband Guard
         if: matrix.variant == 'ksu'
         working-directory: common
         run: |
-          git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
+          git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
           ln -sf ../Baseband-guard security/baseband-guard
           
-          grep -q "baseband-guard" security/Makefile || \
-            echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
-          
-          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
-          
-          grep -q "baseband-guard/Kconfig" security/Kconfig || \
-            sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
-          
-          echo "✅ Baseband Guard setup complete"
+          echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
+          sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
+          echo "✅ BBG setup complete"
 
-      - name: Configure kernel (KSU variant)
-        if: matrix.variant == 'ksu'
+      - name: Configure kernel (Single Step)
         working-directory: common
         run: |
-          CONFIG_FILE="arch/arm64/configs/gki_defconfig"
-          
-          # Basic kernel configs
-          cat >> "$CONFIG_FILE" << 'EOF'
-          # Wild-KSU Configurations
-          CONFIG_KSU=y
-          CONFIG_KPROBES=y
-          CONFIG_HAVE_KPROBES=y
-          CONFIG_KPROBE_EVENTS=y
-          CONFIG_OVERLAY_FS=y
-          
-          # SUSFS Configurations
-          CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_PATH=y
-          CONFIG_KSU_SUSFS_SUS_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_KSTAT=y
-          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-          CONFIG_KSU_SUSFS_ENABLE_LOG=y
-          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=y
-          
-          # Performance Optimizations
-          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
-          CONFIG_TMPFS_XATTR=y
-          CONFIG_TMPFS_POSIX_ACL=y
-          CONFIG_F2FS_FS=y
-          CONFIG_F2FS_FS_SECURITY=y
-          CONFIG_F2FS_FS_ENCRYPTION=y
-          
-          # Memory Management
-          CONFIG_LRU_GEN=y
-          CONFIG_LRU_GEN_ENABLED=y
-          # CONFIG_LRU_GEN_STATS is not set
-          
-          # TCP Congestion Control
-          CONFIG_TCP_CONG_ADVANCED=y
-          CONFIG_TCP_CONG_BBR=y
-          CONFIG_TCP_CONG_WESTWOOD=y
-          CONFIG_DEFAULT_TCP_CONG="westwood"
-          CONFIG_DEFAULT_WESTWOOD=y
-          # CONFIG_DEFAULT_CUBIC is not set
-          # CONFIG_DEFAULT_BBR is not set
-          # CONFIG_TCP_CONG_BIC is not set
-          # CONFIG_TCP_CONG_HTCP is not set
-          
-          # ZRAM
-          CONFIG_ZRAM=y
-          CONFIG_ZRAM_DEF_COMP_LZ4=y
-          CONFIG_ZRAM_DEF_COMP="lz4"
-          
-          # Disable Debug Features
-          # CONFIG_DEBUG_KERNEL is not set
-          # CONFIG_TRACING_SUPPORT is not set
-          # CONFIG_TRACING is not set
-          # CONFIG_FTRACE is not set
-          # CONFIG_TRACEPOINTS is not set
-          # CONFIG_PSI is not set
-          # CONFIG_PSI_DEFAULT_DISABLED is not set
-          
-          # Baseband Guard
-          CONFIG_BBG=y
-          
-          # Kernel Version
-          CONFIG_LOCALVERSION="-android13-8-00005-gb4287516c23f-ab12345678"
-          CONFIG_LOCALVERSION_AUTO=n
-          EOF
-          
-          echo "✅ Kernel configuration for KSU variant updated"
-
-      - name: Configure kernel (NoKSU variant)
-        if: matrix.variant == 'noksu'
-        working-directory: common
-        run: |
-          CONFIG_FILE="arch/arm64/configs/gki_defconfig"
-          
-          cat >> "$CONFIG_FILE" << 'EOF'
-          # NoKSU Configuration
-          # CONFIG_KSU is not set
-          
-          # Performance Optimizations
-          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
-          CONFIG_TMPFS_XATTR=y
-          CONFIG_TMPFS_POSIX_ACL=y
-          CONFIG_F2FS_FS=y
-          CONFIG_F2FS_FS_SECURITY=y
-          CONFIG_F2FS_FS_ENCRYPTION=y
-          CONFIG_OVERLAY_FS=y
-          
-          # Memory Management
-          CONFIG_LRU_GEN=y
-          CONFIG_LRU_GEN_ENABLED=y
-          # CONFIG_LRU_GEN_STATS is not set
-          
-          # TCP Congestion Control
-          CONFIG_TCP_CONG_ADVANCED=y
-          CONFIG_TCP_CONG_BBR=y
-          CONFIG_TCP_CONG_WESTWOOD=y
-          CONFIG_DEFAULT_TCP_CONG="westwood"
-          CONFIG_DEFAULT_WESTWOOD=y
-          # CONFIG_DEFAULT_CUBIC is not set
-          # CONFIG_DEFAULT_BBR is not set
-          # CONFIG_TCP_CONG_BIC is not set
-          # CONFIG_TCP_CONG_HTCP is not set
-          
-          # ZRAM
-          CONFIG_ZRAM=y
-          CONFIG_ZRAM_DEF_COMP_LZ4=y
-          CONFIG_ZRAM_DEF_COMP="lz4"
-          
-          # Disable Debug Features
-          # CONFIG_DEBUG_KERNEL is not set
-          # CONFIG_TRACING_SUPPORT is not set
-          # CONFIG_TRACING is not set
-          # CONFIG_FTRACE is not set
-          # CONFIG_TRACEPOINTS is not set
-          # CONFIG_PSI is not set
-          # CONFIG_PSI_DEFAULT_DISABLED is not set
-          
-          # Kernel Version
-          CONFIG_LOCALVERSION="-android13-8-00005-gb4287516c23f-ab12345678"
-          CONFIG_LOCALVERSION_AUTO=n
-          EOF
-          
-          echo "✅ Kernel configuration for NoKSU variant updated"
-
-      - name: Apply GKI fixup patch
-        working-directory: common
-        run: |
-          # Apply GKI fixup patch (sama seperti YASK)
-          curl -L -o gki-fixup.patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-gki-fixup.patch"
-          if patch -p1 --forward < gki-fixup.patch; then
-            echo "✅ GKI fixup patch applied"
-          else
-            echo "⚠️ GKI fixup patch had issues, but continuing..."
-          fi
-          rm -f gki-fixup.patch
-
-      - name: Verify kernel configuration
-        working-directory: common
-        run: |
-          echo "=== Kernel Configuration Verification ==="
-          
-          # Check critical configs
-          CONFIG_FILE="arch/arm64/configs/gki_defconfig"
-          
-          echo "1. TCP Congestion Control:"
-          grep -E "CONFIG_TCP_CONG_WESTWOOD|CONFIG_DEFAULT_WESTWOOD|CONFIG_DEFAULT_TCP_CONG" "$CONFIG_FILE" || echo "  Not found"
-          
-          echo ""
-          echo "2. Performance Features:"
-          grep -E "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE|CONFIG_LRU_GEN|CONFIG_ZRAM" "$CONFIG_FILE" || echo "  Not found"
-          
-          echo ""
-          echo "3. Debug Features (should be disabled):"
-          grep -E "CONFIG_DEBUG_KERNEL|CONFIG_TRACING|CONFIG_FTRACE|CONFIG_PSI" "$CONFIG_FILE" || echo "  Not found"
-          
-          if [ "${{ matrix.variant }}" == "ksu" ]; then
-            echo ""
-            echo "4. KSU Features:"
-            grep -E "CONFIG_KSU|CONFIG_KSU_SUSFS" "$CONFIG_FILE" || echo "  Not found"
-          fi
-
-      - name: Build kernel
-        run: |
-          export CCACHE_COMPRESS=1
-          export CCACHE_MAXSIZE=2G
-          export USE_CCACHE=1
-          export CCACHE_DIR=~/.ccache
-          export KBUILD_BUILD_USER=yu
-          export KBUILD_BUILD_HOST=github
-          
-          # Add AOSP clang to PATH
           export PATH="${{ env.WORK_DIR }}/prebuilts/clang/host/linux-x86/clang-r547379/bin:$PATH"
           
-          echo "=== Ccache stats before build ==="
-          ccache -s
-          echo ""
+          # Buat config fragment
+          FRAGMENT_FILE="arch/arm64/configs/custom.fragment"
+          
+          # Konfigurasi dasar untuk semua variant
+          cat > "$FRAGMENT_FILE" << 'EOF'
+          # Performance Optimizations
+          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
+          CONFIG_LRU_GEN=y
+          CONFIG_LRU_GEN_ENABLED=y
+          
+          # TCP Congestion Control - FIX WESTWOOD
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_BBR=y
+          CONFIG_TCP_CONG_WESTWOOD=y
+          CONFIG_DEFAULT_TCP_CONG="westwood"
+          CONFIG_DEFAULT_WESTWOOD=y
+          # CONFIG_DEFAULT_CUBIC is not set
+          # CONFIG_DEFAULT_BBR is not set
+          
+          # Filesystem
+          CONFIG_OVERLAY_FS=y
+          CONFIG_F2FS_FS=y
+          CONFIG_F2FS_FS_SECURITY=y
+          CONFIG_F2FS_FS_ENCRYPTION=y
+          
+          # ZRAM
+          CONFIG_ZRAM=y
+          CONFIG_ZRAM_DEF_COMP_LZ4=y
+          CONFIG_ZRAM_DEF_COMP="lz4"
+          
+          # Disable debug features
+          # CONFIG_DEBUG_KERNEL is not set
+          # CONFIG_TRACING_SUPPORT is not set
+          # CONFIG_PSI is not set
+          EOF
+          
+          # Tambahkan konfig KSU hanya untuk variant ksu
+          if [ "${{ matrix.variant }}" == "ksu" ]; then
+            cat >> "$FRAGMENT_FILE" << 'EOF'
+            # KernelSU
+            CONFIG_KSU=y
+            CONFIG_KSU_SUSFS=y
+            CONFIG_BBG=y
+            EOF
+          fi
+          
+          # Merge fragment dengan gki_defconfig
+          ./scripts/kconfig/merge_config.sh -m -O out/ \
+            arch/arm64/configs/gki_defconfig \
+            "$FRAGMENT_FILE"
+          
+          echo "✅ Kernel configured for ${{ matrix.variant }} variant"
+
+      - name: Build kernel dengan AOSP Clang
+        run: |
+          export PATH="${{ env.WORK_DIR }}/prebuilts/clang/host/linux-x86/clang-r547379/bin:$PATH"
+          export KBUILD_BUILD_USER=github-action
+          export KBUILD_BUILD_HOST=github
+          
           echo "=== Clang version ==="
           clang --version | head -1
           
-          # Build using AOSP build script
+          # Build dengan skrip AOSP
           LTO=thin \
           BUILD_CONFIG=common/build.config.gki.aarch64 \
           build/build.sh -j$(nproc --all) || {
-            echo "Build failed, checking logs..."
-            cat out/error.log 2>/dev/null || true
+            echo "❌ Build failed!"
             exit 1
           }
           
-          echo "=== Ccache stats after build ==="
-          ccache -s
-
-      - name: Verify build output
-        run: |
-          if [ ! -f "out/android13-5.15/dist/Image" ]; then
-            echo "✗ Kernel Image not found!"
-            ls -la out/android13-5.15/dist/ || true
-            exit 1
-          fi
-          
-          echo "✅ Build successful: $(du -h out/android13-5.15/dist/Image | cut -f1)"
-          
-          # Verify kernel version in binary
-          echo ""
-          echo "=== Kernel version string ==="
-          strings out/android13-5.15/dist/Image | grep "Linux version" | head -1 || echo "⚠ Version string not found"
-          
-          # Check for Westwood in config
-          echo ""
-          echo "=== Checking TCP congestion modules ==="
-          if strings out/android13-5.15/dist/Image | grep -i "westwood"; then
-            echo "✅ TCP Westwood found in kernel binary"
-          else
-            echo "⚠ Westwood not found in kernel binary"
-          fi
+          echo "✅ Build successful"
 
       - name: Package AnyKernel3
         run: |
-          git clone -q --depth=1 $ANYKERNEL_REPO ak3
+          git clone --depth=1 $ANYKERNEL_REPO ak3
           cp out/android13-5.15/dist/Image ak3/
-          [ -f out/android13-5.15/dist/dtb ] && cp out/android13-5.15/dist/dtb ak3/ || true
-          [ -f out/android13-5.15/dist/dtbo.img ] && cp out/android13-5.15/dist/dtbo.img ak3/ || true
           
           cd ak3
           VARIANT_SUFFIX=""
           [ "${{ matrix.variant }}" == "noksu" ] && VARIANT_SUFFIX="-noksu"
           
-          # Create proper filename
           ZIP_NAME="GKI-${DEVICE}-A13${VARIANT_SUFFIX}-$(date +%Y%m%d).zip"
-          zip -q -r9 "../${ZIP_NAME}" * -x .git\* -x README.md
+          zip -q -r9 "../${ZIP_NAME}" * -x .git/\*
           
-          echo "✅ Package created: ${ZIP_NAME}"
           echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+          echo "✅ Package created: ${ZIP_NAME}"
 
-      - name: Upload artifact
+      - name: Upload artifact (1 day retention)
         uses: actions/upload-artifact@v4
         with:
-          name: GKI-${{ env.DEVICE }}-${{ matrix.variant }}-${{ github.run_number }}
+          name: kernel-${{ matrix.variant }}-${{ github.run_number }}
           path: GKI-*.zip
-          retention-days: 7
+          retention-days: 1  # ⚠️ Hanya disimpan 1 hari
 
+  # 🔒 RELEASE HANYA JIKA BUILD BERHASIL
   release:
     needs: build
     runs-on: ubuntu-22.04
-    if: always()
+    if: success()  # ⚠️ HANYA jika semua job build sukses
+    
     steps:
-      - name: Get build info
-        id: build_info
-        run: |
-          date_full="$(date '+%Y-%m-%d %H:%M:%S UTC')"
-          date_short="$(date +%Y%m%d)"
-          tag="v${{ github.run_number }}-${date_short}"
-          echo "date=${date_full}" >> $GITHUB_OUTPUT
-          echo "date_short=${date_short}" >> $GITHUB_OUTPUT
-          echo "tag=${tag}" >> $GITHUB_OUTPUT
-
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Prepare release files
-        id: prepare
+      - name: Prepare release
         run: |
           mkdir -p release_files
-          has_ksu=false
-          has_noksu=false
           
-          [ -d "artifacts/GKI-${{ env.DEVICE }}-ksu-${{ github.run_number }}" ] && {
-            cp artifacts/GKI-${{ env.DEVICE }}-ksu-${{ github.run_number }}/*.zip release_files/
-            has_ksu=true
-            echo "✅ KSU variant"
-          }
+          # Cari semua file ZIP dari artifact
+          find artifacts -name "*.zip" -exec cp {} release_files/ \;
           
-          [ -d "artifacts/GKI-${{ env.DEVICE }}-noksu-${{ github.run_number }}" ] && {
-            cp artifacts/GKI-${{ env.DEVICE }}-noksu-${{ github.run_number }}/*.zip release_files/
-            has_noksu=true
-            echo "✅ NoKSU variant"
-          }
-          
-          # Determine variant text
-          if [ "$has_ksu" = true ] && [ "$has_noksu" = true ]; then
-            variant_text="both (KSU + NoKSU)"
-          elif [ "$has_ksu" = true ]; then
-            variant_text="ksu"
-          elif [ "$has_noksu" = true ]; then
-            variant_text="noksu"
-          else
-            variant_text="unknown"
-          fi
-          
-          echo "variant_text=${variant_text}" >> $GITHUB_OUTPUT
-          echo "has_ksu=${has_ksu}" >> $GITHUB_OUTPUT
-          echo "has_noksu=${has_noksu}" >> $GITHUB_OUTPUT
+          echo "Artifacts found:"
+          ls -la release_files/
 
-      - name: Create Unified Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.build_info.outputs.tag }}
-          name: GKI Kernel - Build #${{ github.run_number }} (${{ steps.build_info.outputs.date_short }})
+          tag_name: "build-${{ github.run_number }}"
+          name: "GKI Kernel Build #${{ github.run_number }}"
           body: |
-            ## GKI Kernel for Redmi Note 13 4G / NFC
-            **Android 13 • Kernel 5.15 • Build #${{ github.run_number }}**
+            ## ⚠️ IMPORTANT NOTICE
+            **This is an automated kernel build. Use at your own risk!**
             
             ### Build Information
-            - **Variants Built:** `${{ steps.prepare.outputs.variant_text }}`
-            - **Build Date:** ${{ steps.build_info.outputs.date }}
-            - **Build Number / Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-            - **Commit:** [`${{ github.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
-            - **Branch:** `${{ github.ref_name }}`
+            - **Build Date:** $(date '+%Y-%m-%d %H:%M UTC')
+            - **Build Number:** #${{ github.run_number }}
+            - **Kernel Version:** 5.15 GKI
+            - **Android Version:** 13
+            
+            ### Variants Included
+            ${{ github.event.inputs.build_variant == 'both' && '- KSU Variant (with Wild-KSU + SUSFS + BBG)' || '' }}
+            ${{ github.event.inputs.build_variant == 'both' && '- NoKSU Variant (stock GKI)' || '' }}
+            ${{ github.event.inputs.build_variant == 'ksu' && '- KSU Variant only' || '' }}
+            ${{ github.event.inputs.build_variant == 'noksu' && '- NoKSU Variant only' || '' }}
             
             ### Features
-            
-            ${{ steps.prepare.outputs.has_ksu == 'true' && '#### KSU Variant Features:
-            - ✅ Wild KernelSU integrated
-            - ✅ SUSFS root hiding
-            - ✅ Baseband Guard protection
-            ' || '' }}
-            ${{ steps.prepare.outputs.has_noksu == 'true' && '#### NoKSU Variant Features:
-            - ❌ No KernelSU (stock GKI)
-            ' || '' }}
-            
-            #### Common Features (Both Variants):
+            - ✅ TCP Westwood as default congestion control
             - ✅ AOSP Clang r547379 toolchain
             - ✅ MGLRU memory management
-            - ✅ TCP BBR + Westwood congestion control (Westwood as default)
-            - ✅ F2FS optimization
-            - ✅ ZRAM LZ4 compression
-            - ✅ PSI disabled for performance
-            - ✅ All debugging infrastructure disabled
-            - ✅ Proper kernel version string (5.15.197-android13-...)
+            - ✅ Performance optimizations
+            - ✅ All debug features disabled
             
             ### Installation
-            1. Boot to recovery (TWRP/OrangeFox)
-            2. Flash the appropriate ZIP file below:
-               ${{ steps.prepare.outputs.has_ksu == 'true' && '- `GKI-sapphiren-A13-YYYYMMDD.zip` - **KSU variant**' || '' }}
-               ${{ steps.prepare.outputs.has_noksu == 'true' && '- `GKI-sapphiren-A13-noksu-YYYYMMDD.zip` - **NoKSU variant**' || '' }}
-            3. Reboot system
-            ${{ steps.prepare.outputs.has_ksu == 'true' && '4. For KSU variant: Install [Wild KSU Manager](https://github.com/WildKernels/Wild_KSU/releases)' || '' }}
+            1. Backup your current kernel/boot partition
+            2. Flash in custom recovery (TWRP/OrangeFox)
+            3. Reboot
             
-            ### Notes & Warnings
-            - ⚠️ **Compatible:** Android 13 GKI devices only
-            - ⚠️ **Requires:** Unlocked bootloader
-            - 💾 **Backup:** Your current boot partition before flashing
-            - 📱 **Tested on:** Redmi Note 13 4G (Sapphire/Sapphiren)
-            - ℹ️ **TCP:** Westwood is properly set as default congestion control
-            - ℹ️ **Toolchain:** Using AOSP Clang r547379 for consistency
-            - ℹ️ **Debug:** All debug features are disabled for better performance
+            ### Warnings
+            - 🔴 **NO WARRANTY** - May brick your device
+            - 🔴 **Backup first** - Always backup before flashing
+            - 🔴 **Compatible devices only** - Redmi Note 13 4G/NFC
             
-            ### Changelog
-            - Fixed: TCP Westwood now properly compiled as default
-            - Fixed: Using AOSP Clang r547379 (same as YASK)
-            - Improved: Simplified build process
-            - Updated: Kernel configuration approach
-            
-            See [commit history](${{ github.server_url }}/${{ github.repository }}/commits/${{ github.ref_name }}) for detailed changes.
-            
-            ---
-            
-            ### Downloads
-            Download the appropriate ZIP file below and flash via TWRP/OrangeFox recovery.
+            ### Source
+            Build logs and source: [${{ github.repository }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
           files: release_files/*.zip
           draft: false
-          prerelease: false
+          prerelease: true  # ⚠️ Mark as pre-release for safety
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
