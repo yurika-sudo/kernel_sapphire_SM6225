@@ -251,31 +251,34 @@ jobs:
           # CONFIG_TRACING is not set
           # CONFIG_FTRACE is not set
           # CONFIG_TRACEPOINTS is not set
+          # CONFIG_KASAN is not set
+          # CONFIG_KASAN_GENERIC is not set
+          # CONFIG_KASAN_SW_TAGS is not set
           EOF
           
           if [ "${{ matrix.variant }}" == "ksu" ]; then
             cat > arch/arm64/configs/fragments/ksu.fragment << 'EOF'
-          CONFIG_KSU=y
-          CONFIG_KPROBES=y
-          CONFIG_HAVE_KPROBES=y
-          CONFIG_KPROBE_EVENTS=y
-          CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_PATH=y
-          CONFIG_KSU_SUSFS_SUS_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_KSTAT=y
-          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-          CONFIG_KSU_SUSFS_ENABLE_LOG=y
-          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=y
-          CONFIG_BBG=y
-          EOF
+            CONFIG_KSU=y
+            CONFIG_KPROBES=y
+            CONFIG_HAVE_KPROBES=y
+            CONFIG_KPROBE_EVENTS=y
+            CONFIG_KSU_SUSFS=y
+            CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+            CONFIG_KSU_SUSFS_SUS_PATH=y
+            CONFIG_KSU_SUSFS_SUS_MOUNT=y
+            CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+            CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+            CONFIG_KSU_SUSFS_SUS_KSTAT=y
+            CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+            CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+            CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+            CONFIG_KSU_SUSFS_ENABLE_LOG=y
+            CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+            CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+            CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+            CONFIG_KSU_SUSFS_SUS_SU=y
+            CONFIG_BBG=y
+            EOF
           fi
           
           echo "✓ Config fragments created"
@@ -299,6 +302,17 @@ jobs:
           echo "=== Running make gki_defconfig ==="
           make O=out ARCH=arm64 CC=clang gki_defconfig
           
+          echo "=== Ensuring KASAN is disabled ==="
+          ./scripts/config --file out/.config -d KASAN
+          ./scripts/config --file out/.config -d KASAN_GENERIC
+          ./scripts/config --file out/.config -d KASAN_SW_TAGS
+          ./scripts/config --file out/.config -d KASAN_HW_TAGS
+          ./scripts/config --file out/.config -d KASAN_VMALLOC
+          
+          ./scripts/config --file out/.config -d KCSAN
+          ./scripts/config --file out/.config -d UBSAN
+          ./scripts/config --file out/.config -d GCOV_KERNEL
+          
           if [ "${{ matrix.variant }}" == "ksu" ]; then
             echo "=== Adding BBG to LSM ==="
             current_lsm=$(grep "^CONFIG_LSM=" out/.config | cut -d'"' -f2 || echo "")
@@ -310,13 +324,24 @@ jobs:
           echo "=== Running olddefconfig ==="
           make O=out ARCH=arm64 CC=clang olddefconfig
           
+          echo "=== Verifying KASAN is disabled ==="
+          if grep -q "^CONFIG_KASAN=y" out/.config; then
+            echo "❌ ERROR: KASAN is still enabled! Forcing disable..."
+            sed -i 's/^CONFIG_KASAN=y/# CONFIG_KASAN is not set/' out/.config
+            # Jalankan olddefconfig lagi
+            make O=out ARCH=arm64 CC=clang olddefconfig
+          else
+            echo "✓ KASAN is properly disabled"
+          fi
+          
           echo "=== Final config verification ==="
           grep "CONFIG_KSU" out/.config && echo "✓ KSU configs present" || true
           grep "CONFIG_LRU_GEN_ENABLED=y" out/.config && echo "✓ MGLRU enabled" || echo "✗ MGLRU not found"
           grep "CONFIG_DEFAULT_WESTWOOD=y" out/.config && echo "✓ Westwood default" || echo "✗ Westwood not default"
+          grep "CONFIG_KASAN" out/.config && echo "⚠ KASAN configs found (should be disabled)" || echo "✓ No KASAN configs"
           
           echo "✓ Kernel config completed for ${{ matrix.variant }} variant"
-
+          
       - name: Build kernel
         run: |
           export USE_CCACHE=0
