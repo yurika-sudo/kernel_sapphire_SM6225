@@ -225,7 +225,7 @@ jobs:
           fi
           
           echo "✅ Kernel version string fixed: $KMI_VERSION"
-
+          
       - name: "Clean git tree
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
