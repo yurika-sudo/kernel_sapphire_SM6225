@@ -40,17 +40,17 @@ jobs:
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           
-          MESSAGE="🔨 *Kernel Build Started*%0A%0A"
-          MESSAGE="${MESSAGE}📁 *Repo:* ${{ github.repository }}%0A"
-          MESSAGE="${MESSAGE}🎯 *Target:* Android ${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}%0A"
-          MESSAGE="${MESSAGE}🔄 *Trigger:* ${{ github.event_name }}%0A"
-          MESSAGE="${MESSAGE}⏰ *Started:* $(date +'%H:%M:%S WIB')%0A"
-          MESSAGE="${MESSAGE}⚡ *Status:* Initializing..."
+          MESSAGE="<b>🔨 Kernel Build Started</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>📁 Repo:</b> ${{ github.repository }}%0A"
+          MESSAGE="${MESSAGE}<b>🎯 Target:</b> Android ${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}%0A"
+          MESSAGE="${MESSAGE}<b>🔄 Trigger:</b> ${{ github.event_name }}%0A"
+          MESSAGE="${MESSAGE}<b>⏰ Started:</b> $(date +'%H:%M:%S WIB')%0A"
+          MESSAGE="${MESSAGE}<b>⚡ Status:</b> Initializing..."
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
             -d text="$MESSAGE" \
-            -d parse_mode="Markdown"
+            -d parse_mode="HTML"
 
       - name: "Clone kernel source"
         working-directory: ./${{ env.KERNEL_LOC_DIR }}
@@ -176,64 +176,49 @@ jobs:
             ln -sf ../Wild_KSU drivers/kernelsu
           fi
 
-      - name: "Remove all -dirty strings from kernel version"
+      - name: "Fix kernel version string"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          echo "=== REMOVING ALL -dirty STRINGS ==="
+          set -e
+          echo "=== FIXING KERNEL VERSION STRING ==="
           
-          # Backup original files
+          # Backup files
           cp scripts/setlocalversion scripts/setlocalversion.backup
-          
-          # Method 1: Replace all printf '%s' -dirty with printf '%s' ''
-          sed -i "s/printf '%s' -dirty/printf '%s' ''/g" scripts/setlocalversion
-          
-          # Method 2: Also replace any other occurrences of -dirty
-          sed -i "s/-dirty//g" scripts/setlocalversion
-          
-          # Method 3: Replace the echo line to ensure no -dirty
-          sed -i 's/echo "$res"/echo "${res%-dirty}"/' scripts/setlocalversion
-          
-          echo "✅ Removed -dirty from setlocalversion"
-
-      - name: "Hardcode kernel version string"
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          echo "=== HARDCODING KERNEL VERSION STRING ==="
-          
-          # Generate build timestamp (WIB time)
-          export TZ="Asia/Jakarta"
-          BUILD_TIMESTAMP_WIB=$(date +"%a %b %d %H:%M:%S WIB %Y")
-          BUILD_TIMESTAMP_UTC=$(date -u +"%a %b %d %H:%M:%S UTC %Y")
-          
-          echo "Build Time (WIB): $BUILD_TIMESTAMP_WIB"
-          echo "Build Time (UTC): $BUILD_TIMESTAMP_UTC"
-          
-          # Generate git hash and build ID
-          GIT_HASH=$(git rev-parse --verify HEAD | cut -c1-13)
-          BUILD_ID="ab$((RANDOM % 90000000 + 10000000))"
-          
-          # Create final version string
-          # Format: 5.15.197-android13-8-g6b88270ef707-ab13297889
-          KERNEL_BASE="5.15.197"  # This will be auto-filled by kernel build system
-          VERSION_SUFFIX="-android13-8-g${GIT_HASH}-${BUILD_ID}"
-          
-          echo "Version suffix: $VERSION_SUFFIX"
-          
-          # 1. Hardcode in setlocalversion (last echo line)
-          echo "Hardcoding setlocalversion..."
-          sed -i '$s|echo "$res"|echo "'"$VERSION_SUFFIX"'"|' scripts/setlocalversion
-          
-          # 2. Hardcode in mkcompile_h
           if [ -f "scripts/mkcompile_h" ]; then
-            echo "Hardcoding mkcompile_h..."
-            # Replace UTS_VERSION line
-            sed -i 's|UTS_VERSION="\$(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP | cut -b -\$UTS_LEN)"|UTS_VERSION="#1 SMP PREEMPT '"$BUILD_TIMESTAMP_WIB"'"|' scripts/mkcompile_h
-            
-            # Also set LINUX_COMPILE_BY and LINUX_COMPILE_HOST
-            sed -i '/UTS_VERSION=/a LINUX_COMPILE_BY="GitHub Actions"\nLINUX_COMPILE_HOST="github.com"' scripts/mkcompile_h
+            cp scripts/mkcompile_h scripts/mkcompile_h.backup
           fi
           
-          # 3. Set LOCALVERSION in defconfig
+          # Generate version info
+          export TZ="Asia/Jakarta"
+          BUILD_TIMESTAMP_WIB=$(date +"%a %b %d %H:%M:%S WIB %Y")
+          GIT_HASH=$(git rev-parse --verify HEAD | cut -c1-13)
+          BUILD_ID="ab$((RANDOM % 90000000 + 10000000))"
+          VERSION_SUFFIX="-android13-8-g${GIT_HASH}-${BUILD_ID}"
+          
+          echo "Build Time (WIB): $BUILD_TIMESTAMP_WIB"
+          echo "Version suffix: $VERSION_SUFFIX"
+          
+          # 1. Remove -dirty from setlocalversion
+          echo "Removing -dirty from setlocalversion..."
+          sed -i 's/-dirty//g' scripts/setlocalversion
+          sed -i 's/echo "$res"/echo "${res%-dirty}"/' scripts/setlocalversion
+          
+          # 2. Hardcode version in setlocalversion (use different delimiter)
+          echo "Hardcoding version in setlocalversion..."
+          sed -i "\$s|echo \"\$res\"|echo \"$VERSION_SUFFIX\"|" scripts/setlocalversion
+          
+          # 3. Fix mkcompile_h with proper delimiter (use @ instead of /)
+          if [ -f "scripts/mkcompile_h" ]; then
+            echo "Fixing mkcompile_h..."
+            # Escape the timestamp for sed
+            ESCAPED_TIMESTAMP=$(echo "$BUILD_TIMESTAMP_WIB" | sed 's/[\/&]/\\&/g')
+            sed -i "s@UTS_VERSION=\"\$(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP | cut -b -\$UTS_LEN)\"@UTS_VERSION=\"#1 SMP PREEMPT $ESCAPED_TIMESTAMP\"@" scripts/mkcompile_h
+            
+            # Add compile info
+            sed -i "/UTS_VERSION=/a LINUX_COMPILE_BY=\"GitHub Actions\"\nLINUX_COMPILE_HOST=\"github.com\"" scripts/mkcompile_h
+          fi
+          
+          # 4. Set LOCALVERSION in defconfig
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           
           # Remove existing
@@ -244,64 +229,25 @@ jobs:
           echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
           echo "CONFIG_LOCALVERSION=\"$VERSION_SUFFIX\"" >> "$CONFIG_FILE"
           
-          echo "✅ Hardcoded version string"
-          echo "Expected uname -r: ${KERNEL_BASE}${VERSION_SUFFIX}"
-
-      - name: "Remove .git from subdirectories to avoid dirty"
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          echo "=== REMOVING .git FROM SUBDIRECTORIES ==="
-          
-          # Find and remove all .git directories in subdirectories
-          find . -type d -name ".git" ! -path "./.git" -exec rm -rf {} + 2>/dev/null || true
-          
-          # Also remove .git files if any
-          find . -type f -name ".git" -exec rm -f {} + 2>/dev/null || true
-          
-          echo "✅ Removed .git from subdirectories"
+          echo "✅ Version string fixed"
 
       - name: "Clean git status"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           echo "=== CLEANING GIT STATUS ==="
           
-          # Reset any changes we made to version scripts
-          git checkout -- scripts/setlocalversion scripts/mkcompile_h 2>/dev/null || true
+          # Remove .git from subdirectories
+          find . -type d -name ".git" ! -path "./.git" -exec rm -rf {} + 2>/dev/null || true
           
-          # Apply our modifications again (since we reset)
-          # 1. Remove -dirty
-          sed -i "s/printf '%s' -dirty/printf '%s' ''/g" scripts/setlocalversion
-          sed -i "s/-dirty//g" scripts/setlocalversion
-          sed -i 's/echo "$res"/echo "${res%-dirty}"/' scripts/setlocalversion
-          
-          # 2. Hardcode version
-          GIT_HASH=$(git rev-parse --verify HEAD | cut -c1-13)
-          BUILD_ID="ab$((RANDOM % 90000000 + 10000000))"
-          VERSION_SUFFIX="-android13-8-g${GIT_HASH}-${BUILD_ID}"
-          sed -i '$s|echo "$res"|echo "'"$VERSION_SUFFIX"'"|' scripts/setlocalversion
-          
-          # 3. Hardcode timestamp in mkcompile_h
-          export TZ="Asia/Jakarta"
-          BUILD_TIMESTAMP_WIB=$(date +"%a %b %d %H:%M:%S WIB %Y")
-          if [ -f "scripts/mkcompile_h" ]; then
-            sed -i 's|UTS_VERSION="\$(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP | cut -b -\$UTS_LEN)"|UTS_VERSION="#1 SMP PREEMPT '"$BUILD_TIMESTAMP_WIB"'"|' scripts/mkcompile_h
-          fi
-          
-          # Commit changes to avoid dirty
+          # Commit changes
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
           
           git add -A
           if ! git diff-index --quiet HEAD; then
-            git commit -m "build: apply modifications and fix version string" --no-verify
-            echo "✅ Committed all changes"
-          else
-            echo "⚠️ No changes to commit"
+            git commit -m "build: apply modifications" --no-verify
+            echo "✅ Committed changes"
           fi
-          
-          # Verify git status is clean
-          echo "Git status:"
-          git status --short || true
 
       - name: "Setup kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -387,34 +333,19 @@ jobs:
         run: |
           echo "🔍 VERIFYING KERNEL VERSION ==="
           
-          # Extract full version string
           VERSION_FULL=$(strings Image | grep "Linux version" | head -1)
           echo "Full version string: $VERSION_FULL"
           
-          # Check for -dirty
           if echo "$VERSION_FULL" | grep -q "dirty"; then
-            echo "❌ ERROR: Kernel still contains -dirty!"
-            echo "Trying to extract more details..."
-            strings Image | grep -A2 -B2 "dirty" || true
+            echo "❌ ERROR: Kernel contains -dirty!"
             exit 1
           fi
           
-          # Extract clean version
           VERSION_CLEAN=$(echo "$VERSION_FULL" | sed 's/Linux version //' | sed 's/ (.*//')
           echo "✅ Clean kernel version: $VERSION_CLEAN"
           
-          # Also check /proc/version format
-          echo "Checking /proc/version format..."
-          if strings Image | grep -q "LINUX_COMPILE_BY"; then
-            COMPILE_BY=$(strings Image | grep "LINUX_COMPILE_BY" | head -1)
-            echo "Compile by: $COMPILE_BY"
-          fi
-          
           echo "KERNEL_VERSION=$VERSION_CLEAN" >> $GITHUB_ENV
           echo "$VERSION_CLEAN" > kernel_version.txt
-          
-          echo "Expected format: 5.15.197-android13-8-gXXXXXXXXXXXXX-abXXXXXXXX"
-          echo "Actual version: $VERSION_CLEAN"
 
       - name: "Copy kernel image"
         working-directory: ${{ env.WORK_DIR }}/out/dist
@@ -422,15 +353,12 @@ jobs:
           cp Image "Image.gki"
           echo "📦 Kernel image:"
           ls -lh Image.gki
-          file Image.gki
 
       - name: "Upload kernel artifact"
         uses: actions/upload-artifact@v4
         with:
           name: gki-kernel
-          path: |
-            ${{ env.WORK_DIR }}/out/dist/Image.gki
-            ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
+          path: ${{ env.WORK_DIR }}/out/dist/Image.gki
           retention-days: 1
 
   package-kernel:
@@ -444,8 +372,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts/
-          pattern: gki-kernel
-          merge-multiple: true
 
       - name: "Read kernel version"
         run: |
@@ -454,25 +380,8 @@ jobs:
             echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
             echo "📋 Detected kernel version: $KERNEL_VERSION"
           else
-            # Fallback version
             echo "KERNEL_VERSION=5.15.197-android13-8-g6b88270ef707-ab13297889" >> $GITHUB_ENV
-            echo "⚠️ Using fallback version"
           fi
-
-      - name: "Send Telegram packaging started"
-        run: |
-          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          
-          MESSAGE="📦 *Packaging Started*%0A%0A"
-          MESSAGE="${MESSAGE}⏰ *Time:* $(date +'%H:%M:%S WIB')%0A"
-          MESSAGE="${MESSAGE}⚡ *Stage:* Creating flashable ZIP...%0A"
-          MESSAGE="${MESSAGE}🔧 *Version:* \`${{ env.KERNEL_VERSION }}\`"
-          
-          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-            -d chat_id="$CHAT_ID" \
-            -d text="$MESSAGE" \
-            -d parse_mode="Markdown"
 
       - name: "Create ZIP package"
         run: |
@@ -502,8 +411,6 @@ jobs:
           echo "TAG_NAME=gki-$DATE_TAG" >> $GITHUB_ENV
           
           echo "✅ Package created: $ZIP_NAME ($ZIP_SIZE_MB MB)"
-          echo "🔐 SHA256: $ZIP_SHA256"
-          echo "🔐 SHA256 (short): $ZIP_SHA256_SHORT"
 
       - name: "Create GitHub Release"
         uses: softprops/action-gh-release@v1
@@ -517,9 +424,9 @@ jobs:
             ## GKI Kernel with Wild-KSU + SUSFS
             
             **Build Date:** $(date +'%Y-%m-%d %H:%M WIB')
-            **Kernel Version:** \`${{ env.KERNEL_VERSION }}\`
+            **Kernel Version:** `${{ env.KERNEL_VERSION }}`
             **File:** ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)
-            **SHA256:** \`${{ env.ZIP_SHA256 }}\`
+            **SHA256:** `${{ env.ZIP_SHA256 }}`
             
             ### Features:
             - Wild-KSU 3.0.0 Stable
@@ -532,11 +439,6 @@ jobs:
             2. Or flash in custom recovery
             3. Reboot
             
-            ### Verification:
-            ```bash
-            uname -r
-            # Should show: ${{ env.KERNEL_VERSION }}
-            ```
           draft: false
           prerelease: false
 
@@ -546,19 +448,19 @@ jobs:
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG_NAME }}"
           
-          MESSAGE="✅ *Build Success!*%0A%0A"
-          MESSAGE="${MESSAGE}📦 *File:* \`${{ env.ZIP_NAME }}\`%0A"
-          MESSAGE="${MESSAGE}📊 *Size:* ${{ env.ZIP_SIZE_MB }} MB%0A"
-          MESSAGE="${MESSAGE}🔐 *SHA256:* \`${{ env.ZIP_SHA256_SHORT }}...\`%0A"
-          MESSAGE="${MESSAGE}🔧 *Version:* \`${{ env.KERNEL_VERSION }}\`%0A"
-          MESSAGE="${MESSAGE}🔗 *Download:* [Release](${RELEASE_URL})%0A"
-          MESSAGE="${MESSAGE}⏰ *Time:* $(date +'%H:%M:%S WIB')%0A"
-          MESSAGE="${MESSAGE}🎯 *Features:* Wild-KSU + SUSFS + BBG"
+          MESSAGE="<b>✅ Build Success!</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>📦 File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
+          MESSAGE="${MESSAGE}<b>📊 Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
+          MESSAGE="${MESSAGE}<b>🔐 SHA256:</b> <code>${{ env.ZIP_SHA256_SHORT }}...</code>%0A"
+          MESSAGE="${MESSAGE}<b>🔧 Version:</b> <code>${{ env.KERNEL_VERSION }}</code>%0A"
+          MESSAGE="${MESSAGE}<b>🔗 Download:</b> <a href='${RELEASE_URL}'>Release</a>%0A"
+          MESSAGE="${MESSAGE}<b>⏰ Time:</b> $(date +'%H:%M:%S WIB')%0A"
+          MESSAGE="${MESSAGE}<b>🎯 Features:</b> Wild-KSU + SUSFS + BBG"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
             -d text="$MESSAGE" \
-            -d parse_mode="Markdown"
+            -d parse_mode="HTML"
 
   notify-failure:
     name: "Notify Failure"
@@ -573,12 +475,12 @@ jobs:
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
-          MESSAGE="❌ *Build Failed!*%0A%0A"
-          MESSAGE="${MESSAGE}⏰ *Time:* $(date +'%H:%M:%S WIB')%0A"
-          MESSAGE="${MESSAGE}🔗 *Logs:* [View Logs](${RUN_URL})%0A"
+          MESSAGE="<b>❌ Build Failed!</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>⏰ Time:</b> $(date +'%H:%M:%S WIB')%0A"
+          MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>%0A"
           MESSAGE="${MESSAGE}⚠️ Check the logs for details."
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
             -d text="$MESSAGE" \
-            -d parse_mode="Markdown"
+            -d parse_mode="HTML"
