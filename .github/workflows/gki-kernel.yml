@@ -33,7 +33,7 @@ jobs:
           echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
           sudo apt-get update -qq
-          sudo apt-get install -y repo rsync aria2 bc bison build-essential flex git libelf-dev libssl-dev wget curl jq
+          sudo apt-get install -y repo rsync aria2 bc bison build-essential flex git libelf-dev libssl-dev wget curl
 
       - name: "Send Telegram build started"
         if: always()
@@ -46,7 +46,9 @@ jobs:
           MESSAGE="${MESSAGE}🎯 <b>Target:</b> Android ${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}%0A"
           MESSAGE="${MESSAGE}🔄 <b>Trigger:</b> ${{ github.event_name }}%0A"
           MESSAGE="${MESSAGE}⏰ <b>Started:</b> ${{ env.BUILD_TIME }}%0A"
-          MESSAGE="${MESSAGE}⚡ <b>Status:</b> Initializing..."
+          MESSAGE="${MESSAGE}⚡ <b>Status:</b> Initializing...%0A%0A"
+          MESSAGE="${MESSAGE}👨‍💻 <b>Maintainer:</b> @superuseryu%0A"
+          MESSAGE="${MESSAGE}🎓 <b>Based on:</b> YASK by @belowzeroiq"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -178,54 +180,61 @@ jobs:
             ln -sf ../Wild_KSU drivers/kernelsu
           fi
 
-      - name: "Fix kernel version string (HAPUS -dirty & hash)"
+      - name: "Fix kernel version string (GKI Format)"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          # Backup original setlocalversion
+          # Backup original
           cp scripts/setlocalversion scripts/setlocalversion.backup
           
-          # Remove -dirty from version string
-          sed -i 's/echo "$res"/echo "${res%-dirty}"/' scripts/setlocalversion
+          # Generate GKI-style version
+          KERNEL_MAJOR=$(grep '^VERSION = ' Makefile | awk '{print $3}')
+          KERNEL_MINOR=$(grep '^PATCHLEVEL = ' Makefile | awk '{print $3}')
+          KERNEL_PATCH=$(grep '^SUBLEVEL = ' Makefile | awk '{print $3}')
+          GIT_HASH=$(git rev-parse --short=12 HEAD)
+          GIT_COUNT=$(git rev-list --count HEAD)
+          GIT_COUNT_PADDED=$(printf "%05d" $GIT_COUNT)
+          BUILD_ID=$(head -c 100 /dev/urandom | tr -dc 'a-f0-9' | head -c 10)
           
-          # Remove git hash/sha from version string
-          sed -i 's/scm_version="$(scm_version)"/scm_version=""/' scripts/setlocalversion || true
+          VERSION_STRING="${KERNEL_MAJOR}.${KERNEL_MINOR}.${KERNEL_PATCH}-android13-8-${GIT_COUNT_PADDED}-g${GIT_HASH}-${BUILD_ID}"
           
-          # Remove any auto-versioning
-          sed -i '/LOCALVERSION_AUTO/d' scripts/setlocalversion || true
+          echo "GKI Version: $VERSION_STRING"
+          echo "$VERSION_STRING" > .kernel_version
           
-          # Set LOCALVERSION to empty in defconfig
+          # Create custom setlocalversion
+          cat > scripts/setlocalversion << 'EOF'
+          #!/bin/sh
+          # Custom GKI version format
+          if [ -f .kernel_version ]; then
+          cat .kernel_version
+          else
+          # Fallback
+          echo "-android13-8-$(git rev-list --count HEAD | awk '{printf "%05d", $1}')-g$(git rev-parse --short=12 HEAD)-$(head -c 100 /dev/urandom | tr -dc 'a-f0-9' | head -c 10)"
+          fi
+          EOF
+          
+          chmod +x scripts/setlocalversion
+          
+          # Set config
           CONFIG_FILE="./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          
-          # Remove existing LOCALVERSION configs
           sed -i '/CONFIG_LOCALVERSION=/d' "$CONFIG_FILE"
           sed -i '/CONFIG_LOCALVERSION_AUTO=/d' "$CONFIG_FILE"
-          
-          # Add clean version configs
           echo 'CONFIG_LOCALVERSION=""' >> "$CONFIG_FILE"
-          echo 'CONFIG_LOCALVERSION_AUTO=n' >> "$CONFIG_FILE"
-          
-          echo "✅ Kernel version string fixed - no -dirty, no hash"
+          echo '# CONFIG_LOCALVERSION_AUTO is not set' >> "$CONFIG_FILE"
 
-      - name: "Clean git tree to avoid -dirty"
+      - name: "Clean git tree"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
           
-          # Add all changes
+          git reset --hard HEAD
+          git clean -fd
           git add -A
           
-          # Check if there are changes to commit
           if ! git diff-index --quiet HEAD; then
-            git commit -m "Build: Apply Wild-KSU, SUSFS, BBG modifications" --no-verify
-            echo "Committed changes to avoid -dirty tag"
-          else
-            echo "No changes to commit"
+            git commit -m "Build: Apply Wild-KSU, SUSFS, BBG" --no-verify
+            echo "✅ Changes committed"
           fi
-          
-          # Verify the git status is clean
-          echo "Git status after commit:"
-          git status --short
 
       - name: "Setup kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -270,39 +279,18 @@ jobs:
           CONFIG_ZRAM=y
           CONFIG_ZRAM_DEF_COMP_LZ4=y
           CONFIG_CRYPTO_LZ4=y
-          CONFIG_PSI=n
-          CONFIG_PSI_DEFAULT_DISABLED=y
-          CONFIG_DEBUG_FS=n
-          CONFIG_KASAN=n
-          CONFIG_UBSAN=n
-          CONFIG_DEBUG_KERNEL=n
-          CONFIG_GKI_HACKS_TO_FIX=n
-          CONFIG_FTRACE=n
-          CONFIG_ENABLE_DEFAULT_TRACERS=n
-          CONFIG_TRACING=n
-          CONFIG_GENERIC_TRACER=n
+          # CONFIG_PSI is not set
+          # CONFIG_DEBUG_FS is not set
+          # CONFIG_KASAN is not set
+          # CONFIG_UBSAN is not set
+          # CONFIG_DEBUG_KERNEL is not set
+          # CONFIG_GKI_HACKS_TO_FIX is not set
+          # CONFIG_FTRACE is not set
+          # CONFIG_ENABLE_DEFAULT_TRACERS is not set
+          # CONFIG_TRACING is not set
           EOF
 
-      - name: "Fix ABI check issues"
-        working-directory: ${{ env.WORK_DIR }}
-        run: |
-          # Disable ABI checking script
-          if [ -f "build/abi/compare_to_symbol_list" ]; then
-            mv build/abi/compare_to_symbol_list build/abi/compare_to_symbol_list.disabled
-            echo "Disabled ABI comparison script"
-          fi
-          
-          # Create a dummy script that always succeeds
-          cat > build/abi/compare_to_symbol_list << 'EOF'
-          #!/bin/bash
-          echo "ABI checking disabled for custom kernel build"
-          echo "Custom modifications detected: Wild-KSU, SUSFS, BBG, MGLRU"
-          echo "Proceeding without ABI checks..."
-          exit 0
-          EOF
-          chmod +x build/abi/compare_to_symbol_list
-
-      - name: "Send Telegram build progress"
+      - name: "Send Telegram progress"
         if: always()
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
@@ -310,8 +298,9 @@ jobs:
           
           MESSAGE="⚙️ <b>Kernel Build Progress</b>%0A%0A"
           MESSAGE="${MESSAGE}⏰ <b>Time:</b> $(date +'%H:%M:%S')%0A"
-          MESSAGE="${MESSAGE}🔧 <b>Stage:</b> Compiling kernel...%0A"
-          MESSAGE="${MESSAGE}📊 <b>Status:</b> Running make..."
+          MESSAGE="${MESSAGE}🔧 <b>Stage:</b> Compiling...%0A"
+          MESSAGE="${MESSAGE}📊 <b>Status:</b> Building with GKI format%0A%0A"
+          MESSAGE="${MESSAGE}👨‍💻 <b>Maintainer:</b> @superuseryu"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -329,33 +318,11 @@ jobs:
           BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
           build/build.sh -j$(nproc --all)
 
-      - name: "Verify kernel version string"
-        working-directory: ${{ env.WORK_DIR }}/out/dist
-        run: |
-          echo "🔍 Checking kernel version string..."
-          strings Image | grep "Linux version" | head -1
-          
-          # Check if contains -dirty
-          if strings Image | grep "Linux version" | grep -q "dirty"; then
-            echo "❌ ERROR: Kernel still contains -dirty!"
-            exit 1
-          fi
-          
-          # Check if contains git hash (more than just version numbers)
-          VERSION_STRING=$(strings Image | grep "Linux version" | head -1)
-          if echo "$VERSION_STRING" | grep -qE "[0-9a-f]{7,}"; then
-            echo "❌ ERROR: Kernel contains git hash!"
-            echo "Version string: $VERSION_STRING"
-            exit 1
-          fi
-          
-          echo "✅ Kernel version string is clean!"
-
       - name: "Copy kernel image"
         working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
           cp Image "Image.gki"
-          echo "📦 Kernel image copied: Image.gki"
+          echo "✅ Kernel image copied"
 
       - name: "Upload kernel artifact"
         uses: actions/upload-artifact@v4
@@ -380,7 +347,6 @@ jobs:
         id: create_zip
         run: |
           set -e
-          echo "📦 Creating AnyKernel3 package..."
           git clone --depth=1 https://github.com/superuseryu/AnyKernel3 ak3
           cp ./artifacts/gki-kernel/Image.gki ak3/
           
@@ -390,7 +356,6 @@ jobs:
           zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
           
-          # Get file size
           ZIP_SIZE=$(stat -c%s "$ZIP_NAME" 2>/dev/null || echo "0")
           ZIP_SIZE_MB=$(echo "scale=2; $ZIP_SIZE / 1024 / 1024" | bc)
           
@@ -398,8 +363,6 @@ jobs:
           echo "ZIP_SIZE_MB=$ZIP_SIZE_MB" >> $GITHUB_ENV
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
           echo "TAG_NAME=gki-$DATE_TAG" >> $GITHUB_ENV
-          
-          echo "✅ Package created: $ZIP_NAME ($ZIP_SIZE_MB MB)"
 
       - name: "Create GitHub Release"
         uses: softprops/action-gh-release@v1
@@ -410,32 +373,31 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           name: "GKI Kernel: Wild-KSU 3.0.0 Stable ${{ env.DATE_TAG }}"
           body: |
-            ## 🚀 GKI Kernel with Wild-KSU + SUSFS
+            This release includes **Wild-KSU 3.0.0 Stable**
             
-            **Build Date:** ${{ env.BUILD_TIME }}
-            **File:** ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)
+            Features:
+            -> Wild-KSU 3.0.0 Stable
+            -> SUSFS ඞ v2.0.0
+            -> Manual Syscall Hooks for better hiding
+            -> Magic Mount Support
+            -> Simple hiding for LineageOS detection
+            -> Futile hiding for jit-zygote-cache detection
+            -> Wireguard Support
+            -> BBR Support
+            -> BBG Support
+            -> BBG supported
             
-            ### Features:
-            - Wild-KSU 3.0.0 Stable
-            - SUSFS ඞ v2.0.0
-            - Baseband Guard (BBG) Protection
-            - WireGuard VPN Support
-            - BBR + Westwood TCP Congestion Control
-            - multi-gen LRU (MGLRU)
-            - ZRAM with LZ4 compression
-            - Debugging disabled for performance
-            - Clean kernel version string (no -dirty/hash)
+            <details>
+            <summary>Notes:</summary>
+            - -> In SUS SU Mode 2, it will show as disabled or incompatible, the reason is that non-kprobe hooks were used (when compiling the kernel), and non-kprobe hooks are no longer needed!
+            - -> In the latest version of susfs, flashing AK3 compressed package with Kernel Flasher will brick your device, try [Horizon Kernel Flasher](https://github.com/libxzr/HorizonKernelFlasher)!
+            </details>
             
-            ### Special Thanks:
-            - Based on YASK by @belowzeroiq
-            - Uses clang-r547379 toolchain
+            Modules:
+            -> https://github.com/sidex15/ksu_module_susfs
             
-            ### Installation Notes:
-            - Use Kernel Flasher
-            - Use Latest OrangeFox Recovery (recommended)
-            - SUSFS module: https://github.com/sidex15/ksu_module_susfs
-            - Wild-KSU Manager: https://github.com/WildKernels/Wild_KSU/releases
-            ```
+            Download Manager:
+            -> https://github.com/WildKernels/Wild_KSU/releases/tag/v3.0.0
           draft: false
           prerelease: false
 
@@ -455,11 +417,22 @@ jobs:
           MESSAGE="${MESSAGE}🔗 <b>Release:</b> <a href='${RELEASE_URL}'>Download</a>%0A"
           MESSAGE="${MESSAGE}📝 <b>Build Logs:</b> <a href='${RUN_URL}'>View</a>%0A%0A"
           MESSAGE="${MESSAGE}⚡ <b>Features:</b>%0A"
-          MESSAGE="${MESSAGE}• Wild-KSU 3.0.0 + SUSFS ඞ%0A"
-          MESSAGE="${MESSAGE}• BBG Protection%0A"
-          MESSAGE="${MESSAGE}• WireGuard + BBR2%0A"
-          MESSAGE="${MESSAGE}• Clean kernel version%0A%0A"
-          MESSAGE="${MESSAGE}🎯 <b>Based on:</b> YASK by @belowzeroiq"
+          MESSAGE="${MESSAGE}-> Wild-KSU 3.0.0 Stable%0A"
+          MESSAGE="${MESSAGE}-> SUSFS ඞ v2.0.0%0A"
+          MESSAGE="${MESSAGE}-> Manual Syscall Hooks%0A"
+          MESSAGE="${MESSAGE}-> Magic Mount Support%0A"
+          MESSAGE="${MESSAGE}-> Simple hiding for LineageOS%0A"
+          MESSAGE="${MESSAGE}-> Futile hiding for jit-zygote-cache%0A"
+          MESSAGE="${MESSAGE}-> Wireguard Support%0A"
+          MESSAGE="${MESSAGE}-> BBR Support%0A"
+          MESSAGE="${MESSAGE}-> BBG Support%0A"
+          MESSAGE="${MESSAGE}👨‍💻 <b>Maintainer:</b> @superuseryu%0A"
+          MESSAGE="${MESSAGE}🎓 <b>Based on:</b> YASK by @belowzeroiq%0A%0A"
+          MESSAGE="${MESSAGE}<details>%0A<summary>Notes:</summary>%0A"
+          MESSAGE="${MESSAGE}- In SUS SU Mode 2, it will show as disabled or incompatible, the reason is that non-kprobe hooks were used (when compiling the kernel), and non-kprobe hooks are no longer needed!%0A"
+          MESSAGE="${MESSAGE}- In the latest version of susfs, flashing AK3 compressed package with Kernel Flasher will brick your device, try Horizon Kernel Flasher!%0A"
+          MESSAGE="${MESSAGE}</details>%0A%0A"
+          MESSAGE="${MESSAGE}📦 <b>Modules:</b> https://github.com/sidex15/ksu_module_susfs"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -467,15 +440,12 @@ jobs:
             -d parse_mode="HTML" \
             -d disable_web_page_preview=true
           
-          # Send file if < 50MB
           if (( $(echo "${{ env.ZIP_SIZE_MB }} < 50" | bc -l) )); then
             echo "📤 Sending ZIP file to Telegram..."
             curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendDocument" \
               -F chat_id="$CHAT_ID" \
               -F document=@"${{ env.ZIP_NAME }}" \
               -F caption="📦 ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)"
-          else
-            echo "ℹ️ File too large (${{ env.ZIP_SIZE_MB }} MB), only sending link."
           fi
 
   notify-failure:
@@ -498,6 +468,7 @@ jobs:
           MESSAGE="${MESSAGE}🔗 <b>Commit:</b> <code>${COMMIT_HASH}</code>%0A"
           MESSAGE="${MESSAGE}🚨 <b>Failed Step:</b> ${{ github.job }}%0A"
           MESSAGE="${MESSAGE}🔍 <b>Debug:</b> <a href='${JOB_URL}'>View Error Logs</a>%0A%0A"
+          MESSAGE="${MESSAGE}👨‍💻 <b>Maintainer:</b> @superuseryu%0A"
           MESSAGE="${MESSAGE}⚠️ <b>Possible Issues:</b>%0A"
           MESSAGE="${MESSAGE}• Compilation error%0A"
           MESSAGE="${MESSAGE}• Missing dependencies%0A"
