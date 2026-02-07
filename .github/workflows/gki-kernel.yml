@@ -230,7 +230,7 @@ jobs:
             sed -i 's|UTS_VERSION="\$(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP | cut -b -\$UTS_LEN)"|UTS_VERSION="#1 SMP PREEMPT '"$BUILD_TIMESTAMP_WIB"'"|' scripts/mkcompile_h
             
             # Also set LINUX_COMPILE_BY and LINUX_COMPILE_HOST
-            sed -i '/UTS_VERSION=/a LINUX_COMPILE_BY="/home/yu"\nLINUX_COMPILE_HOST="superuseryu"' scripts/mkcompile_h
+            sed -i '/UTS_VERSION=/a LINUX_COMPILE_BY="GitHub Actions"\nLINUX_COMPILE_HOST="github.com"' scripts/mkcompile_h
           fi
           
           # 3. Set LOCALVERSION in defconfig
