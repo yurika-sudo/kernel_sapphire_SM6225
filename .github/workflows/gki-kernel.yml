@@ -40,18 +40,17 @@ jobs:
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           
-          MESSAGE="🔨 <b>Kernel Build Started</b>%0A%0A"
-          MESSAGE="${MESSAGE}📁 <b>Repository:</b> ${{ github.repository }}%0A"
-          MESSAGE="${MESSAGE}🎯 <b>Target:</b> Android ${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}%0A"
-          MESSAGE="${MESSAGE}🔄 <b>Trigger:</b> ${{ github.event_name }}%0A"
-          MESSAGE="${MESSAGE}⏰ <b>Started:</b> ${{ env.BUILD_TIME }}%0A"
-          MESSAGE="${MESSAGE}⚡ <b>Status:</b> Initializing..."
+          MESSAGE="🔨 *Kernel Build Started*%0A%0A"
+          MESSAGE="${MESSAGE}📁 *Repo:* ${{ github.repository }}%0A"
+          MESSAGE="${MESSAGE}🎯 *Target:* Android ${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}%0A"
+          MESSAGE="${MESSAGE}🔄 *Trigger:* ${{ github.event_name }}%0A"
+          MESSAGE="${MESSAGE}⏰ *Started:* $(date +'%H:%M:%S WIB')%0A"
+          MESSAGE="${MESSAGE}⚡ *Status:* Initializing..."
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
             -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview=true
+            -d parse_mode="Markdown"
 
       - name: "Clone kernel source"
         working-directory: ./${{ env.KERNEL_LOC_DIR }}
@@ -63,7 +62,7 @@ jobs:
         working-directory: ${{ env.WORK_DIR }}
         run: |
           repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15-lts --depth=1
-          repo sync --optimized-fetch --prune -j8
+          repo sync --optimized-fetch --prune -j$(nproc --all)
           
           rm -rf .repo
           rm -rf common
@@ -177,143 +176,76 @@ jobs:
             ln -sf ../Wild_KSU drivers/kernelsu
           fi
 
-      - name: "Kernel version string"
+      - name: "Fix kernel version string (AGGRESSIVE METHOD)"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           set -e
           
-          echo "=== COMPREHENSIVE VERSION STRING FIX ==="
+          # 1. Remove embedded .git directories to avoid -dirty
+          for dir in Baseband-guard Wild_KSU susfs4ksu; do
+            if [ -d "$dir/.git" ]; then
+              echo "Removing .git from $dir"
+              rm -rf "$dir/.git"
+            fi
+          done
           
-          # 1. Backup original scripts
-          cp scripts/setlocalversion scripts/setlocalversion.backup
-          if [ -f "scripts/mkcompile_h" ]; then
-            cp scripts/mkcompile_h scripts/mkcompile_h.backup
-          fi
-          
-          # 2. Set build timestamp (WIB - Jakarta time)
+          # 2. Set timezone to WIB
           export TZ="Asia/Jakarta"
-          CURRENT_TIME_WIB=$(date +"%a %b %d %H:%M:%S %Z %Y")
-          CURRENT_TIME_UTC=$(date -u +"%a %b %d %H:%M:%S UTC %Y")
+          CURRENT_TIME=$(date +"%a %b %d %H:%M:%S WIB %Y")
+          echo "Build Time: $CURRENT_TIME"
           
-          echo "WIB Time: $CURRENT_TIME_WIB"
-          echo "UTC Time: $CURRENT_TIME_UTC"
-          
-          # 3. Fix mkcompile_h to use proper timestamp (for 5.x kernels)
+          # 3. Fix mkcompile_h timestamp
           if [ -f "scripts/mkcompile_h" ]; then
-            # Replace the UTS_VERSION line in mkcompile_h
-            sed -i 's|UTS_VERSION="\$.*$|UTS_VERSION="#1 SMP PREEMPT '"$CURRENT_TIME_WIB"'"|' scripts/mkcompile_h
+            sed -i 's|UTS_VERSION=.*|UTS_VERSION="#1 SMP PREEMPT '"$CURRENT_TIME"'"|' scripts/mkcompile_h
             echo "✅ Fixed mkcompile_h timestamp"
           fi
           
-          # 4. COMPLETELY REMOVE -dirty from ALL places
-          echo "Removing -dirty from setlocalversion..."
+          # 4. Generate version suffix
+          cd ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
           
-          # Remove -dirty pattern completely
-          sed -i 's/-dirty//g' scripts/setlocalversion
-          
-          # Replace the echo line to ensure no -dirty
-          sed -i 's/echo "$res"/echo "${res%-dirty}"/' scripts/setlocalversion
-          
-          # Also remove any git status checking that adds -dirty
-          sed -i '/-dirty/d' scripts/setlocalversion
-          
-          # 5. Generate proper KMI version string
-          # Get short git hash (13 chars like gbf0a81a7f319)
+          # Generate build ID dan hash
+          BID="ab$((RANDOM % 90000000 + 10000000))"
           GHASH=$(git rev-parse --verify HEAD | cut -c1-13)
           
-          # Get commit count since beginning (padded to 5 digits)
-          COMMIT_COUNT=$(git rev-list --count HEAD)
-          COMMIT_COUNT_FORMATTED=$(printf "%05d" $COMMIT_COUNT)
+          # Format: -android13-8-g6b88270ef707-ab13297889
+          KMI_VERSION="-android13-8-g${GHASH}-${BID}"
+          echo "KMI_VERSION=$KMI_VERSION"
           
-          # Generate random build ID (8 digits)
-          BUILD_ID=$(printf "%08d" $((RANDOM % 100000000)))
-          
-          # Create KMI version string
-          KMI_VERSION="-android13-8-${COMMIT_COUNT_FORMATTED}-g${GHASH}-ab${BUILD_ID}"
-          echo "Generated KMI_VERSION: $KMI_VERSION"
-          
-          # 6. Set LOCALVERSION in defconfig
-          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          
-          # Remove ALL existing LOCALVERSION configs
-          sed -i '/CONFIG_LOCALVERSION=/d' "$CONFIG_FILE"
-          sed -i '/CONFIG_LOCALVERSION_AUTO=/d' "$CONFIG_FILE"
-          
-          # Add new configs
-          echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
-          echo "CONFIG_LOCALVERSION=\"$KMI_VERSION\"" >> "$CONFIG_FILE"
-          
-          # 7. Also modify setlocalversion to force our version
-          # Replace the entire output with our KMI_VERSION
-          echo "Forcing setlocalversion to output: $KMI_VERSION"
-          
-          # Create a new setlocalversion that just outputs our version
+          # 5. Hardcode setlocalversion untuk menghindari -dirty
           cat > scripts/setlocalversion << 'EOF'
           #!/bin/sh
-          # Modified by build script to output clean version
-          # Disable scm version string
-          scm_version=""
-          
-          # Output our custom version
-          echo "-android13-8-00001-g6b88270ef707-ab13297889"
+          # Force clean version string
+          echo "-android13-8-g6b88270ef707-ab13297889"
           EOF
           
           chmod +x scripts/setlocalversion
           
-          # 8. Clean git status to avoid -dirty
-          echo "Cleaning git status..."
+          # 6. Set LOCALVERSION on defconfig
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           
-          # Remove gitignored files from index
-          git rm --cached -r --ignore-unmatch Baseband-guard Wild_KSU susfs4ksu 2>/dev/null || true
+          # Remove existing
+          sed -i '/CONFIG_LOCALVERSION=/d' "$CONFIG_FILE"
+          sed -i '/CONFIG_LOCALVERSION_AUTO=/d' "$CONFIG_FILE"
           
-          # Create .gitignore for subdirectories
-          for dir in Baseband-guard Wild_KSU susfs4ksu; do
-            if [ -d "$dir" ]; then
-              echo "$dir/" > "$dir/.gitignore"
-            fi
-          done
+          # Add new
+          echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
+          echo "CONFIG_LOCALVERSION=\"$KMI_VERSION\"" >> "$CONFIG_FILE"
           
-          # Add proper .gitignore files
-          echo "security/baseband-guard/" > security/.gitignore_baseband 2>/dev/null || true
-          echo "drivers/kernelsu/" > drivers/.gitignore_kernelsu 2>/dev/null || true
-          
-          # Reset any changes to setlocalversion and mkcompile_h
-          git checkout -- scripts/setlocalversion 2>/dev/null || true
-          git checkout -- scripts/mkcompile_h 2>/dev/null || true
-          
-          # Apply our modified versions
-          cp scripts/setlocalversion.backup scripts/setlocalversion
-          sed -i 's/-dirty//g' scripts/setlocalversion
-          sed -i 's/echo "$res"/echo "${res%-dirty}"/' scripts/setlocalversion
-          
-          # Final commit with ALL changes
+          # 7. Clean git status
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
           
+          # Remove all tracked changes
+          git checkout -- .
+          
+          # Add and commit if any change
           git add -A
           if ! git diff-index --quiet HEAD; then
-            git commit -m "build: apply modifications and fix version string" --no-verify
-            echo "✅ Committed all changes"
+            git commit -m "build: apply Wild-KSU, SUSFS, BBG" --no-verify
+            echo "✅ Committed changes"
           fi
           
-          echo "=== VERSION FIX COMPLETE ==="
-          echo "Expected uname -r: 5.15.197$KMI_VERSION"
-
-      - name: "Send Telegram build progress"
-        run: |
-          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          
-          MESSAGE="⚙️ <b>Kernel Build Progress</b>%0A%0A"
-          MESSAGE="${MESSAGE}⏰ <b>Time:</b> $(date +'%H:%M:%S WIB')%0A"
-          MESSAGE="${MESSAGE}🔧 <b>Stage:</b> Setting up kernel configs...%0A"
-          MESSAGE="${MESSAGE}📊 <b>Status:</b> Version string fixed, applying configs..."
-          
-          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-            -d chat_id="$CHAT_ID" \
-            -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview=true
+          echo "Expected: 5.15.197$KMI_VERSION"
 
       - name: "Setup kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -333,7 +265,6 @@ jobs:
           CONFIG_OVERLAY_FS=y
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
-          CONFIG_KPM=y
           CONFIG_BBG=y
           CONFIG_KSU=y
           CONFIG_KPROBES=y
@@ -356,122 +287,73 @@ jobs:
           CONFIG_KSU_SUSFS_SUS_SU=y
           EOF
 
-          echo "✅ Kernel configs updated"
-
-      - name: "Fix ABI check issues"
+      - name: "Disable ABI checks"
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          # Disable ABI checking script
+          export SKIP_ABI_CHECKS=1
+          export SKIP_KMI_CHECK=1
+          
           if [ -f "build/abi/compare_to_symbol_list" ]; then
             mv build/abi/compare_to_symbol_list build/abi/compare_to_symbol_list.disabled
-            echo "Disabled ABI comparison script"
+            cat > build/abi/compare_to_symbol_list << 'EOF'
+            #!/bin/bash
+            echo "ABI checking disabled for custom GKI kernel build"
+            exit 0
+            EOF
+            chmod +x build/abi/compare_to_symbol_list
           fi
-          
-          # Create a dummy script that always succeeds
-          cat > build/abi/compare_to_symbol_list << 'EOF'
-          #!/bin/bash
-          echo "ABI checking disabled for custom kernel build"
-          echo "Custom modifications detected: Wild-KSU, SUSFS, BBG, MGLRU"
-          echo "Proceeding without ABI checks..."
-          exit 0
-          EOF
-          chmod +x build/abi/compare_to_symbol_list
-
-      - name: "Send Telegram compiling started"
-        run: |
-          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          
-          MESSAGE="🔨 <b>Compilation Started</b>%0A%0A"
-          MESSAGE="${MESSAGE}⏰ <b>Time:</b> $(date +'%H:%M:%S WIB')%0A"
-          MESSAGE="${MESSAGE}⚡ <b>Stage:</b> Compiling kernel...%0A"
-          MESSAGE="${MESSAGE}📊 <b>Cores:</b> $(nproc)%0A"
-          MESSAGE="${MESSAGE}⏳ <b>ETA:</b> 10-15 minutes..."
-          
-          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-            -d chat_id="$CHAT_ID" \
-            -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview=true
 
       - name: "Build kernel"
         working-directory: ${{ env.WORK_DIR }}
-        timeout-minutes: 40
+        timeout-minutes: 45
         run: |
           set -e
-          echo "🚀 Starting kernel build..."
+          echo "🚀 Starting kernel build with $(nproc) cores..."
           
           export LTO=thin
           export SKIP_ABI_CHECKS=1
           export SKIP_KMI_CHECK=1
-          export KBUILD_BUILD_TIMESTAMP="$(date -u '+%a %b %e %H:%M:%S UTC %Y')"
           
-          echo "Build environment:"
-          echo "LTO=$LTO"
-          echo "SKIP_ABI_CHECKS=$SKIP_ABI_CHECKS"
-          echo "KBUILD_BUILD_TIMESTAMP=$KBUILD_BUILD_TIMESTAMP"
+          START_TIME=$(date +%s)
           
           BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
-          build/build.sh -j$(nproc --all)
+          build/build.sh -j$(nproc)
           
-          echo "✅ Build completed successfully!"
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - START_TIME))
+          echo "✅ Build completed in $((DURATION / 60))m $((DURATION % 60))s"
+          
+          echo "BUILD_DURATION=$DURATION" >> $GITHUB_ENV
 
-      - name: "Verify kernel version string"
+      - name: "Verify kernel version"
         working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
-          echo "🔍 VERIFYING KERNEL VERSION STRING..."
+          echo "🔍 Checking kernel version..."
           
-          # Extract version string from kernel image
-          VERSION_RAW=$(strings Image | grep "Linux version" | head -1)
-          echo "Raw version string: $VERSION_RAW"
-          
-          # Decode the format string
-          VERSION_CLEAN=$(echo "$VERSION_RAW" | sed 's/%s/ /g')
-          echo "Decoded version: $VERSION_CLEAN"
-          
-          # Check for -dirty
-          if echo "$VERSION_CLEAN" | grep -q "dirty"; then
+          # Extract version string
+          if strings Image | grep -q "dirty"; then
             echo "❌ ERROR: Kernel contains -dirty!"
-            echo "Full string: $VERSION_CLEAN"
+            strings Image | grep "Linux version" | head -1
             exit 1
           fi
           
-          # Extract just the version part after "Linux version"
-          VERSION_PART=$(echo "$VERSION_CLEAN" | sed -n 's/.*Linux version \([^ ]*\).*/\1/p')
-          echo "Kernel version: $VERSION_PART"
+          VERSION=$(strings Image | grep "Linux version" | head -1 | sed 's/Linux version //')
+          echo "✅ Clean kernel version: $VERSION"
           
-          # Verify format
-          if echo "$VERSION_PART" | grep -qE "^5\.15\.[0-9]+-android13-8-[0-9]{5}-g[0-9a-f]{13}-ab[0-9]{8}$"; then
-            echo "✅ PERFECT! Version string format is correct!"
-            echo "uname -r should show: $VERSION_PART"
-          elif echo "$VERSION_PART" | grep -qE "^5\.15\.[0-9]+-android13-8"; then
-            echo "⚠️  Acceptable: Version string has basic format: $VERSION_PART"
-            echo "But might not have full commit hash/build ID"
-          else
-            echo "⚠️  Warning: Version string format unexpected: $VERSION_PART"
-          fi
-          
-          # Save version for later use
-          echo "KERNEL_VERSION=$VERSION_PART" >> $GITHUB_ENV
-          echo "$VERSION_PART" > kernel_version.txt
+          echo "KERNEL_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "$VERSION" > kernel_version.txt
 
       - name: "Copy kernel image"
         working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
           cp Image "Image.gki"
-          echo "📦 Kernel image copied: Image.gki"
-          
-          # Show file info
           ls -lh Image.gki
-          file Image.gki
 
       - name: "Upload kernel artifact"
         uses: actions/upload-artifact@v4
         with:
           name: gki-kernel
-          path: |
-            ${{ env.WORK_DIR }}/out/dist/Image.gki
-            ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
+          path: ${{ env.WORK_DIR }}/out/dist/Image.gki
           retention-days: 1
 
   package-kernel:
@@ -485,72 +367,33 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts/
-          pattern: gki-kernel
-          merge-multiple: true
-
-      - name: "Read kernel version"
-        run: |
-          if [ -f "./artifacts/kernel_version.txt" ]; then
-            KERNEL_VERSION=$(cat ./artifacts/kernel_version.txt)
-            echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
-            echo "Detected kernel version: $KERNEL_VERSION"
-          else
-            echo "Using default kernel version"
-            echo "KERNEL_VERSION=5.15.197-android13-8-00001-g6b88270ef707-ab13297889" >> $GITHUB_ENV
-          fi
-
-      - name: "Send Telegram packaging started"
-        run: |
-          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          
-          MESSAGE="📦 <b>Packaging Started</b>%0A%0A"
-          MESSAGE="${MESSAGE}⏰ <b>Time:</b> $(date +'%H:%M:%S WIB')%0A"
-          MESSAGE="${MESSAGE}⚡ <b>Stage:</b> Creating flashable ZIP...%0A"
-          MESSAGE="${MESSAGE}🔧 <b>Version:</b> <code>${{ env.KERNEL_VERSION }}</code>"
-          
-          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-            -d chat_id="$CHAT_ID" \
-            -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview=true
 
       - name: "Create ZIP package"
-        id: create_zip
         run: |
           set -e
           echo "📦 Creating AnyKernel3 package..."
           
-          # Clone AnyKernel3
-          git clone --depth=1 https://github.com/superuseryu/AnyKernel3
+          git clone --depth=1 https://github.com/topnotchfreaks/AnyKernel3 -b YASK AnyKernel3
+          cp ./artifacts/gki-kernel/Image.gki AnyKernel3/
           
-          # Copy kernel image
-          cp ./artifacts/Image.gki AnyKernel3/
-          
-          # Get kernel version for filename
-          KERNEL_BASE_VERSION=$(echo "${{ env.KERNEL_VERSION }}" | cut -d'-' -f1)
           DATE_TAG=$(date +'%Y.%m.%d')
+          ZIP_NAME="GKI_Kernel_${DATE_TAG}.zip"
           
-          ZIP_NAME="GKI_Kernel_WildKSU_${DATE_TAG}.zip"
-          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
           cd AnyKernel3
           zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
           
-          # Get file size and SHA256
           ZIP_SIZE=$(stat -c%s "$ZIP_NAME")
           ZIP_SIZE_MB=$(echo "scale=2; $ZIP_SIZE / 1024 / 1024" | bc)
           ZIP_SHA256=$(sha256sum "$ZIP_NAME" | cut -d' ' -f1)
           
-          echo "ZIP_SIZE=$ZIP_SIZE" >> $GITHUB_ENV
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
           echo "ZIP_SIZE_MB=$ZIP_SIZE_MB" >> $GITHUB_ENV
           echo "ZIP_SHA256=$ZIP_SHA256" >> $GITHUB_ENV
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
           echo "TAG_NAME=gki-$DATE_TAG" >> $GITHUB_ENV
           
-          echo "✅ Package created: $ZIP_NAME"
-          echo "📊 Size: $ZIP_SIZE_MB MB"
-          echo "🔐 SHA256: $ZIP_SHA256"
+          echo "✅ Package created: $ZIP_NAME ($ZIP_SIZE_MB MB)"
 
       - name: "Create GitHub Release"
         uses: softprops/action-gh-release@v1
@@ -559,40 +402,21 @@ jobs:
         with:
           files: ${{ env.ZIP_NAME }}
           tag_name: ${{ env.TAG_NAME }}
-          name: "GKI Kernel: Wild-KSU + SUSFS ${{ env.DATE_TAG }}"
+          name: "GKI Kernel ${{ env.DATE_TAG }}"
           body: |
-            ## 🚀 GKI Kernel with Wild-KSU + SUSFS
+            ## GKI Kernel with Wild-KSU + SUSFS
             
-            **Build Date:** ${{ env.BUILD_TIME }} (WIB)
-            **File:** ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)
-            **SHA256:** `${{ env.ZIP_SHA256 }}`
+            **Build Date:** $(date +'%Y-%m-%d %H:%M WIB')
             
-            ### Kernel Version:
-            ```
-            ${{ env.KERNEL_VERSION }}
-            ```
-            
-            ### Features:
+            **Features:**
             - Wild-KSU 3.0.0 Stable
-            - SUSFS ඞ v2.0.0
+            - SUSFS v2.0.0
             - Baseband Guard (BBG)
-            - BBR + Westwood TCP Congestion Control
+            - BBR + Westwood TCP
             
-            ### Special Thanks:
-            - Based on YASK by @belowzeroiq
-            - Uses clang-r547379 toolchain
-            
-            ### Installation Notes:
-            - Boot to recovery (TWRP/OrangeFox) (recommended)
-            - Kernel Flasher: https://github.com/fatalcoder524/KernelFlasher/
-            - SUSFS module: https://github.com/sidex15/ksu_module_susfs
-            - Wild-KSU Manager: https://github.com/WildKernels/Wild_KSU/releases
-            
-            ### Verification:
-            ```bash
-            uname -r
-            # Should show: ${{ env.KERNEL_VERSION }}
-            ```
+            **Installation:**
+            - Use Kernel Flasher app
+            - Or flash in recovery
           draft: false
           prerelease: false
 
@@ -601,45 +425,18 @@ jobs:
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG_NAME }}"
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
-          # Calculate build duration
-          START_TIME="${{ env.BUILD_TIME }}"
-          END_TIME=$(date +'%H:%M')
-          DURATION=$(( $(date +%s) - $(date -d "$START_TIME" +%s) ))
-          DURATION_MIN=$((DURATION / 60))
-          DURATION_SEC=$((DURATION % 60))
-          
-          MESSAGE="✅ <b>Build Completed Successfully!</b>%0A%0A"
-          MESSAGE="${MESSAGE}📦 <b>File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
-          MESSAGE="${MESSAGE}📊 <b>Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
-          MESSAGE="${MESSAGE}⏰ <b>Started:</b> $START_TIME%0A"
-          MESSAGE="${MESSAGE}⏱️ <b>Duration:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
-          MESSAGE="${MESSAGE}🔗 <b>Release:</b> <a href='${RELEASE_URL}'>Download</a>%0A"
-          MESSAGE="${MESSAGE}📝 <b>Build Logs:</b> <a href='${RUN_URL}'>View</a>%0A%0A"
-          MESSAGE="${MESSAGE}⚡ <b>Kernel Version:</b>%0A"
-          MESSAGE="${MESSAGE}<code>${{ env.KERNEL_VERSION }}</code>%0A%0A"
-          MESSAGE="${MESSAGE}🎯 <b>Features:</b>%0A"
-          MESSAGE="${MESSAGE}• Wild-KSU 3.0.0 + SUSFS ඞ%0A"
-          MESSAGE="${MESSAGE}• Baseband-guard (BBG)%0A"
-          MESSAGE="${MESSAGE}• BBR + Westwood"
+          MESSAGE="✅ *Build Success!*%0A%0A"
+          MESSAGE="${MESSAGE}📦 *File:* ${{ env.ZIP_NAME }}%0A"
+          MESSAGE="${MESSAGE}📊 *Size:* ${{ env.ZIP_SIZE_MB }} MB%0A"
+          MESSAGE="${MESSAGE}🔗 *Download:* [Release](${RELEASE_URL})%0A"
+          MESSAGE="${MESSAGE}⏰ *Time:* $(date +'%H:%M:%S WIB')%0A"
+          MESSAGE="${MESSAGE}🎯 *Features:* Wild-KSU + SUSFS + BBG"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
             -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview=true
-          
-          # Send file if < 20MB (Telegram limit is 50MB, but be conservative)
-          if (( $(echo "${{ env.ZIP_SIZE_MB }} < 20" | bc -l) )); then
-            echo "📤 Sending ZIP file to Telegram..."
-            curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendDocument" \
-              -F chat_id="$CHAT_ID" \
-              -F document=@"${{ env.ZIP_NAME }}" \
-              -F caption="📦 ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)"
-          else
-            echo "ℹ️ File size (${{ env.ZIP_SIZE_MB }} MB), sending download link only."
-          fi
+            -d parse_mode="Markdown"
 
   notify-failure:
     name: "Notify Failure"
@@ -653,19 +450,13 @@ jobs:
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          JOB_URL="$RUN_URL#step:${{ github.step }}"
           
-          MESSAGE="❌ <b>Build Failed!</b>%0A%0A"
-          MESSAGE="${MESSAGE}⏰ <b>Time:</b> $(date +'%H:%M:%S WIB')%0A"
-          MESSAGE="${MESSAGE}🚨 <b>Failed Job:</b> ${{ github.job }}%0A"
-          MESSAGE="${MESSAGE}🔍 <b>Debug:</b> <a href='${JOB_URL}'>View Error Logs</a>%0A%0A"
-          MESSAGE="${MESSAGE}⚠️ <b>Possible Issues:</b>%0A"
-          MESSAGE="${MESSAGE}• Compilation error%0A"
-          MESSAGE="${MESSAGE}• Version string issues%0A"
-          MESSAGE="${MESSAGE}• Missing dependencies"
+          MESSAGE="❌ *Build Failed!*%0A%0A"
+          MESSAGE="${MESSAGE}⏰ *Time:* $(date +'%H:%M:%S WIB')%0A"
+          MESSAGE="${MESSAGE}🔗 *Logs:* [View Logs](${RUN_URL})%0A"
+          MESSAGE="${MESSAGE}⚠️ Check the logs for details."
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
             -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview=true
+            -d parse_mode="Markdown"
