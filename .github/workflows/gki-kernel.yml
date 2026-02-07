@@ -152,48 +152,79 @@ jobs:
       - name: "Fix kernel version string"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          export TZ="Asia/Jakarta"
-          BUILD_TIMESTAMP_WIB=$(date +"%a %b %d %H:%M:%S WIB %Y")
-          GIT_HASH=$(git rev-parse --verify HEAD 2>/dev/null | cut -c1-13)
-          [ -z "$GIT_HASH" ] && GIT_HASH="unknown"
-          BUILD_ID="ab$((RANDOM % 90000000 + 10000000))"
-          VERSION_SUFFIX="-android13-8-g${GIT_HASH}-${BUILD_ID}"
+          sed -i 's/-dirty//g' scripts/setlocalversion 2>/dev/null
+          sed -i 's/dirty//g' scripts/setlocalversion 2>/dev/null
           
-          if [ -f "scripts/setlocalversion" ]; then
-            cp scripts/setlocalversion scripts/setlocalversion.backup 2>/dev/null || true
-            sed -i "/printf '%s' -dirty/d" scripts/setlocalversion 2>/dev/null || true
-            sed -i 's/-dirty//g' scripts/setlocalversion 2>/dev/null || true
-            sed -i '$ s|echo "$res"|echo "'"$VERSION_SUFFIX"'"|' scripts/setlocalversion 2>/dev/null || true
-          fi
+          cat > scripts/setlocalversion << 'EOF'
+          #!/bin/sh
+          # Hardcoded by GitHub Actions
+          # Disable git version detection completely
+          echo "-android13-8-g6b88270ef707-ab$((RANDOM % 90000000 + 10000000))"
+          EOF
+          
+          chmod +x scripts/setlocalversion
           
           if [ -f "scripts/mkcompile_h" ]; then
-            cp scripts/mkcompile_h scripts/mkcompile_h.backup 2>/dev/null || true
-            ESCAPED_TIMESTAMP=$(echo "$BUILD_TIMESTAMP_WIB" | sed 's/[\/&]/\\&/g')
-            sed -i "s|UTS_VERSION=\"\$(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP | cut -b -\$UTS_LEN)\"|UTS_VERSION=\"#1 SMP PREEMPT $ESCAPED_TIMESTAMP\"|" scripts/mkcompile_h 2>/dev/null || true
-            grep -q "LINUX_COMPILE_BY" scripts/mkcompile_h || sed -i "/UTS_VERSION=/a LINUX_COMPILE_BY=\"GitHub Actions\"\nLINUX_COMPILE_HOST=\"github.com\"" scripts/mkcompile_h 2>/dev/null || true
+            echo "HARDCODING MKCOMPILE_H..."
+            
+            # Generate timestamp WIB
+            export TZ="Asia/Jakarta"
+            BUILD_TIMESTAMP_WIB=$(date +"%a %b %d %H:%M:%S WIB %Y")
+            
+            cp scripts/mkcompile_h scripts/mkcompile_h.backup
+            
+            # Replace the whole UTS_VERSION generation
+            sed -i '/UTS_VERSION=/,$d' scripts/mkcompile_h
+            cat >> scripts/mkcompile_h << EOF
+            UTS_VERSION="#1 SMP PREEMPT $BUILD_TIMESTAMP_WIB"
+            LINUX_COMPILE_BY="GitHub Actions"
+            LINUX_COMPILE_HOST="github.com"
+            EOF
           fi
           
-          if [ -f "init/Makefile" ] && grep -q "build-timestamp" init/Makefile; then
-            HARDCODED_TS="\"$(date +'%a %b %e %H:%M:%S WIB %Y')\""
-            sed -i "s|build-timestamp =.*|build-timestamp = $HARDCODED_TS|" init/Makefile 2>/dev/null || true
-          fi
-          
+          # Set CONFIG_LOCALVERSION_AUTO to n
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          if [ -f "$CONFIG_FILE" ]; then
-            sed -i '/CONFIG_LOCALVERSION=/d' "$CONFIG_FILE" 2>/dev/null || true
-            sed -i '/CONFIG_LOCALVERSION_AUTO=/d' "$CONFIG_FILE" 2>/dev/null || true
-            echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
-            echo "CONFIG_LOCALVERSION=\"$VERSION_SUFFIX\"" >> "$CONFIG_FILE"
-          fi
-
-      - name: "Clean git status"
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
+          
+          sed -i '/CONFIG_LOCALVERSION/d' "$CONFIG_FILE" 2>/dev/null
+          sed -i '/CONFIG_LOCALVERSION_AUTO/d' "$CONFIG_FILE" 2>/dev/null
+          
+          echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
+          echo 'CONFIG_LOCALVERSION="-android13-8-g6b88270ef707-ab$((RANDOM % 90000000 + 10000000))"' >> "$CONFIG_FILE"
+          
+          echo "FORCING CLEAN GIT STATUS..."
+          
           find . -type d -name ".git" ! -path "./.git" -exec rm -rf {} + 2>/dev/null || true
+          
+          git checkout -- . 2>/dev/null || true
+          git clean -fdx 2>/dev/null || true
+          git reset --hard HEAD 2>/dev/null || true
+          
+          git add -A 2>/dev/null || true
+          
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
-          git add -A 2>/dev/null || true
-          git diff-index --quiet HEAD || git commit -m "build: apply modifications" --no-verify 2>/dev/null || true
+          git commit -m "build: force clean version" --allow-empty 2>/dev/null || true
+          
+          echo "✅ Version fix DONE!"
+          
+      - name: "Force git clean before build"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          git status --short
+        
+          if [ -n "$(git status --porcelain)" ]; then
+           echo "⚠️ Still have modified files, forcing reset..."
+           git checkout -- . 2>/dev/null || true
+           git clean -fdx 2>/dev/null || true
+           git reset --hard HEAD 2>/dev/null || true
+          fi
+        
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git commit --allow-empty -m "build: pre-build clean" 2>/dev/null || true
+        
+          echo "Git status after clean:"
+          git status --short || true
 
       - name: "Setup kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
