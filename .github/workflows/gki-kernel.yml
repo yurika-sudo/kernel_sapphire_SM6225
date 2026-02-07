@@ -224,8 +224,8 @@ jobs:
             sed -i "\$s|echo \"\$res\"|echo \"$KMI_VERSION\"|" scripts/setlocalversion 2>/dev/null || true
           fi
           echo "✅ Kernel version string fixed: $KMI_VERSION"
-          
-      - name: "Clean git tree
+
+      - name: "Clean git tree"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           git config --global user.email "github-actions@github.com"
