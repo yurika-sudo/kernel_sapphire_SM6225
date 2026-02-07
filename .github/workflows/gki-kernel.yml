@@ -73,41 +73,81 @@ jobs:
       - name: "Setup Wild-KSU with SUSFS"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
+          set -e
+          
           rm -rf ./KernelSU ./drivers/kernelsu ./Wild_KSU
+          
+          echo "Installing Wild-KSU..."
           curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
-          [ ! -d "Wild_KSU" ] && { echo "ERROR: Wild_KSU directory not found!"; exit 1; }
-          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          [ ! -d "susfs4ksu" ] && { echo "ERROR: SUSFS4KSU clone failed!"; exit 1; }
-          SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-          if [ -f "$SUSFS_PATCH" ]; then
-            patch -p1 --forward < "$SUSFS_PATCH" 2>/dev/null || true
+          
+          if [ ! -d "Wild_KSU" ]; then
+            echo "ERROR: Wild_KSU directory not found!"
+            exit 1
           fi
+          
+          echo "Cloning SUSFS4KSU..."
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+          
+          if [ ! -d "susfs4ksu" ]; then
+            echo "ERROR: SUSFS4KSU clone failed!"
+            exit 1
+          fi
+          
+          SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
+          
+          if [ -f "$SUSFS_PATCH" ]; then
+            if patch -p1 --forward < "$SUSFS_PATCH"; then
+              echo "SUSFS kernel patch applied"
+            else
+              echo "Patch had some issues, continuing..."
+            fi
+          fi
+          
           mkdir -p fs include/linux
+          
           if [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ]; then
             cp -f susfs4ksu/kernel_patches/fs/susfs.c fs/susfs.c
           else
             echo "ERROR: fs/susfs.c not found!"
             exit 1
           fi
+          
           if [ -f "susfs4ksu/kernel_patches/include/linux/susfs.h" ]; then
             cp -f susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/susfs.h
           else
             echo "ERROR: include/linux/susfs.h not found!"
             exit 1
           fi
-          [ -f "susfs4ksu/kernel_patches/include/linux/susfs_def.h" ] && cp -f susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/susfs_def.h
-          [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ] && cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* Wild_KSU/kernel/ || true
+          
+          if [ -f "susfs4ksu/kernel_patches/include/linux/susfs_def.h" ]; then
+            cp -f susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/susfs_def.h
+          fi
+          
+          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
+            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* Wild_KSU/kernel/ || true
+          fi
+          
           KSU_C_FILE="Wild_KSU/kernel/ksu.c"
-          [ ! -f "$KSU_C_FILE" ] && { echo "ERROR: $KSU_C_FILE not found!"; exit 1; }
+          
+          if [ ! -f "$KSU_C_FILE" ]; then
+            echo "ERROR: $KSU_C_FILE not found!"
+            exit 1
+          fi
+          
           if ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
             if ! grep -q "#include <linux/susfs.h>" "$KSU_C_FILE"; then
-              sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE" 2>/dev/null
+              sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE"
             fi
+            
             if ! grep -q "susfs_init()" "$KSU_C_FILE"; then
-              sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE" 2>/dev/null || sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$KSU_C_FILE" 2>/dev/null
+              sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE" || \
+              sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$KSU_C_FILE"
             fi
           fi
-          [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && ln -sf ../Wild_KSU drivers/kernelsu
+          
+          if [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
+            ln -sf ../Wild_KSU drivers/kernelsu
+          fi
 
       - name: "Fix kernel version string"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
