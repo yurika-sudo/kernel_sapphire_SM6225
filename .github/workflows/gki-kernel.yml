@@ -178,7 +178,7 @@ jobs:
             ln -sf ../Wild_KSU drivers/kernelsu
           fi
 
-      - name: "Fix kernel version string (remove -dirty & set proper format)"
+      - name: "Fix kernel version string"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           # Generate build timestamp
@@ -287,10 +287,10 @@ jobs:
           CONFIG_KSU_SUSFS_SUS_SU=y
           EOF
 
-      - name: "Disable ABI checks (GKI method)"
+      - name: "Disable ABI checks
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          # Skip ABI checks completely (GKI method)
+          # Skip ABI checks
           export SKIP_ABI_CHECKS=1
           export SKIP_KMI_CHECK=1
           
