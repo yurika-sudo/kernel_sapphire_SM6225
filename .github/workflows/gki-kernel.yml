@@ -44,7 +44,7 @@ jobs:
           MESSAGE="${MESSAGE}📁 <b>Repository:</b> ${{ github.repository }}%0A"
           MESSAGE="${MESSAGE}🎯 <b>Target:</b> Android ${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}%0A"
           MESSAGE="${MESSAGE}🔄 <b>Trigger:</b> ${{ github.event_name }}%0A"
-          MESSAGE="${MESSAGE}⏰ <b>Started:</b> ${{ env.BUILD_TIME }}%0A"
+          MESSAGE="${MESSAGE}🕐 <b>Started:</b> ${{ env.BUILD_TIME }}%0A"
           MESSAGE="${MESSAGE}👨‍💻 <b>Maintainer:</b> @superuseryu%0A"
           MESSAGE="${MESSAGE}🎓 <b>Based on:</b> YASK by @belowzeroiq%0A"
           MESSAGE="${MESSAGE}⏳ <b>Status:</b> Initializing..."
@@ -239,24 +239,37 @@ jobs:
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
 
-          # Remove any untracked files and directories
-          git clean -fd
+          # Remove patch backup files ONLY (not our added files)
+          find . -name "*.orig" -delete
+          find . -name "*.rej" -delete
 
-          # Add all changes
+          # Add all changes except those in .gitignore
           git add -A
 
           # Commit if there are changes
           git commit -m "build: clean state for kernel build" --allow-empty || true
 
-          # Ensure setlocalversion doesn't have -dirty
-          sed -i 's/-dirty//g' scripts/setlocalversion
-          sed -i 's/echo "$res"/echo "${res%-dirty}"/' scripts/setlocalversion
+          # COMPLETELY rewrite setlocalversion to remove all -dirty logic
+          cat > scripts/setlocalversion << 'EOF'
+          #!/bin/sh
+          # Disable scm version string to avoid -dirty
+          scm_version=""
+          echo "$scm_version"
+          EOF
+          
+          chmod +x scripts/setlocalversion
 
-          # Verify
-          if grep -r "dirty" scripts/setlocalversion; then
+          # Also ensure CONFIG_LOCALVERSION_AUTO is disabled
+          echo "CONFIG_LOCALVERSION_AUTO=n" >> "arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+
+          # Verify that the file does not contain the string 'dirty'
+          if grep -qi "dirty" scripts/setlocalversion; then
             echo "ERROR: setlocalversion still contains dirty"
+            cat scripts/setlocalversion
             exit 1
           fi
+
+          echo "✅ setlocalversion cleaned, no more dirty strings"
 
       - name: "Send Telegram build progress"
         run: |
@@ -302,7 +315,7 @@ jobs:
           MESSAGE="${MESSAGE}🕐 <b>Time:</b> $(date +'%H:%M')%0A"
           MESSAGE="${MESSAGE}⚙️ <b>Stage:</b> Compiling kernel...%0A"
           MESSAGE="${MESSAGE}📊 <b>Cores:</b> $(nproc)%0A"
-          MESSAGE="${MESSAGE}⏳ <b>ETA:</b> 35-40 minutes..."
+          MESSAGE="${MESSAGE}⏳ <b>ETA:</b> 10-15 minutes..."
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -518,17 +531,10 @@ jobs:
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG_NAME }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-    
-          # Calculate build duration
-          START_TIME="${{ env.BUILD_TIME }}"
-          END_TIME=$(date +'%H:%M')
-          DURATION=$(( $(date +%s) - $(date -d "$START_TIME" +%s) ))
-          DURATION_MIN=$((DURATION / 60))
-          DURATION_SEC=$((DURATION % 60))
-    
+          
           # Create short SHA256 for display
           SHORT_SHA=$(echo "${{ env.ZIP_SHA256 }}" | cut -c1-20)
-    
+          
           MESSAGE="✅ <b>Build Success!</b>%0A%0A"
           MESSAGE="${MESSAGE}📦 <b>File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
           MESSAGE="${MESSAGE}📊 <b>Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
@@ -541,20 +547,20 @@ jobs:
           MESSAGE="${MESSAGE}👨‍💻 <b>Author/Maintainer:</b> @superuseryu%0A"
           MESSAGE="${MESSAGE}🎓 <b>Based on:</b> YASK by @belowzeroiq%0A%0A"
           MESSAGE="${MESSAGE}#kernel #gki #wildksu #susfs"
-    
+          
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-          -d chat_id="$CHAT_ID" \
-          -d text="$MESSAGE" \
-          -d parse_mode="HTML" \
-          -d disable_web_page_preview=true
-    
+            -d chat_id="$CHAT_ID" \
+            -d text="$MESSAGE" \
+            -d parse_mode="HTML" \
+            -d disable_web_page_preview=true
+          
           # Send file if < 20MB
           if (( $(echo "${{ env.ZIP_SIZE_MB }} < 20" | bc -l) )); then
             echo "📤 Sending ZIP file to Telegram..."
             curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendDocument" \
-            -F chat_id="$CHAT_ID" \
-            -F document=@"${{ env.ZIP_NAME }}" \
-            -F caption="📦 ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)%0A🔐 SHA256: ${{ env.ZIP_SHA256 }}"
+              -F chat_id="$CHAT_ID" \
+              -F document=@"${{ env.ZIP_NAME }}" \
+              -F caption="📦 ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)%0A🔐 SHA256: ${{ env.ZIP_SHA256 }}"
           else
             echo "ℹ️ File size (${{ env.ZIP_SIZE_MB }} MB), sending download link only."
           fi
