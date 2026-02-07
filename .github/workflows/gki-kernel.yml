@@ -73,24 +73,39 @@ jobs:
       - name: "Setup Wild-KSU with SUSFS"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          set -e
           rm -rf ./KernelSU ./drivers/kernelsu ./Wild_KSU
           curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
-          [ ! -d "Wild_KSU" ] && echo "ERROR: Wild_KSU directory not found!" && exit 1
+          [ ! -d "Wild_KSU" ] && { echo "ERROR: Wild_KSU directory not found!"; exit 1; }
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          [ ! -d "susfs4ksu" ] && echo "ERROR: SUSFS4KSU clone failed!" && exit 1
+          [ ! -d "susfs4ksu" ] && { echo "ERROR: SUSFS4KSU clone failed!"; exit 1; }
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-          [ -f "$SUSFS_PATCH" ] && patch -p1 --forward < "$SUSFS_PATCH" || true
+          if [ -f "$SUSFS_PATCH" ]; then
+            patch -p1 --forward < "$SUSFS_PATCH" 2>/dev/null || true
+          fi
           mkdir -p fs include/linux
-          [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ] && cp -f susfs4ksu/kernel_patches/fs/susfs.c fs/susfs.c || (echo "ERROR: fs/susfs.c not found!" && exit 1)
-          [ -f "susfs4ksu/kernel_patches/include/linux/susfs.h" ] && cp -f susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/susfs.h || (echo "ERROR: include/linux/susfs.h not found!" && exit 1)
+          if [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ]; then
+            cp -f susfs4ksu/kernel_patches/fs/susfs.c fs/susfs.c
+          else
+            echo "ERROR: fs/susfs.c not found!"
+            exit 1
+          fi
+          if [ -f "susfs4ksu/kernel_patches/include/linux/susfs.h" ]; then
+            cp -f susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/susfs.h
+          else
+            echo "ERROR: include/linux/susfs.h not found!"
+            exit 1
+          fi
           [ -f "susfs4ksu/kernel_patches/include/linux/susfs_def.h" ] && cp -f susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/susfs_def.h
           [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ] && cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* Wild_KSU/kernel/ || true
           KSU_C_FILE="Wild_KSU/kernel/ksu.c"
-          [ ! -f "$KSU_C_FILE" ] && echo "ERROR: $KSU_C_FILE not found!" && exit 1
+          [ ! -f "$KSU_C_FILE" ] && { echo "ERROR: $KSU_C_FILE not found!"; exit 1; }
           if ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
-            grep -q "#include <linux/susfs.h>" "$KSU_C_FILE" || sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE"
-            grep -q "susfs_init()" "$KSU_C_FILE" || (sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE" || sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$KSU_C_FILE")
+            if ! grep -q "#include <linux/susfs.h>" "$KSU_C_FILE"; then
+              sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE" 2>/dev/null
+            fi
+            if ! grep -q "susfs_init()" "$KSU_C_FILE"; then
+              sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE" 2>/dev/null || sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$KSU_C_FILE" 2>/dev/null
+            fi
           fi
           [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && ln -sf ../Wild_KSU drivers/kernelsu
 
@@ -103,27 +118,27 @@ jobs:
           BUILD_ID="ab$((RANDOM % 90000000 + 10000000))"
           VERSION_SUFFIX="-android13-8-g${GIT_HASH}-${BUILD_ID}"
           
-          cp scripts/setlocalversion scripts/setlocalversion.backup
+          [ -f "scripts/setlocalversion" ] && cp scripts/setlocalversion scripts/setlocalversion.backup
           [ -f "scripts/mkcompile_h" ] && cp scripts/mkcompile_h scripts/mkcompile_h.backup
           
-          sed -i "/printf '%s' -dirty/d" scripts/setlocalversion
-          sed -i 's/-dirty//g' scripts/setlocalversion
-          sed -i '$ s|echo "$res"|echo "'"$VERSION_SUFFIX"'"|' scripts/setlocalversion
+          sed -i "/printf '%s' -dirty/d" scripts/setlocalversion 2>/dev/null
+          sed -i 's/-dirty//g' scripts/setlocalversion 2>/dev/null
+          sed -i '$ s|echo "$res"|echo "'"$VERSION_SUFFIX"'"|' scripts/setlocalversion 2>/dev/null
           
           if [ -f "scripts/mkcompile_h" ]; then
             ESCAPED_TIMESTAMP=$(echo "$BUILD_TIMESTAMP_WIB" | sed 's/[\/&]/\\&/g')
-            sed -i "s|UTS_VERSION=\"\$(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP | cut -b -\$UTS_LEN)\"|UTS_VERSION=\"#1 SMP PREEMPT $ESCAPED_TIMESTAMP\"|" scripts/mkcompile_h
-            grep -q "LINUX_COMPILE_BY" scripts/mkcompile_h || sed -i "/UTS_VERSION=/a LINUX_COMPILE_BY=\"GitHub Actions\"\nLINUX_COMPILE_HOST=\"github.com\"" scripts/mkcompile_h
+            sed -i "s|UTS_VERSION=\"\$(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP | cut -b -\$UTS_LEN)\"|UTS_VERSION=\"#1 SMP PREEMPT $ESCAPED_TIMESTAMP\"|" scripts/mkcompile_h 2>/dev/null
+            grep -q "LINUX_COMPILE_BY" scripts/mkcompile_h || sed -i "/UTS_VERSION=/a LINUX_COMPILE_BY=\"GitHub Actions\"\nLINUX_COMPILE_HOST=\"github.com\"" scripts/mkcompile_h 2>/dev/null
           fi
           
           if [ -f "init/Makefile" ] && grep -q "build-timestamp" init/Makefile; then
             HARDCODED_TS="\"$(date +'%a %b %e %H:%M:%S WIB %Y')\""
-            sed -i "s|build-timestamp =.*|build-timestamp = $HARDCODED_TS|" init/Makefile
+            sed -i "s|build-timestamp =.*|build-timestamp = $HARDCODED_TS|" init/Makefile 2>/dev/null
           fi
           
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          sed -i '/CONFIG_LOCALVERSION=/d' "$CONFIG_FILE"
-          sed -i '/CONFIG_LOCALVERSION_AUTO=/d' "$CONFIG_FILE"
+          sed -i '/CONFIG_LOCALVERSION=/d' "$CONFIG_FILE" 2>/dev/null
+          sed -i '/CONFIG_LOCALVERSION_AUTO=/d' "$CONFIG_FILE" 2>/dev/null
           echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
           echo "CONFIG_LOCALVERSION=\"$VERSION_SUFFIX\"" >> "$CONFIG_FILE"
 
@@ -133,8 +148,8 @@ jobs:
           find . -type d -name ".git" ! -path "./.git" -exec rm -rf {} + 2>/dev/null || true
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
-          git add -A
-          git diff-index --quiet HEAD || git commit -m "build: apply modifications" --no-verify
+          git add -A 2>/dev/null
+          git diff-index --quiet HEAD || git commit -m "build: apply modifications" --no-verify 2>/dev/null
 
       - name: "Setup kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -183,7 +198,6 @@ jobs:
           [ -f "build/abi/compare_to_symbol_list" ] && mv build/abi/compare_to_symbol_list build/abi/compare_to_symbol_list.disabled
           cat > build/abi/compare_to_symbol_list << 'EOF'
           #!/bin/bash
-          echo "ABI checking disabled for custom kernel build"
           exit 0
           EOF
           chmod +x build/abi/compare_to_symbol_list
@@ -201,7 +215,7 @@ jobs:
         working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
           VERSION_FULL=$(strings Image | grep "Linux version" | head -1)
-          echo "$VERSION_FULL" | grep -q "dirty" && echo "ERROR: Kernel contains -dirty!" && exit 1
+          echo "$VERSION_FULL" | grep -q "dirty" && exit 1
           VERSION_CLEAN=$(echo "$VERSION_FULL" | sed 's/Linux version //' | sed 's/ (.*//')
           echo "KERNEL_VERSION=$VERSION_CLEAN" >> $GITHUB_ENV
           echo "$VERSION_CLEAN" > kernel_version.txt
@@ -243,7 +257,6 @@ jobs:
       - name: "Create ZIP package"
         run: |
           git clone --depth=1 https://github.com/superuseryu/AnyKernel3
-          
           if [ -f "./artifacts/Image.gki" ]; then
             cp ./artifacts/Image.gki AnyKernel3/
           elif [ -f "./artifacts/gki-kernel/Image.gki" ]; then
@@ -252,7 +265,6 @@ jobs:
             IMAGE_FILE=$(find ./artifacts -name "Image*" -type f | head -1)
             [ -n "$IMAGE_FILE" ] && cp "$IMAGE_FILE" AnyKernel3/Image.gki || exit 1
           fi
-          
           DATE_TAG=$(date +'%Y.%m.%d')
           ZIP_NAME="GKI_Kernel_${DATE_TAG}.zip"
           cd AnyKernel3
@@ -262,7 +274,6 @@ jobs:
           ZIP_SIZE_MB=$(echo "scale=2; $ZIP_SIZE / 1024 / 1024" | bc)
           ZIP_SHA256=$(sha256sum "$ZIP_NAME" | cut -d' ' -f1)
           ZIP_SHA256_SHORT=$(echo "$ZIP_SHA256" | cut -c1-16)
-          
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
           echo "ZIP_SIZE_MB=$ZIP_SIZE_MB" >> $GITHUB_ENV
           echo "ZIP_SHA256=$ZIP_SHA256" >> $GITHUB_ENV
@@ -289,11 +300,6 @@ jobs:
             - SUSFS v2.0.0
             - Baseband Guard (BBG)
             - BBR + Westwood TCP
-            
-            ### Installation:
-            1. Use Kernel Flasher app
-            2. Or flash in custom recovery
-            3. Reboot
           draft: false
           prerelease: false
 
