@@ -149,48 +149,53 @@ jobs:
             ln -sf ../Wild_KSU drivers/kernelsu
           fi
 
-      - name: "Fix kernel version string"
+      - name: "Fix kernel version string AGGRESIF"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
+          # ===== STEP 1: HARDCODE VERSION DI SETLOCALVERSION =====
+          echo "HARDCODING VERSION STRING..."
+          
           sed -i 's/-dirty//g' scripts/setlocalversion 2>/dev/null
           sed -i 's/dirty//g' scripts/setlocalversion 2>/dev/null
           
-          cat > scripts/setlocalversion << 'EOF'
-          #!/bin/sh
-          # Hardcoded by GitHub Actions
-          # Disable git version detection completely
-          echo "-android13-8-g6b88270ef707-ab$((RANDOM % 90000000 + 10000000))"
-          EOF
+          echo '#!/bin/sh' > scripts/setlocalversion
+          echo '# Hardcoded by GitHub Actions' >> scripts/setlocalversion
+          echo '# Disable git version detection completely' >> scripts/setlocalversion
+          echo 'echo "-android13-8-g6b88270ef707-ab$((RANDOM % 90000000 + 10000000))"' >> scripts/setlocalversion
           
           chmod +x scripts/setlocalversion
           
+          # ===== STEP 2: HARDCODE MKCOMPILE_H =====
           if [ -f "scripts/mkcompile_h" ]; then
             echo "HARDCODING MKCOMPILE_H..."
-            
+           
             # Generate timestamp WIB
             export TZ="Asia/Jakarta"
             BUILD_TIMESTAMP_WIB=$(date +"%a %b %d %H:%M:%S WIB %Y")
-            
+           
             cp scripts/mkcompile_h scripts/mkcompile_h.backup
-            
+           
             # Replace the whole UTS_VERSION generation
             sed -i '/UTS_VERSION=/,$d' scripts/mkcompile_h
-            cat >> scripts/mkcompile_h << EOF
-            UTS_VERSION="#1 SMP PREEMPT $BUILD_TIMESTAMP_WIB"
-            LINUX_COMPILE_BY="GitHub Actions"
-            LINUX_COMPILE_HOST="github.com"
-            EOF
+           
+            echo 'UTS_VERSION="#1 SMP PREEMPT '"$BUILD_TIMESTAMP_WIB"'"' >> scripts/mkcompile_h
+            echo 'LINUX_COMPILE_BY="GitHub Actions"' >> scripts/mkcompile_h
+            echo 'LINUX_COMPILE_HOST="github.com"' >> scripts/mkcompile_h
           fi
           
+          # ===== STEP 3: DISABLE GIT VERSION DETECTION =====
           # Set CONFIG_LOCALVERSION_AUTO to n
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           
           sed -i '/CONFIG_LOCALVERSION/d' "$CONFIG_FILE" 2>/dev/null
           sed -i '/CONFIG_LOCALVERSION_AUTO/d' "$CONFIG_FILE" 2>/dev/null
           
-          echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
-          echo 'CONFIG_LOCALVERSION="-android13-8-g6b88270ef707-ab$((RANDOM % 90000000 + 10000000))"' >> "$CONFIG_FILE"
+          BUILD_ID="ab$((RANDOM % 90000000 + 10000000))"
           
+          echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
+          echo "CONFIG_LOCALVERSION=\"-android13-8-g6b88270ef707-${BUILD_ID}\"" >> "$CONFIG_FILE"
+          
+          # ===== STEP 4: FORCE CLEAN GIT STATUS =====
           echo "FORCING CLEAN GIT STATUS..."
           
           find . -type d -name ".git" ! -path "./.git" -exec rm -rf {} + 2>/dev/null || true
