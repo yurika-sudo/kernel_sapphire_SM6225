@@ -396,7 +396,7 @@ jobs:
 
       - name: "Build kernel"
         working-directory: ${{ env.WORK_DIR }}
-        timeout-minutes: 30
+        timeout-minutes: 40
         run: |
           set -e
           echo "🚀 Starting kernel build..."
