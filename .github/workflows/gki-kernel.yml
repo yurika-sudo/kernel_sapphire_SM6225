@@ -223,7 +223,6 @@ jobs:
           if [ -f "scripts/setlocalversion" ]; then
             sed -i "\$s|echo \"\$res\"|echo \"$KMI_VERSION\"|" scripts/setlocalversion 2>/dev/null || true
           fi
-          
           echo "✅ Kernel version string fixed: $KMI_VERSION"
           
       - name: "Clean git tree
