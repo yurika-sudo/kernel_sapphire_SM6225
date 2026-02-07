@@ -100,7 +100,6 @@ jobs:
           grep -q "baseband-guard/Kconfig" security/Kconfig || \
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
           
-          # Add to .gitignore early
           echo "Baseband-guard/" >> .gitignore
           echo "security/baseband-guard/" >> .gitignore
 
@@ -183,7 +182,6 @@ jobs:
             ln -sf ../Wild_KSU drivers/kernelsu
           fi
           
-          # Add to .gitignore
           echo "Wild_KSU/" >> .gitignore
           echo "susfs4ksu/" >> .gitignore
           echo "drivers/kernelsu/" >> .gitignore
@@ -235,41 +233,30 @@ jobs:
       - name: "Clean git tree and fix -dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          # Ensure we are in a state where we can commit
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
 
-          # Remove patch backup files ONLY (not our added files)
-          find . -name "*.orig" -delete
-          find . -name "*.rej" -delete
+          find . -name "*.orig" -delete 2>/dev/null || true
+          find . -name "*.rej" -delete 2>/dev/null || true
 
-          # Add all changes except those in .gitignore
           git add -A
-
-          # Commit if there are changes
           git commit -m "build: clean state for kernel build" --allow-empty || true
 
-          # COMPLETELY rewrite setlocalversion to remove all -dirty logic
+          mv scripts/setlocalversion scripts/setlocalversion.orig 2>/dev/null || true
+          
           cat > scripts/setlocalversion << 'EOF'
           #!/bin/sh
-          # Disable scm version string to avoid -dirty
-          scm_version=""
-          echo "$scm_version"
+          :
           EOF
           
           chmod +x scripts/setlocalversion
 
-          # Also ensure CONFIG_LOCALVERSION_AUTO is disabled
-          echo "CONFIG_LOCALVERSION_AUTO=n" >> "arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          sed -i '/CONFIG_LOCALVERSION_AUTO/d' "$CONFIG_FILE"
+          echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
+          sed -i 's/CONFIG_LOCALVERSION_AUTO=y/CONFIG_LOCALVERSION_AUTO=n/' "$CONFIG_FILE" 2>/dev/null || true
 
-          # Verify that the file does not contain the string 'dirty'
-          if grep -qi "dirty" scripts/setlocalversion; then
-            echo "ERROR: setlocalversion still contains dirty"
-            cat scripts/setlocalversion
-            exit 1
-          fi
-
-          echo "✅ setlocalversion cleaned, no more dirty strings"
+          echo "✅ setlocalversion disabled, LOCALVERSION_AUTO=n set"
 
       - name: "Send Telegram build progress"
         run: |
@@ -290,13 +277,11 @@ jobs:
       - name: "Fix ABI check issues"
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          # Disable ABI checking script
           if [ -f "build/abi/compare_to_symbol_list" ]; then
             mv build/abi/compare_to_symbol_list build/abi/compare_to_symbol_list.disabled
             echo "Disabled ABI comparison script"
           fi
           
-          # Create a dummy script that always succeeds
           cat > build/abi/compare_to_symbol_list << 'EOF'
           #!/bin/bash
           echo "ABI checking disabled for custom kernel build"
@@ -315,7 +300,7 @@ jobs:
           MESSAGE="${MESSAGE}🕐 <b>Time:</b> $(date +'%H:%M')%0A"
           MESSAGE="${MESSAGE}⚙️ <b>Stage:</b> Compiling kernel...%0A"
           MESSAGE="${MESSAGE}📊 <b>Cores:</b> $(nproc)%0A"
-          MESSAGE="${MESSAGE}⏳ <b>ETA:</b> 10-15 minutes..."
+          MESSAGE="${MESSAGE}⏳ <b>ETA:</b> 35-40 minutes..."
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -350,37 +335,30 @@ jobs:
         run: |
           echo "🔍 VERIFYING KERNEL VERSION STRING..."
           
-          # Extract version string from kernel image
           VERSION_RAW=$(strings Image | grep "Linux version" | head -1)
           echo "Raw version string: $VERSION_RAW"
           
-          # Decode the format string
           VERSION_CLEAN=$(echo "$VERSION_RAW" | sed 's/%s/ /g')
           echo "Decoded version: $VERSION_CLEAN"
           
-          # Check for -dirty
           if echo "$VERSION_CLEAN" | grep -q "dirty"; then
             echo "❌ ERROR: Kernel contains -dirty!"
             echo "Full string: $VERSION_CLEAN"
             exit 1
           fi
           
-          # Extract just the version part after "Linux version"
           VERSION_PART=$(echo "$VERSION_CLEAN" | sed -n 's/.*Linux version \([^ ]*\).*/\1/p')
           echo "Kernel version: $VERSION_PART"
           
-          # Verify format
           if echo "$VERSION_PART" | grep -qE "^5\.15\.[0-9]+-android13-8-[0-9]{5}-g[0-9a-f]{13}-ab[0-9]{8}$"; then
             echo "✅ PERFECT! Version string format is correct!"
             echo "uname -r should show: $VERSION_PART"
           elif echo "$VERSION_PART" | grep -qE "^5\.15\.[0-9]+-android13-8"; then
             echo "⚠️  Acceptable: Version string has basic format: $VERSION_PART"
-            echo "But might not have full commit hash/build ID"
           else
             echo "⚠️  Warning: Version string format unexpected: $VERSION_PART"
           fi
           
-          # Save version for later use
           echo "KERNEL_VERSION=$VERSION_PART" >> $GITHUB_ENV
           echo "$VERSION_PART" > kernel_version.txt
 
@@ -389,8 +367,6 @@ jobs:
         run: |
           cp Image "Image.gki"
           echo "📦 Kernel image copied: Image.gki"
-          
-          # Show file info
           ls -lh Image.gki
           file Image.gki
 
@@ -424,7 +400,6 @@ jobs:
             echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
             echo "Detected kernel version: $KERNEL_VERSION"
           else
-            echo "Using default kernel version"
             echo "KERNEL_VERSION=5.15.197-android13-8-00001-g6b88270ef707-ab13297889" >> $GITHUB_ENV
           fi
 
@@ -450,23 +425,17 @@ jobs:
           set -e
           echo "📦 Creating AnyKernel3 package..."
           
-          # Clone AnyKernel3
           git clone --depth=1 https://github.com/superuseryu/AnyKernel3
           
-          # Copy kernel image
           cp ./artifacts/Image.gki AnyKernel3/
           
-          # Get kernel version for filename
-          KERNEL_BASE_VERSION=$(echo "${{ env.KERNEL_VERSION }}" | cut -d'-' -f1)
           DATE_TAG=$(date +'%Y.%m.%d')
-          
           ZIP_NAME="GKI_Kernel_WildKSU_${DATE_TAG}.zip"
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
           cd AnyKernel3
           zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
           
-          # Get file size and SHA256
           ZIP_SIZE=$(stat -c%s "$ZIP_NAME")
           ZIP_SIZE_MB=$(echo "scale=2; $ZIP_SIZE / 1024 / 1024" | bc)
           ZIP_SHA256=$(sha256sum "$ZIP_NAME" | cut -d' ' -f1)
@@ -532,7 +501,6 @@ jobs:
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG_NAME }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
-          # Create short SHA256 for display
           SHORT_SHA=$(echo "${{ env.ZIP_SHA256 }}" | cut -c1-20)
           
           MESSAGE="✅ <b>Build Success!</b>%0A%0A"
@@ -554,7 +522,6 @@ jobs:
             -d parse_mode="HTML" \
             -d disable_web_page_preview=true
           
-          # Send file if < 20MB
           if (( $(echo "${{ env.ZIP_SIZE_MB }} < 20" | bc -l) )); then
             echo "📤 Sending ZIP file to Telegram..."
             curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendDocument" \
