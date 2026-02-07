@@ -158,6 +158,21 @@ jobs:
             ln -sf ../Wild_KSU drivers/kernelsu
           fi
 
+      - name: "Fix kernel version string"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          # Remove -dirty from version string
+          sed -i 's/\(echo "$res"\)/echo "${res%-dirty}"/' scripts/setlocalversion
+          
+          # Remove git hash from version string
+          sed -i 's/\(scm_version="$(scm_version)"/scm_version=""\)/' scripts/setlocalversion || true
+          
+          # Set LOCALVERSION to empty in defconfig
+          CONFIG_FILE="./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          sed -i '/CONFIG_LOCALVERSION=/d' "$CONFIG_FILE"
+          echo 'CONFIG_LOCALVERSION=""' >> "$CONFIG_FILE"
+          echo 'CONFIG_LOCALVERSION_AUTO=n' >> "$CONFIG_FILE"
+
       - name: "Clean git tree to avoid -dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -272,10 +287,29 @@ jobs:
           path: ${{ env.WORK_DIR }}/out/dist/Image.gki
           retention-days: 1
 
+      - name: "Send Telegram build started"
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          COMMIT_HASH="${GITHUB_SHA:0:7}"
+          MESSAGE="🔄 <b>Kernel Build Started</b>%0A%0A"
+          MESSAGE="${MESSAGE}📅 <b>Date:</b> $(date +'%Y-%m-%d')%0A"
+          MESSAGE="${MESSAGE}🔧 <b>Branch:</b> ${GITHUB_REF#refs/heads/}%0A"
+          MESSAGE="${MESSAGE}📝 <b>Commit:</b> <code>${COMMIT_HASH}</code>%0A"
+          MESSAGE="${MESSAGE}⚡ <b>Status:</b> Building..."
+          
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="${MESSAGE}" \
+            -d parse_mode="HTML" \
+            -d disable_web_page_preview=true
+
   package-kernel:
     name: "Package Kernel"
     runs-on: ubuntu-latest
     needs: [build-kernels]
+    if: success()
+    
     steps:
       - name: "Download kernel artifact"
         uses: actions/download-artifact@v4
@@ -283,17 +317,22 @@ jobs:
           path: ./artifacts/
 
       - name: "Create ZIP package"
+        id: create_zip
         run: |
           set -e
           git clone --depth=1 https://github.com/superuseryu/AnyKernel3 ak3
           cp ./artifacts/gki-kernel/Image.gki ak3/
           
+          DATE_TAG=$(date +'%Y.%m.%d')
           ZIP_NAME="GKI_Kernel_WildKSU_$(date +'%Y%m%d').zip"
+          ZIP_SIZE=$(stat -c%s "$ZIP_NAME" 2>/dev/null || echo "0")
           cd ak3
           zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
           
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+          echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
+          echo "TAG_NAME=gki-$DATE_TAG" >> $GITHUB_ENV
 
       - name: "Create GitHub Release"
         uses: softprops/action-gh-release@v1
@@ -301,8 +340,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: ${{ env.ZIP_NAME }}
-          tag_name: "gki-$(date +'%Y.%m.%d')"
-          name: "GKI Kernel: Wild-KSU 3.0.0 Stable $(date +'%Y.%m.%d')"
+          tag_name: ${{ env.TAG_NAME }}
+          name: "GKI Kernel: Wild-KSU ${{ env.DATE_TAG }}"
           body: |
             This release includes **Wild-KSU 3.0.0 Stable**
             
@@ -314,12 +353,7 @@ jobs:
             -> Simple hiding for LineageOS detection
             -> Futile hiding for jit-zygote-cache detection
             -> Wireguard Support
-            -> BBR Support
             -> BBG Support
-            -> BBG supported
-            -> MGLRU enabled
-            -> ZRAM LZ4 compression
-            -> Debugging disabled for performance
             
             <details>
             <summary>Notes:</summary>
@@ -334,3 +368,44 @@ jobs:
             -> https://github.com/WildKernels/Wild_KSU/releases/tag/v3.0.0
           draft: false
           prerelease: false
+
+      - name: "Send Telegram success notification"
+        if: success()
+        run: |
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG_NAME }}"
+          COMMIT_HASH="${GITHUB_SHA:0:7}"
+          COMMIT_URL="https://github.com/${{ github.repository }}/commit/$GITHUB_SHA"
+          MESSAGE="✅ <b>Kernel Build Success!</b>%0A%0A"
+          MESSAGE="${MESSAGE}📦 <b>File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
+          MESSAGE="${MESSAGE}📅 <b>Date:</b> ${{ env.DATE_TAG }}%0A"
+          MESSAGE="${MESSAGE}📝 <b>Commit:</b> <a href='${COMMIT_URL}'>${COMMIT_HASH}</a>%0A%0A"
+          MESSAGE="${MESSAGE}🔗 <a href='${RELEASE_URL}'>Download Release</a>"
+          
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="${MESSAGE}" \
+            -d parse_mode="HTML" \
+            -d disable_web_page_preview=true
+
+  notify-failure:
+    name: "Notify on Failure"
+    runs-on: ubuntu-latest
+    needs: [build-kernels]
+    if: failure()
+    
+    steps:
+      - name: "Send Telegram failure notification"
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          COMMIT_HASH="${GITHUB_SHA:0:7}"
+          MESSAGE="❌ <b>Kernel Build Failed</b>%0A%0A"
+          MESSAGE="${MESSAGE}📅 <b>Date:</b> $(date +'%Y-%m-%d')%0A"
+          MESSAGE="${MESSAGE}📝 <b>Commit:</b> <code>${COMMIT_HASH}</code>%0A"
+          MESSAGE="${MESSAGE}⚠️ <b>Status:</b> Build Failed%0A%0A"
+          MESSAGE="${MESSAGE}🔗 <a href='${RUN_URL}'>View Error Logs</a>"
+          
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="${MESSAGE}" \
+            -d parse_mode="HTML" \
+            -d disable_web_page_preview=true
