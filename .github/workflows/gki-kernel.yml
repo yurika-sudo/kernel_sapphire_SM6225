@@ -251,13 +251,15 @@ jobs:
           
           if [ -f "scripts/mkcompile_h" ]; then
             cp scripts/mkcompile_h scripts/mkcompile_h.bak
-            ESCAPED_TS=$(echo "$BUILD_TIMESTAMP_WIB" | sed 's/[\/&]/\\&/g')
-            sed -i "s|UTS_VERSION=\"\$(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP | cut -b -\$UTS_LEN)\"|UTS_VERSION=\"#1 SMP PREEMPT $ESCAPED_TS\"|" scripts/mkcompile_h
+            # Use @ as delimiter instead of | to avoid issues
+            # And use printf %q for proper escaping
+            SAFE_TS=$(printf '%s' "$BUILD_TIMESTAMP_WIB" | sed 's/[\/&]/\\&/g')
+            sed -i "s@UTS_VERSION=\".*@UTS_VERSION=\"#1 SMP PREEMPT $SAFE_TS\"@" scripts/mkcompile_h
           fi
           
           if [ -f "init/Makefile" ] && grep -q "build-timestamp" init/Makefile; then
-            HARDCODED_TS="\"$(date +'%a %b %e %H:%M:%S WIB %Y')\""
-            sed -i "s|build-timestamp =.*|build-timestamp = $HARDCODED_TS|" init/Makefile
+            # Properly quote the timestamp
+            sed -i 's@build-timestamp =.*@build-timestamp = "'"$BUILD_TIMESTAMP_WIB"'"@' init/Makefile
           fi
           
           # STEP 8: Final commit to lock everything in
