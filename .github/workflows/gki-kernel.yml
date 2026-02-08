@@ -47,7 +47,9 @@ jobs:
           MESSAGE="${MESSAGE}<b>🔄 Trigger:</b> ${{ github.event_name }}%0A"
           MESSAGE="${MESSAGE}<b>🆔 Run ID:</b> #${{ github.run_number }}%0A"
           MESSAGE="${MESSAGE}<b>⏰ Started:</b> $(date +'%Y-%m-%d %H:%M')%0A"
-          MESSAGE="${MESSAGE}<b>⏳ Status:</b> Initializing%0A%0A"
+          MESSAGE="${MESSAGE}<b>⚡ Status:</b> Initializing%0A%0A"
+          MESSAGE="${MESSAGE}<b>👨‍💻 Author:</b> @superuseryu%0A"
+          MESSAGE="${MESSAGE}#kernel #gki"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -206,34 +208,52 @@ jobs:
           CONFIG_KSU_SUSFS_SUS_SU=y
           EOF
 
-      - name: Remove dirty flag from kernel version
+      - name: Set proper kernel version string
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           set -e
           
-          echo "Removing dirty flag from kernel version..."
+          echo "Setting proper kernel version string..."
           
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config set advice.addEmbeddedRepo false
+          
           git add -A
           git commit -m "Wild: Pre-build configuration" --allow-empty || true
           
           ACTUAL_COMMIT=$(git rev-parse --short=12 HEAD 2>/dev/null || echo "000000000000")
           BUILD_NUM=$(printf "ab%08d" ${{ github.run_number }})
-          HARDCODED_VERSION="-android13-8-g${ACTUAL_COMMIT}-${BUILD_NUM}"
           
-          echo "Hardcoded version: $HARDCODED_VERSION"
+          echo "Actual commit: $ACTUAL_COMMIT"
+          echo "Build number: $BUILD_NUM"
           
-          perl -i -0777 -pe 's/(.*)echo "\$res".*/$1echo "'"$HARDCODED_VERSION"'"/s' ./scripts/setlocalversion
+          SUBLEVEL=$(grep '^SUBLEVEL = ' Makefile | awk '{print $3}')
+          echo "Sublevel from Makefile: $SUBLEVEL"
           
-          echo "Modified setlocalversion:"
-          tail -n 5 ./scripts/setlocalversion
+          FULL_VERSION="${{ env.KERNEL_VERSION }}.$SUBLEVEL-android${{ env.ANDROID_VERSION }}-8-g${ACTUAL_COMMIT}-${BUILD_NUM}"
+          echo "Full kernel version: $FULL_VERSION"
+          
+          echo "KERNEL_VERSION_FULL=$FULL_VERSION" >> $GITHUB_ENV
+          
+          echo "Fixing setlocalversion script..."
+          if [ -f "scripts/setlocalversion" ]; then
+            cp scripts/setlocalversion scripts/setlocalversion.bak
+            sed -i '/echo "\$res"/d' scripts/setlocalversion
+            sed -i '/^#.*$/d' scripts/setlocalversion
+            echo 'echo "-android'${{ env.ANDROID_VERSION }}'-8-g'$ACTUAL_COMMIT'-'$BUILD_NUM'"' >> scripts/setlocalversion
+          fi
+          
+          echo "Setting CONFIG_LOCALVERSION in defconfig..."
+          DEFCONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          sed -i '/CONFIG_LOCALVERSION/d' "$DEFCONFIG_FILE"
+          echo 'CONFIG_LOCALVERSION="-android'${{ env.ANDROID_VERSION }}'-8-g'$ACTUAL_COMMIT'-'$BUILD_NUM'"' >> "$DEFCONFIG_FILE"
           
           export KBUILD_BUILD_TIMESTAMP="$(date -u '+%a %b %e %H:%M:%S UTC %Y')"
           echo "KBUILD_BUILD_TIMESTAMP=$KBUILD_BUILD_TIMESTAMP" >> $GITHUB_ENV
           
-          git add scripts/setlocalversion
-          git commit -m "Wild: Hardcode version string to remove dirty flag" --allow-empty || true
+          git add scripts/setlocalversion "$DEFCONFIG_FILE"
+          git commit -m "Wild: Set kernel version to $FULL_VERSION" --allow-empty || true
 
       - name: Bypass GKI module and ABI checks
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -285,6 +305,7 @@ jobs:
           
           echo "Starting kernel build..."
           echo "Build timestamp: $KBUILD_BUILD_TIMESTAMP"
+          echo "Expected kernel version: $KERNEL_VERSION_FULL"
           
           if ! LTO=thin BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 build/build.sh 2>&1 | tee build.log; then
             if grep -q "modules list out of date" build.log; then
@@ -314,7 +335,7 @@ jobs:
           
           echo "Kernel build completed!"
 
-      - name: Extract kernel version from built image
+      - name: Verify kernel version in built image
         working-directory: ${{ env.WORK_DIR }}
         run: |
           set -e
@@ -343,36 +364,43 @@ jobs:
             exit 1
           fi
           
-          VERSION_FULL=$(strings "$IMAGE_PATH" | grep -m1 "^Linux version" | sed 's/Linux version //' | awk '{print $1}')
+          echo "Extracting kernel version from Image..."
           
-          if [ -n "$VERSION_FULL" ]; then
-            echo "Detected kernel version: $VERSION_FULL"
+          KERNEL_VERSION_FILE="${{ env.WORK_DIR }}/extracted_version.txt"
+          
+          strings "$IMAGE_PATH" | grep -m1 "^Linux version" > "$KERNEL_VERSION_FILE" || true
+          
+          if [ -s "$KERNEL_VERSION_FILE" ]; then
+            VERSION_FULL=$(cat "$KERNEL_VERSION_FILE")
+            echo "Extracted version string: $VERSION_FULL"
             
             if echo "$VERSION_FULL" | grep -q "\-dirty"; then
               echo "ERROR: -dirty flag still present in kernel version!"
-              echo "Version string: $VERSION_FULL"
               exit 1
-            else
-              echo "SUCCESS: No -dirty flag detected!"
             fi
             
-            VERSION_PART=$(echo "$VERSION_FULL" | grep -oP '^\d+\.\d+\.\d+[^\s]*' || echo "$VERSION_FULL")
+            VERSION_PART=$(echo "$VERSION_FULL" | sed 's/Linux version //' | awk '{print $1}')
+            echo "Kernel version part: $VERSION_PART"
+            
             echo "KERNEL_VERSION=$VERSION_PART" >> $GITHUB_ENV
+            echo "Expected version was: $KERNEL_VERSION_FULL"
+            
+            if echo "$VERSION_PART" | grep -q "5\.15\.[0-9]\+-android13-8"; then
+              echo "✅ SUCCESS: Proper version string detected!"
+              echo "Version matches expected format"
+            else
+              echo "⚠️ WARNING: Version string format mismatch"
+              echo "Got: $VERSION_PART"
+              echo "Expected format: 5.15.X-android13-8-gXXXXXXXXXXXX-abXXXXXXXX"
+            fi
             
             IMAGE_DIR=$(dirname "$IMAGE_PATH")
             echo "$VERSION_PART" > "$IMAGE_DIR/kernel_version.txt"
             
             echo "IMAGE_PATH=$IMAGE_PATH" >> $GITHUB_ENV
-            echo "Kernel version saved: $VERSION_PART"
           else
-            echo "Warning: Could not extract version from Image"
-            SUBLEVEL=$(grep '^SUBLEVEL = ' ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/Makefile | awk '{print $3}')
-            VERSION_PART="5.15.${SUBLEVEL}-android13-8"
-            echo "KERNEL_VERSION=$VERSION_PART" >> $GITHUB_ENV
-            
-            IMAGE_DIR=$(dirname "$IMAGE_PATH")
-            echo "$VERSION_PART" > "$IMAGE_DIR/kernel_version.txt"
-            echo "IMAGE_PATH=$IMAGE_PATH" >> $GITHUB_ENV
+            echo "ERROR: Could not extract kernel version from Image!"
+            exit 1
           fi
 
       - name: Copy kernel image
@@ -416,18 +444,28 @@ jobs:
 
       - name: Read kernel version
         run: |
+          echo "Looking for kernel_version.txt..."
+          
           if [ -f "./artifacts/kernel_version.txt" ]; then
-            KERNEL_VERSION=$(cat ./artifacts/kernel_version.txt)
-            echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
+            KERNEL_VERSION=$(cat ./artifacts/kernel_version.txt | tr -d '\n' | tr -d '\r')
             echo "Detected kernel version: $KERNEL_VERSION"
+            
+            if [ -z "$KERNEL_VERSION" ]; then
+              echo "ERROR: Kernel version is empty!"
+              exit 1
+            fi
             
             if echo "$KERNEL_VERSION" | grep -q "\-dirty"; then
               echo "CRITICAL: -dirty flag detected in final artifact!"
               exit 1
             fi
+            
+            echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
+            echo "✅ Kernel version loaded successfully"
           else
-            echo "kernel_version.txt not found, using fallback"
-            echo "KERNEL_VERSION=5.15.197-android13-8-00001-g6b88270ef707-ab12345678" >> $GITHUB_ENV
+            echo "ERROR: kernel_version.txt not found!"
+            find ./artifacts -type f -name "*.txt" | xargs cat || true
+            exit 1
           fi
 
       - name: Send Telegram packaging started
