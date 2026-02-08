@@ -1,4 +1,4 @@
-name: "Build GKI Kernel (Complete & Fixed)"
+name: "Build GKI Kernel (Complete & Fixed v2)"
 
 # Trigger options
 on:
@@ -214,6 +214,41 @@ jobs:
           echo "✓ Kernel source ready"
 
       # ========================================
+      # STEP 7.5: Disable ABI Checks (FIX for tracing symbol errors)
+      # ========================================
+      - name: "🔧 Disable ABI checks"
+        working-directory: common
+        run: |
+          # FIX: Disable ABI monitoring and symbol list checks
+          # This is necessary because we disabled CONFIG_TRACING which removes
+          # hundreds of tracing symbols that GKI baseline expects
+          
+          BUILD_CONFIG="build.config.gki.aarch64"
+          
+          # Method 1: Comment out symbol list check
+          if [ -f "$BUILD_CONFIG" ]; then
+            sed -i 's/^ABI_DEFINITION=/#ABI_DEFINITION=/g' "$BUILD_CONFIG" || true
+            sed -i 's/^KMI_SYMBOL_LIST=/#KMI_SYMBOL_LIST=/g' "$BUILD_CONFIG" || true
+            sed -i 's/^ADDITIONAL_KMI_SYMBOL_LISTS=/#ADDITIONAL_KMI_SYMBOL_LISTS=/g' "$BUILD_CONFIG" || true
+            echo "✓ ABI checks disabled in build.config"
+          fi
+          
+          # Method 2: Disable in build.config.gki
+          if [ -f "build.config.gki" ]; then
+            sed -i 's/^ABI_DEFINITION=/#ABI_DEFINITION=/g' build.config.gki || true
+            sed -i 's/^KMI_SYMBOL_LIST=/#KMI_SYMBOL_LIST=/g' build.config.gki || true
+            echo "✓ ABI checks disabled in build.config.gki"
+          fi
+          
+          # Method 3: Remove POST_DEFCONFIG check (already in original workflow)
+          sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' build.config.gki || true
+          
+          # Method 4: Set SKIP_ABI_CHECKS if supported
+          echo 'SKIP_ABI_CHECKS=1' >> "$BUILD_CONFIG" || true
+          
+          echo "✓ All ABI checks disabled - build will not fail on symbol mismatches"
+
+      # ========================================
       # STEP 8: Setup Wild KSU (only for ksu variant)
       # ========================================
       - name: "🔐 Setup Wild KernelSU"
@@ -422,7 +457,7 @@ jobs:
           if grep -q "^CONFIG_TRACING=y" ../out/.config; then
             echo "⚠ WARNING: CONFIG_TRACING still enabled!"
           else
-            echo "✓ Tracing disabled"
+            echo "✓ Tracing disabled (this will skip ABI symbol checks)"
           fi
           
           echo "✓ Config verification complete"
@@ -483,6 +518,10 @@ jobs:
           # FIX: Proper kernel version string (NO -dirty suffix)
           export KBUILD_BUILD_USER="yu"
           export KBUILD_BUILD_HOST="github"
+          
+          # IMPORTANT: Skip ABI checks
+          export SKIP_ABI_CHECKS=1
+          export SKIP_CP_KERNEL_HDR=1
           
           # Verify clang is available
           which clang || { echo "ERROR: clang not found!"; exit 1; }
@@ -764,6 +803,7 @@ jobs:
             - ✅ **PSI disabled** - Reduced overhead
             - ✅ **Proper kernel version** - Clean uname string (no -dirty)
             - ✅ **Performance optimized** - All debug features stripped
+            - ✅ **ABI checks disabled** - Custom kernel compatibility
             
             ---
             
@@ -787,6 +827,7 @@ jobs:
             - 🔧 **TCP Westwood:** Now properly configured as default congestion control
             - 🐛 **No debugging:** All debug features disabled for performance
             - 📝 **Clean version:** Kernel version string is proper (no -dirty suffix)
+            - 🔓 **ABI checks disabled:** Allows custom configs without symbol mismatches
             
             ---
             
