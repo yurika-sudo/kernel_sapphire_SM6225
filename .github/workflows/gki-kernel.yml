@@ -1,4 +1,4 @@
-name: "Build GKI Kernel (Complete & Fixed v3.1)"
+name: "Build GKI Kernel (Complete & Fixed v3.2)"
 
 # Trigger options
 on:
@@ -153,45 +153,144 @@ jobs:
           echo "✓ Ccache configured"
 
       # ========================================
-      # STEP 6: Setup Clang Toolchain
+      # STEP 6: Setup Clang Toolchain (ROBUST VERSION)
       # ========================================
       - name: "🔧 Cache clang toolchain"
         uses: actions/cache@v4
         id: clang-cache
         with:
           path: clang
-          key: clang-${{ env.CLANG_VERSION }}
+          key: clang-${{ env.CLANG_VERSION }}-v2
 
-      - name: "🔧 Download clang toolchain"
+      - name: "🔧 Download and extract clang toolchain"
         if: steps.clang-cache.outputs.cache-hit != 'true'
         run: |
+          set -e
           echo "Downloading Clang ${{ env.CLANG_VERSION }}..."
+          
+          # Remove old clang if exists
+          rm -rf clang
           mkdir -p clang
-          aria2c -x 16 -s 16 -o clang.tar.gz \
+          
+          # Download with aria2c
+          aria2c -x 16 -s 16 -k 1M -o clang.tar.gz \
             "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-${{ env.CLANG_VERSION }}.tar.gz"
-          tar -xzf clang.tar.gz -C clang --strip-components=1
+          
+          # Verify download
+          if [ ! -f "clang.tar.gz" ]; then
+            echo "ERROR: Download failed!"
+            exit 1
+          fi
+          
+          FILE_SIZE=$(stat -c%s "clang.tar.gz")
+          echo "Downloaded file size: $FILE_SIZE bytes"
+          
+          if [ $FILE_SIZE -lt 100000000 ]; then
+            echo "ERROR: File too small, likely corrupt!"
+            exit 1
+          fi
+          
+          # Extract
+          echo "Extracting clang toolchain..."
+          tar -xzf clang.tar.gz -C clang --strip-components=1 || {
+            echo "ERROR: Extraction failed!"
+            echo "Trying without strip-components..."
+            rm -rf clang/*
+            tar -xzf clang.tar.gz -C clang
+          }
+          
           rm clang.tar.gz
-          echo "✓ Clang downloaded"
+          
+          # Verify extraction
+          if [ ! -d "clang/bin" ]; then
+            echo "ERROR: clang/bin not found after extraction!"
+            echo "Clang directory contents:"
+            ls -la clang/
+            # Maybe extracted to subdirectory?
+            SUBDIR=$(find clang -type d -name "bin" | head -1)
+            if [ -n "$SUBDIR" ]; then
+              echo "Found bin in: $SUBDIR"
+              PARENT=$(dirname "$SUBDIR")
+              echo "Moving contents from $PARENT to clang/"
+              mv "$PARENT"/* clang/
+              rm -rf "$PARENT"
+            else
+              exit 1
+            fi
+          fi
+          
+          echo "✓ Clang downloaded and extracted"
 
       - name: "🔧 Verify clang installation"
         run: |
-          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          set -e
           
           echo "=== Verifying LLVM toolchain ==="
-          clang --version | head -1
+          
+          # Check clang/bin exists
+          if [ ! -d "${GITHUB_WORKSPACE}/clang/bin" ]; then
+            echo "ERROR: clang/bin directory not found!"
+            ls -la "${GITHUB_WORKSPACE}/clang/"
+            exit 1
+          fi
+          
+          # Add to PATH
+          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          
+          # Verify clang binary
+          if [ ! -f "${GITHUB_WORKSPACE}/clang/bin/clang" ]; then
+            echo "ERROR: clang binary not found!"
+            ls -la "${GITHUB_WORKSPACE}/clang/bin/" | head -20
+            exit 1
+          fi
+          
+          # Check if we're using the right clang
+          CLANG_PATH=$(which clang)
+          echo "Clang path: $CLANG_PATH"
+          
+          if [[ "$CLANG_PATH" != "${GITHUB_WORKSPACE}/clang/bin/clang" ]]; then
+            echo "WARNING: PATH issue detected, fixing..."
+            export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+            CLANG_PATH=$(which clang)
+          fi
+          
+          # Show clang version
+          echo ""
+          echo "=== Clang Version ==="
+          clang --version | head -3
+          echo ""
           
           # Verify all required LLVM tools
+          MISSING_TOOLS=()
+          echo "=== Checking LLVM tools ==="
           for tool in clang ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip; do
-            if command -v $tool &> /dev/null; then
-              echo "✓ $tool found"
+            if [ -f "${GITHUB_WORKSPACE}/clang/bin/$tool" ]; then
+              echo "✓ $tool"
             else
-              echo "❌ ERROR: $tool not found!"
-              exit 1
+              echo "❌ $tool NOT FOUND"
+              MISSING_TOOLS+=("$tool")
             fi
           done
           
-          echo "✓ All LLVM tools verified"
-          echo "✓ Clang ready at: ${GITHUB_WORKSPACE}/clang/bin"
+          # If any tools missing, show debug info and fail
+          if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
+            echo ""
+            echo "ERROR: Missing LLVM tools: ${MISSING_TOOLS[*]}"
+            echo ""
+            echo "=== Debugging info ==="
+            echo "Contents of clang/bin/:"
+            ls -la "${GITHUB_WORKSPACE}/clang/bin/" | head -30
+            echo ""
+            echo "Searching for missing tools:"
+            for tool in "${MISSING_TOOLS[@]}"; do
+              find "${GITHUB_WORKSPACE}/clang" -name "$tool" -type f 2>/dev/null || echo "$tool not found anywhere"
+            done
+            exit 1
+          fi
+          
+          echo ""
+          echo "✓ All LLVM tools verified successfully"
+          echo "✓ Clang toolchain ready at: ${GITHUB_WORKSPACE}/clang/bin"
 
       # ========================================
       # STEP 7: Initialize Kernel Source
@@ -261,14 +360,10 @@ jobs:
             echo "ABI_DEFINITION=" >> "$BUILD_CONFIG"
             
             echo "✓ $BUILD_CONFIG patched"
-            echo ""
-            echo "=== Relevant lines in $BUILD_CONFIG ==="
-            grep -E "^(#)?ABI|^(#)?KMI|^SKIP_ABI" "$BUILD_CONFIG" || echo "No ABI definitions found (good!)"
           fi
           
           # Fix build.config.gki
           if [ -f "build.config.gki" ]; then
-            echo "Patching build.config.gki..."
             sed -i 's/^ABI_DEFINITION=/#ABI_DEFINITION=/g' build.config.gki
             sed -i 's/^KMI_SYMBOL_LIST=/#KMI_SYMBOL_LIST=/g' build.config.gki
             sed -i 's/^POST_DEFCONFIG_CMDS="check_defconfig"/# POST_DEFCONFIG_CMDS="check_defconfig"/g' build.config.gki
@@ -281,7 +376,6 @@ jobs:
             echo "✓ build.config.common patched"
           fi
           
-          echo ""
           echo "=== ABI CHECK FIX COMPLETE ==="
 
       # ========================================
@@ -471,19 +565,18 @@ jobs:
           echo "✓ Common configs added"
 
       # ========================================
-      # STEP 13: Generate and Verify Config (WITH LLVM FIX)
+      # STEP 13: Generate and Verify Config
       # ========================================
       - name: "🔍 Generate and verify config"
         working-directory: common
         run: |
-          # CRITICAL: Export PATH and verify tools FIRST
+          # CRITICAL: Export PATH first
           export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
           
           # Verify ld.lld exists
           if ! command -v ld.lld &> /dev/null; then
             echo "ERROR: ld.lld not found in PATH!"
-            echo "Searching for ld.lld..."
-            find "${GITHUB_WORKSPACE}/clang" -name "ld.lld" -type f
+            echo "Current PATH: $PATH"
             exit 1
           fi
           
@@ -530,13 +623,6 @@ jobs:
             fi
           fi
           
-          # Verify debugging is disabled
-          if grep -q "^CONFIG_TRACING=y" ../out/.config; then
-            echo "⚠ WARNING: CONFIG_TRACING still enabled!"
-          else
-            echo "✓ Tracing disabled (this will skip ABI symbol checks)"
-          fi
-          
           echo "✓ Config verification complete"
 
       # ========================================
@@ -581,7 +667,7 @@ jobs:
           fi
 
       # ========================================
-      # STEP 16: Build Kernel (WITH LLVM FIX)
+      # STEP 16: Build Kernel
       # ========================================
       - name: "🔨 Build kernel"
         run: |
@@ -601,7 +687,7 @@ jobs:
           export SKIP_CP_KERNEL_HDR=1
           export ABI_DEFINITION=
           
-          # CRITICAL: Explicit LLVM tools (FIX for ld.lld not found)
+          # CRITICAL: Explicit LLVM tools
           export LLVM=1
           export LLVM_IAS=1
           export CC=clang
