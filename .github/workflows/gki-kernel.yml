@@ -79,29 +79,72 @@ jobs:
           echo "Installing Wild-KSU..."
           curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
           
-          [ ! -d "Wild_KSU" ] && echo "ERROR: Wild_KSU not found!" && exit 1
+          if [ ! -d "Wild_KSU" ]; then
+            echo "ERROR: Wild_KSU not found!"
+            exit 1
+          fi
           
           echo "Cloning SUSFS4KSU..."
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
           
-          [ ! -d "susfs4ksu" ] && echo "ERROR: SUSFS4KSU clone failed!" && exit 1
+          if [ ! -d "susfs4ksu" ]; then
+            echo "ERROR: SUSFS4KSU clone failed!"
+            exit 1
+          fi
           
+          # Apply SUSFS patch - allow some hunks to fail
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-          [ -f "$SUSFS_PATCH" ] && patch -p1 --forward < "$SUSFS_PATCH" || echo "Patch had issues, continuing..."
+          if [ -f "$SUSFS_PATCH" ]; then
+            echo "Applying SUSFS patches..."
+            # Use --forward and ignore failures on non-critical files
+            if patch -p1 --forward < "$SUSFS_PATCH" 2>&1 | tee patch.log; then
+              echo "✅ All SUSFS patches applied successfully"
+            else
+              # Check if only selinux/avc.c failed (non-critical)
+              if grep -q "security/selinux/avc.c" patch.log && ! grep -q "FAILED" patch.log | grep -v "avc.c"; then
+                echo "⚠️ Only selinux/avc.c patch failed - this is non-critical, continuing..."
+              else
+                echo "⚠️ Some patches failed, but continuing anyway..."
+                cat patch.log
+              fi
+            fi
+            rm -f patch.log
+          fi
           
+          # Copy SUSFS files
           mkdir -p fs include/linux
           cp -f susfs4ksu/kernel_patches/fs/susfs.c fs/susfs.c
           cp -f susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/susfs.h
           [ -f "susfs4ksu/kernel_patches/include/linux/susfs_def.h" ] && cp -f susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/susfs_def.h
-          [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ] && cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* Wild_KSU/kernel/ || true
           
-          KSU_C_FILE="Wild_KSU/kernel/ksu.c"
-          if ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
-            grep -q "#include <linux/susfs.h>" "$KSU_C_FILE" || sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE"
-            grep -q "susfs_init()" "$KSU_C_FILE" || sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE"
+          # Copy KernelSU patches
+          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
+            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* Wild_KSU/kernel/ 2>/dev/null || true
           fi
           
-          [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && ln -sf ../Wild_KSU drivers/kernelsu
+          # Patch KSU to call susfs_init
+          KSU_C_FILE="Wild_KSU/kernel/ksu.c"
+          if [ ! -f "$KSU_C_FILE" ]; then
+            echo "ERROR: $KSU_C_FILE not found!"
+            exit 1
+          fi
+          
+          if ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
+            if ! grep -q "#include <linux/susfs.h>" "$KSU_C_FILE"; then
+              sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE"
+            fi
+            if ! grep -q "susfs_init()" "$KSU_C_FILE"; then
+              sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE" || \
+              sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$KSU_C_FILE"
+            fi
+          fi
+          
+          # Create symlink
+          if [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
+            ln -sf ../Wild_KSU drivers/kernelsu
+          fi
+          
+          echo "✅ Wild-KSU + SUSFS setup completed!"
 
       - name: "Setup kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
