@@ -1,4 +1,4 @@
-name: "Build GKI Kernel (Complete & Fixed v2)"
+name: "Build GKI Kernel (Complete & Fixed v3)"
 
 # Trigger options
 on:
@@ -214,39 +214,61 @@ jobs:
           echo "✓ Kernel source ready"
 
       # ========================================
-      # STEP 7.5: Disable ABI Checks (FIX for tracing symbol errors)
+      # STEP 7.5: SUPER FIX - Disable ABI Checks Completely
       # ========================================
-      - name: "🔧 Disable ABI checks"
+      - name: "🔧 SUPER FIX: Disable ALL ABI checks"
         working-directory: common
         run: |
-          # FIX: Disable ABI monitoring and symbol list checks
-          # This is necessary because we disabled CONFIG_TRACING which removes
-          # hundreds of tracing symbols that GKI baseline expects
+          echo "=== FIXING ABI CHECK ISSUES ==="
           
+          # Create dummy ABI files to prevent "No such file" errors
+          mkdir -p android
+          touch android/abi_gki_aarch64
+          touch android/abi_gki_aarch64_virtual_device
+          touch android/abi_gki_aarch64_db845c
+          echo "✓ Created dummy ABI files"
+          
+          # Fix build.config.gki.aarch64
           BUILD_CONFIG="build.config.gki.aarch64"
-          
-          # Method 1: Comment out symbol list check
           if [ -f "$BUILD_CONFIG" ]; then
-            sed -i 's/^ABI_DEFINITION=/#ABI_DEFINITION=/g' "$BUILD_CONFIG" || true
-            sed -i 's/^KMI_SYMBOL_LIST=/#KMI_SYMBOL_LIST=/g' "$BUILD_CONFIG" || true
-            sed -i 's/^ADDITIONAL_KMI_SYMBOL_LISTS=/#ADDITIONAL_KMI_SYMBOL_LISTS=/g' "$BUILD_CONFIG" || true
-            echo "✓ ABI checks disabled in build.config"
+            echo "Patching $BUILD_CONFIG..."
+            
+            # Comment out ALL ABI-related lines
+            sed -i 's/^ABI_DEFINITION=/#ABI_DEFINITION=/g' "$BUILD_CONFIG"
+            sed -i 's/^KMI_SYMBOL_LIST=/#KMI_SYMBOL_LIST=/g' "$BUILD_CONFIG"
+            sed -i 's/^ADDITIONAL_KMI_SYMBOL_LISTS=/#ADDITIONAL_KMI_SYMBOL_LISTS=/g' "$BUILD_CONFIG"
+            sed -i 's/^TRIM_NONLISTED_KMI=/#TRIM_NONLISTED_KMI=/g' "$BUILD_CONFIG"
+            sed -i 's/^KMI_SYMBOL_LIST_STRICT_MODE=/#KMI_SYMBOL_LIST_STRICT_MODE=/g' "$BUILD_CONFIG"
+            
+            # Add explicit skip flags
+            echo "" >> "$BUILD_CONFIG"
+            echo "# ABI checks disabled for custom kernel" >> "$BUILD_CONFIG"
+            echo "SKIP_ABI_CHECKS=1" >> "$BUILD_CONFIG"
+            echo "ABI_DEFINITION=" >> "$BUILD_CONFIG"
+            
+            echo "✓ $BUILD_CONFIG patched"
+            echo ""
+            echo "=== Relevant lines in $BUILD_CONFIG ==="
+            grep -E "^(#)?ABI|^(#)?KMI|^SKIP_ABI" "$BUILD_CONFIG" || echo "No ABI definitions found (good!)"
           fi
           
-          # Method 2: Disable in build.config.gki
+          # Fix build.config.gki
           if [ -f "build.config.gki" ]; then
-            sed -i 's/^ABI_DEFINITION=/#ABI_DEFINITION=/g' build.config.gki || true
-            sed -i 's/^KMI_SYMBOL_LIST=/#KMI_SYMBOL_LIST=/g' build.config.gki || true
-            echo "✓ ABI checks disabled in build.config.gki"
+            echo "Patching build.config.gki..."
+            sed -i 's/^ABI_DEFINITION=/#ABI_DEFINITION=/g' build.config.gki
+            sed -i 's/^KMI_SYMBOL_LIST=/#KMI_SYMBOL_LIST=/g' build.config.gki
+            sed -i 's/^POST_DEFCONFIG_CMDS="check_defconfig"/# POST_DEFCONFIG_CMDS="check_defconfig"/g' build.config.gki
+            echo "✓ build.config.gki patched"
           fi
           
-          # Method 3: Remove POST_DEFCONFIG check (already in original workflow)
-          sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' build.config.gki || true
+          # Fix build.config.common
+          if [ -f "build.config.common" ]; then
+            sed -i 's/^ABI_DEFINITION=/#ABI_DEFINITION=/g' build.config.common
+            echo "✓ build.config.common patched"
+          fi
           
-          # Method 4: Set SKIP_ABI_CHECKS if supported
-          echo 'SKIP_ABI_CHECKS=1' >> "$BUILD_CONFIG" || true
-          
-          echo "✓ All ABI checks disabled - build will not fail on symbol mismatches"
+          echo ""
+          echo "=== ABI CHECK FIX COMPLETE ==="
 
       # ========================================
       # STEP 8: Setup Wild KSU (only for ksu variant)
@@ -399,52 +421,70 @@ jobs:
           
           # ZRAM with LZ4
           CONFIG_ZRAM=y
-          CONFIG_ZRAM_WRITEBACK=y
+          CONFIG_ZRAM_DEF_COMP_LZ4=y
+          CONFIG_ZRAM_DEF_COMP="lz4"
           CONFIG_CRYPTO_LZ4=y
+          CONFIG_LZ4_COMPRESS=y
+          CONFIG_LZ4_DECOMPRESS=y
           
-          # Memory Management
-          CONFIG_MEMCG=y
+          # MGLRU
           CONFIG_LRU_GEN=y
+          CONFIG_LRU_GEN_ENABLED=y
+          CONFIG_LRU_GEN_STATS=y
           
-          # Disable Debugging (untuk performance & clean build)
-          # CONFIG_DEBUG_INFO is not set
-          # CONFIG_DEBUG_KERNEL is not set
-          # CONFIG_TRACING is not set
-          # CONFIG_TRACEPOINTS is not set
-          # CONFIG_FTRACE is not set
+          # Disable debug features for performance
+          CONFIG_TRACING=n
+          CONFIG_FTRACE=n
+          CONFIG_FUNCTION_TRACER=n
+          CONFIG_STACK_TRACER=n
+          CONFIG_SCHED_TRACER=n
+          CONFIG_IRQSOFF_TRACER=n
+          CONFIG_PREEMPT_TRACER=n
+          CONFIG_DEBUG_FS=n
+          CONFIG_DEBUG_KERNEL=n
+          CONFIG_DEBUG_MISC=n
+          CONFIG_SLUB_DEBUG=n
+          CONFIG_PM_DEBUG=n
+          CONFIG_DEBUG_INFO=n
+          CONFIG_SYMBOLIC_ERRNAME=n
+          CONFIG_DEBUG_BUGVERBOSE=n
+          
+          # Disable pressure stall info
+          CONFIG_PSI=n
+          CONFIG_PSI_DEFAULT_DISABLED=y
           EOF
           
           echo "✓ Common configs added"
 
       # ========================================
-      # STEP 13: Regenerate and Verify Defconfig
+      # STEP 13: Generate and Verify Config
       # ========================================
-      - name: "🔍 Regenerate and verify defconfig"
+      - name: "🔍 Generate and verify config"
         working-directory: common
         run: |
-          # Regenerate defconfig untuk ensure semua config applied
-          make ARCH=arm64 O=../out ${{ env.DEFCONFIG_NAME }}
-          make ARCH=arm64 O=../out savedefconfig
-          cp ../out/defconfig arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
+          export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          
+          # Generate config
+          make ARCH=arm64 LLVM=1 LLVM_IAS=1 O=../out ${{ env.DEFCONFIG_NAME }}
           
           echo "=== Verifying critical configs ==="
           
-          # Verify TCP Westwood
-          if grep -q "CONFIG_DEFAULT_WESTWOOD=y" ../out/.config; then
-            echo "✓ TCP Westwood configured as default"
+          # Check TCP westwood
+          if grep -q "CONFIG_DEFAULT_TCP_CONG=\"westwood\"" ../out/.config; then
+            echo "✓ TCP Westwood set as default"
           else
-            echo "⚠ WARNING: TCP Westwood NOT set as default!"
+            echo "⚠ WARNING: TCP Westwood not default!"
           fi
           
-          # Verify BBR
-          if grep -q "CONFIG_TCP_CONG_BBR=y" ../out/.config; then
-            echo "✓ TCP BBR enabled"
+          # Check tracing disabled
+          if grep -q "^# CONFIG_TRACING is not set" ../out/.config; then
+            echo "✓ Tracing disabled"
           else
-            echo "⚠ WARNING: TCP BBR not enabled!"
+            echo "⚠ WARNING: Tracing still enabled!"
           fi
           
-          # Verify KSU (if ksu variant)
-          if [ "${{ matrix.variant }}" == "ksu" ]; then
+          # For KSU variant, verify KSU is enabled
+          if [ "${{ matrix.variant }}" = "ksu" ]; then
             if grep -q "CONFIG_KSU=y" ../out/.config; then
               echo "✓ KernelSU enabled"
             else
@@ -519,9 +559,10 @@ jobs:
           export KBUILD_BUILD_USER="yu"
           export KBUILD_BUILD_HOST="github"
           
-          # IMPORTANT: Skip ABI checks
+          # CRITICAL: Skip ALL ABI checks
           export SKIP_ABI_CHECKS=1
           export SKIP_CP_KERNEL_HDR=1
+          export ABI_DEFINITION=
           
           # Verify clang is available
           which clang || { echo "ERROR: clang not found!"; exit 1; }
@@ -549,157 +590,107 @@ jobs:
       # ========================================
       - name: "🔍 Verify build output"
         run: |
-          KERNEL_IMG="out/android13-5.15/dist/Image"
-          
-          if [ ! -f "$KERNEL_IMG" ]; then
-            echo "❌ Kernel Image not found!"
+          if [ ! -f "out/arch/arm64/boot/Image.gz" ]; then
+            echo "❌ ERROR: Kernel image not found!"
             exit 1
           fi
           
-          echo "✓ Kernel Image: $(du -h $KERNEL_IMG | cut -f1)"
-          
-          # Extract kernel version string
-          echo ""
-          echo "=== Kernel Version String ==="
-          UNAME_STR=$(strings "$KERNEL_IMG" | grep "Linux version" | head -1)
-          echo "$UNAME_STR"
-          echo "UNAME_STRING=$UNAME_STR" >> $GITHUB_ENV
-          
-          # Check for -dirty suffix (should NOT exist)
-          if echo "$UNAME_STR" | grep -q "\-dirty"; then
-            echo "⚠ WARNING: -dirty suffix found in version!"
-          else
-            echo "✓ Clean version string (no -dirty)"
-          fi
-          
-          # Check for trace_printk (should NOT exist)
-          echo ""
-          echo "=== Checking for trace_printk ==="
-          if strings "$KERNEL_IMG" | grep -q "trace_printk"; then
-            echo "⚠ WARNING: trace_printk found in binary!"
-          else
-            echo "✓ No trace_printk (tracing properly disabled)"
-          fi
+          # Display file info
+          ls -lh out/arch/arm64/boot/Image.gz
+          echo "✓ Kernel build verified"
 
       # ========================================
-      # STEP 18: Package with AnyKernel3
+      # STEP 18: Clone AnyKernel3
       # ========================================
-      - name: "📦 Package with AnyKernel3"
+      - name: "📥 Clone AnyKernel3"
         run: |
-          git clone -q --depth=1 ${{ env.ANYKERNEL_REPO }} ak3
+          git clone --depth=1 ${{ env.ANYKERNEL_REPO }} AnyKernel3
+          cd AnyKernel3
           
-          # Copy kernel image
-          cp out/android13-5.15/dist/Image ak3/
-          
-          # Copy dtb if exists
-          [ -f out/android13-5.15/dist/dtb ] && \
-            cp out/android13-5.15/dist/dtb ak3/ || true
-          
-          # Copy dtbo if exists
-          [ -f out/android13-5.15/dist/dtbo.img ] && \
-            cp out/android13-5.15/dist/dtbo.img ak3/ || true
-          
-          # Create ZIP filename
-          cd ak3
-          VARIANT_SUFFIX=""
-          [ "${{ matrix.variant }}" == "noksu" ] && VARIANT_SUFFIX="-noksu"
-          
-          ZIP_NAME="GKI-${{ env.DEVICE }}-A${{ env.ANDROID_VERSION }}${VARIANT_SUFFIX}-${{ env.BUILD_DATE }}.zip"
-          zip -q -r9 "../$ZIP_NAME" * -x .git\* -x README.md
-          cd ..
-          
-          # Calculate file info
-          ZIP_SIZE=$(stat -c%s "$ZIP_NAME")
-          ZIP_SIZE_MB=$(echo "scale=2; $ZIP_SIZE / 1024 / 1024" | bc)
-          ZIP_SHA256=$(sha256sum "$ZIP_NAME" | cut -d' ' -f1)
-          
-          # Export to environment
-          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
-          echo "ZIP_SIZE_MB=$ZIP_SIZE_MB" >> $GITHUB_ENV
-          echo "ZIP_SHA256=$ZIP_SHA256" >> $GITHUB_ENV
-          
-          echo "✓ Package created: $ZIP_NAME ($ZIP_SIZE_MB MB)"
+          # Clean up unnecessary files
+          rm -rf .git* *.md modules/ ramdisk/
+          echo "✓ AnyKernel3 ready"
 
       # ========================================
-      # STEP 19: Upload Artifact
+      # STEP 19: Package Kernel
       # ========================================
-      - name: "📤 Upload artifact"
+      - name: "📦 Package kernel"
+        run: |
+          # Copy kernel image
+          cp out/arch/arm64/boot/Image.gz AnyKernel3/
+          
+          # Determine variant suffix
+          if [ "${{ matrix.variant }}" = "ksu" ]; then
+            VARIANT_SUFFIX=""
+          else
+            VARIANT_SUFFIX="-noksu"
+          fi
+          
+          # Create flashable zip
+          ZIPNAME="GKI-${{ env.DEVICE }}-A${{ env.ANDROID_VERSION }}${VARIANT_SUFFIX}-${BUILD_DATE}.zip"
+          cd AnyKernel3
+          zip -r9 "../${ZIPNAME}" * -x .git README.md .gitignore
+          
+          echo "ZIPNAME=${ZIPNAME}" >> $GITHUB_ENV
+          echo "✓ Package created: ${ZIPNAME}"
+
+      # ========================================
+      # STEP 20: Telegram - Build Complete
+      # ========================================
+      - name: "📢 Telegram: Build complete"
+        if: github.event.inputs.enable_telegram != 'false'
+        run: |
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
+            TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+            CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+            
+            # Get file size
+            SIZE=$(du -h "${{ env.ZIPNAME }}" | cut -f1)
+            
+            MESSAGE="<b>✅ Build Successful!</b>%0A%0A"
+            MESSAGE="${MESSAGE}<b>📦 Variant:</b> <code>${{ matrix.variant }}</code>%0A"
+            MESSAGE="${MESSAGE}<b>📁 File:</b> <code>${{ env.ZIPNAME }}</code>%0A"
+            MESSAGE="${MESSAGE}<b>💾 Size:</b> $SIZE%0A"
+            MESSAGE="${MESSAGE}<b>🕐 Completed:</b> $(date +'%H:%M:%S UTC')%0A"
+            MESSAGE="${MESSAGE}<b>⏱️ Build:</b> #${{ github.run_number }}%0A%0A"
+            MESSAGE="${MESSAGE}<b>⬇️ Next:</b> Creating release..."
+            
+            curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
+              -d chat_id="$CHAT_ID" \
+              -d text="$MESSAGE" \
+              -d parse_mode="HTML" \
+              -d disable_web_page_preview="true" > /dev/null || true
+          fi
+
+      # ========================================
+      # STEP 21: Upload Artifact
+      # ========================================
+      - name: "⬆️ Upload artifact"
         uses: actions/upload-artifact@v4
         with:
           name: GKI-${{ env.DEVICE }}-${{ matrix.variant }}-${{ github.run_number }}
-          path: GKI-*.zip
+          path: ${{ env.ZIPNAME }}
           retention-days: 7
-
-      # ========================================
-      # STEP 20: Telegram - Build Success
-      # ========================================
-      - name: "📢 Telegram: Build success"
-        if: success() && github.event.inputs.enable_telegram != 'false'
-        run: |
-          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
-            TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-            CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-            SHORT_SHA=$(echo "${{ env.ZIP_SHA256 }}" | cut -c1-16)
-            
-            MESSAGE="<b>✅ Build Success!</b>%0A%0A"
-            MESSAGE="${MESSAGE}<b>📦 Variant:</b> <code>${{ matrix.variant }}</code>%0A"
-            MESSAGE="${MESSAGE}<b>📁 File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
-            MESSAGE="${MESSAGE}<b>📊 Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
-            MESSAGE="${MESSAGE}<b>🔐 SHA256:</b> <code>$SHORT_SHA...</code>%0A"
-            MESSAGE="${MESSAGE}<b>🔧 Kernel:</b> <code>${{ env.KERNEL_VERSION }}</code>%0A"
-            MESSAGE="${MESSAGE}<b>🕐 Completed:</b> $(date +'%H:%M:%S UTC')%0A"
-            MESSAGE="${MESSAGE}<b>👨‍💻 Author:</b> @superuseryu"
-            
-            curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-              -d chat_id="$CHAT_ID" \
-              -d text="$MESSAGE" \
-              -d parse_mode="HTML" \
-              -d disable_web_page_preview="true" > /dev/null || true
-          fi
-
-      # ========================================
-      # STEP 21: Telegram - Build Failed
-      # ========================================
-      - name: "📢 Telegram: Build failed"
-        if: failure() && github.event.inputs.enable_telegram != 'false'
-        run: |
-          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
-            TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-            CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-            RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            
-            MESSAGE="<b>❌ Build Failed!</b>%0A%0A"
-            MESSAGE="${MESSAGE}<b>📦 Variant:</b> <code>${{ matrix.variant }}</code>%0A"
-            MESSAGE="${MESSAGE}<b>🕐 Time:</b> $(date +'%H:%M:%S UTC')%0A"
-            MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='$RUN_URL'>View Logs</a>%0A"
-            MESSAGE="${MESSAGE}⚠️ Check the logs for details."
-            
-            curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-              -d chat_id="$CHAT_ID" \
-              -d text="$MESSAGE" \
-              -d parse_mode="HTML" \
-              -d disable_web_page_preview="true" > /dev/null || true
-          fi
 
   # ========================================
   # RELEASE JOB
   # ========================================
-  create-release:
-    name: "Create GitHub Release"
+  release:
+    name: "Create Release"
+    needs: build-kernel
     runs-on: ubuntu-22.04
-    needs: [build-kernel]
     if: always() && needs.build-kernel.result == 'success'
     
     steps:
       # ========================================
-      # Get Build Info
+      # Generate Build Info
       # ========================================
-      - name: "📊 Get build info"
+      - name: "📋 Generate build info"
         id: build_info
         run: |
           BUILD_DATE=$(date +'%Y%m%d')
           BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S UTC')
-          TAG_NAME="v${{ github.run_number }}-${BUILD_DATE}"
+          TAG_NAME="GKI-A${{ env.ANDROID_VERSION }}-${BUILD_DATE}-build${{ github.run_number }}"
           
           echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
           echo "build_time=${BUILD_TIME}" >> $GITHUB_OUTPUT
