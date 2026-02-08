@@ -1,4 +1,4 @@
-name: "Build GKI Kernel (Complete & Fixed v3)"
+name: "Build GKI Kernel (Complete & Fixed v3.1)"
 
 # Trigger options
 on:
@@ -176,7 +176,21 @@ jobs:
       - name: "🔧 Verify clang installation"
         run: |
           export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
+          
+          echo "=== Verifying LLVM toolchain ==="
           clang --version | head -1
+          
+          # Verify all required LLVM tools
+          for tool in clang ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip; do
+            if command -v $tool &> /dev/null; then
+              echo "✓ $tool found"
+            else
+              echo "❌ ERROR: $tool not found!"
+              exit 1
+            fi
+          done
+          
+          echo "✓ All LLVM tools verified"
           echo "✓ Clang ready at: ${GITHUB_WORKSPACE}/clang/bin"
 
       # ========================================
@@ -457,15 +471,38 @@ jobs:
           echo "✓ Common configs added"
 
       # ========================================
-      # STEP 13: Generate and Verify Config
+      # STEP 13: Generate and Verify Config (WITH LLVM FIX)
       # ========================================
       - name: "🔍 Generate and verify config"
         working-directory: common
         run: |
+          # CRITICAL: Export PATH and verify tools FIRST
           export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
           
-          # Generate config
-          make ARCH=arm64 LLVM=1 LLVM_IAS=1 O=../out ${{ env.DEFCONFIG_NAME }}
+          # Verify ld.lld exists
+          if ! command -v ld.lld &> /dev/null; then
+            echo "ERROR: ld.lld not found in PATH!"
+            echo "Searching for ld.lld..."
+            find "${GITHUB_WORKSPACE}/clang" -name "ld.lld" -type f
+            exit 1
+          fi
+          
+          echo "✓ ld.lld found at: $(which ld.lld)"
+          
+          # Generate config with EXPLICIT LLVM tools
+          make ARCH=arm64 \
+               LLVM=1 \
+               LLVM_IAS=1 \
+               CC=clang \
+               LD=ld.lld \
+               AR=llvm-ar \
+               NM=llvm-nm \
+               OBJCOPY=llvm-objcopy \
+               OBJDUMP=llvm-objdump \
+               READELF=llvm-readelf \
+               STRIP=llvm-strip \
+               O=../out \
+               ${{ env.DEFCONFIG_NAME }}
           
           echo "=== Verifying critical configs ==="
           
@@ -544,7 +581,7 @@ jobs:
           fi
 
       # ========================================
-      # STEP 16: Build Kernel
+      # STEP 16: Build Kernel (WITH LLVM FIX)
       # ========================================
       - name: "🔨 Build kernel"
         run: |
@@ -564,8 +601,23 @@ jobs:
           export SKIP_CP_KERNEL_HDR=1
           export ABI_DEFINITION=
           
-          # Verify clang is available
+          # CRITICAL: Explicit LLVM tools (FIX for ld.lld not found)
+          export LLVM=1
+          export LLVM_IAS=1
+          export CC=clang
+          export LD=ld.lld
+          export AR=llvm-ar
+          export NM=llvm-nm
+          export OBJCOPY=llvm-objcopy
+          export OBJDUMP=llvm-objdump
+          export READELF=llvm-readelf
+          export STRIP=llvm-strip
+          
+          # Verify tools before build
+          echo "=== Verifying build tools ==="
           which clang || { echo "ERROR: clang not found!"; exit 1; }
+          which ld.lld || { echo "ERROR: ld.lld not found!"; exit 1; }
+          echo "✓ All tools found"
           
           echo "=== Ccache stats before build ==="
           ccache -s
