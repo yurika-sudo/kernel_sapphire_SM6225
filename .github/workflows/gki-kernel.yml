@@ -1,4 +1,4 @@
-name: Build GKI Kernel - Fixed Version
+name: Build GKI Kernel - Bazel Version
 
 on:
   workflow_dispatch:
@@ -45,8 +45,9 @@ jobs:
           sudo apt-get install -y \
             bc bison flex libssl-dev libelf-dev build-essential \
             zip git curl aria2 repo jq python3 \
-            libncurses-dev gawk rsync wget
-      
+            libncurses-dev gawk rsync wget \
+            gcc-aarch64-linux-gnu
+
       - name: Send build start notification
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
@@ -95,27 +96,12 @@ jobs:
           BUILD_CONFIG=common/build.config.gki
           LTO=thin
           ARCH=arm64
-          CROSS_COMPILE=aarch64-linux-gnu-
           CLANG_VERSION=${{ env.CLANG_VERSION }}
           OUT_DIR=out
           DIST_DIR=${OUT_DIR}/dist
           SKIP_ABI_CHECKS=1
           SKIP_CP_KERNEL_HDR=1
-          SKIP_KMI_SYMBOLS=1
-          ABI_DEFINITION=
-          KMI_SYMBOL_LIST=
-          ADDITIONAL_KMI_SYMBOL_LISTS=
-          GKI_MODULES_LIST=
-          TRIM_NONLISTED_KMI=
-          BUILD_INITRAMFS=1
-          EXT_MODULES=
-          GKI_BUILD_CONFIG=
-          POST_DEFCONFIG_CMDS=""
           EOF
-          
-          sed -i '/ABI_DEFINITION/d' build.config.gki 2>/dev/null || true
-          sed -i '/KMI_SYMBOL_LIST/d' build.config.gki 2>/dev/null || true
-          sed -i '/TRIM_NONLISTED_KMI/d' build.config.gki 2>/dev/null || true
           
           cd ..
       
@@ -262,7 +248,7 @@ jobs:
           
           echo "-android${{ env.ANDROID_VERSION }}-8-g$(git rev-parse --short=12 HEAD)-ab${{ github.run_number }}" > .scmversion
       
-      - name: Build kernel
+      - name: Build kernel with Bazel
         env:
           SKIP_ABI_CHECKS: 1
           SKIP_CP_KERNEL_HDR: 1
@@ -270,17 +256,13 @@ jobs:
           KBUILD_BUILD_HOST: github
           KBUILD_BUILD_TIMESTAMP: "$(date -u '+%a %b %e %H:%M:%S UTC %Y')"
         run: |
-          BUILD_CONFIG=common/build.config.gki.aarch64 \
-          LTO=thin \
-          build/build.sh -j$(nproc) || {
-            echo "Build failed"
-            exit 1
-          }
+          cd common
+          bazel run --lto=thin //common:kernel_aarch64_dist -- --dist_dir=out/dist
           
-          if [ -f "out/android13-5.15/dist/Image" ]; then
-            cp out/android13-5.15/dist/Image "Image.${{ matrix.variant.suffix }}"
+          if [ -f "out/dist/Image" ]; then
+            cp out/dist/Image "../Image.${{ matrix.variant.suffix }}"
           else
-            echo "Kernel Image not found"
+            echo "Kernel Image not found in out/dist/"
             exit 1
           fi
       
