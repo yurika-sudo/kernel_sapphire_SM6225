@@ -47,7 +47,7 @@ jobs:
             zip git curl aria2 repo jq python3 \
             libncurses-dev gawk rsync wget
       
-      - name: Send Telegram notification
+      - name: Send build start notification
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
@@ -79,76 +79,43 @@ jobs:
             -b common-${{ env.KERNEL_BRANCH }} --depth=1
           repo sync -c -j$(nproc) --no-tags --no-clone-bundle
           
-          # Clean unwanted clang versions
           rm -rf prebuilts/clang/host/linux-x86/clang-{3289846,r450784e,stable}
           
           cd common
           git checkout -f && git clean -fdx
           
-          # Update build config
           sed -i \
             -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
             -e 's/^CLANG_VERSION=.*/CLANG_VERSION=${{ env.CLANG_VERSION }}/' \
             build.config.constants
           
-          # === CARA YASK: Bypass semua ABI checks dengan benar ===
-          echo "Disabling all ABI and KMI checks like YASK..."
-          
-          # 1. Hapus POST_DEFCONFIG_CMDS yang memeriksa defconfig
           sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' build.config.gki 2>/dev/null || true
           
-          # 2. Edit build.config.gki.aarch64 untuk disable SEMUA ABI checks
-          # Backup dulu
-          cp build.config.gki.aarch64 build.config.gki.aarch64.orig
-          
-          # Buat file baru yang clean
           cat > build.config.gki.aarch64 << 'EOF'
-          # Build configuration for GKI aarch64 with ABI checks DISABLED
-          
-          # Base config
           BUILD_CONFIG=common/build.config.gki
           LTO=thin
-          
-          # Architecture
           ARCH=arm64
           CROSS_COMPILE=aarch64-linux-gnu-
-          
-          # Toolchain
           CLANG_VERSION=${{ env.CLANG_VERSION }}
-          
-          # Output
           OUT_DIR=out
           DIST_DIR=${OUT_DIR}/dist
-          
-          # ===== CRITICAL: DISABLE ALL ABI/KMI CHECKS =====
           SKIP_ABI_CHECKS=1
           SKIP_CP_KERNEL_HDR=1
           SKIP_KMI_SYMBOLS=1
-          
-          # Empty ABI definitions
           ABI_DEFINITION=
           KMI_SYMBOL_LIST=
           ADDITIONAL_KMI_SYMBOL_LISTS=
           GKI_MODULES_LIST=
-          
-          # Disable trimming
           TRIM_NONLISTED_KMI=
-          
-          # Build flags
           BUILD_INITRAMFS=1
           EXT_MODULES=
           GKI_BUILD_CONFIG=
-          
-          # Post defconfig commands - DISABLED
           POST_DEFCONFIG_CMDS=""
           EOF
           
-          # 3. Hapus juga dari build.config.gki jika ada
           sed -i '/ABI_DEFINITION/d' build.config.gki 2>/dev/null || true
           sed -i '/KMI_SYMBOL_LIST/d' build.config.gki 2>/dev/null || true
           sed -i '/TRIM_NONLISTED_KMI/d' build.config.gki 2>/dev/null || true
-          
-          echo "✓ ABI checks disabled completely"
           
           cd ..
       
@@ -156,35 +123,31 @@ jobs:
         if: matrix.variant.enable_ksu
         working-directory: common
         run: |
-          echo "Setting up Wild-KSU..."
           curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
           
           if [ -d "Wild_KSU" ]; then
-            ln -sf Wild_KSU drivers/kernelsu
-            echo "✓ Wild-KSU linked"
+            rm -f drivers/kernelsu
+            ln -sf $(pwd)/Wild_KSU drivers/kernelsu
           else
-            echo "❌ Wild_KSU directory not found!"
+            echo "Wild_KSU directory not found!"
             exit 1
           fi
       
-      - name: Setup SUSFS (like YASK)
+      - name: Setup SUSFS
         if: matrix.variant.enable_ksu
         working-directory: common
         run: |
           git clone -q --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
           
-          # Simple copy like YASK
           mkdir -p fs include/linux
           [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ] && cp susfs4ksu/kernel_patches/fs/susfs.c fs/
           [ -f "susfs4ksu/kernel_patches/include/linux/susfs.h" ] && cp susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
-          [ -f "susfs4ksu/kernel_patches/include/linux/susfs_def.h" ] && cp susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/ || true
+          [ -f "susfs4ksu/kernel_patches/include/linux/susfs_def.h" ] && cp susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/
           
-          # Patch KSU
           if [ -f "susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch" ]; then
             patch -p1 --forward < susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch 2>/dev/null || true
           fi
           
-          # Integrate with KSU
           if [ -f "Wild_KSU/kernel/ksu.c" ]; then
             grep -q "susfs.h" Wild_KSU/kernel/ksu.c || \
               sed -i '/#include <linux\/fs.h>/a #include <linux/susfs.h>' Wild_KSU/kernel/ksu.c
@@ -193,7 +156,6 @@ jobs:
           fi
           
           rm -rf susfs4ksu
-          echo "✓ SUSFS setup complete"
       
       - name: Setup Baseband Guard
         if: matrix.variant.enable_ksu
@@ -208,107 +170,86 @@ jobs:
           grep -q "baseband-guard/Kconfig" security/Kconfig || \
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
           
-          # Add to LSM
           sed -i '/^config LSM$/,/^help$/{ /default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
-          
-          echo "✓ Baseband Guard setup complete"
       
-      - name: Configure kernel (YASK style)
+      - name: Configure kernel
         working-directory: common
         run: |
           CONFIG="arch/arm64/configs/gki_defconfig"
-          
-          # Get git info
           GIT_HASH=$(git rev-parse --short=12 HEAD)
           BUILD_ID="ab$(printf "%08d" ${{ github.run_number }})"
           
-          # === CARA YASK: Tambah di akhir file, bukan edit existing ===
-          echo "" >> "$CONFIG"
-          echo "# === Custom Configurations ===" >> "$CONFIG"
+          cat >> "$CONFIG" << EOF
           
-          # Version string (like YASK)
-          echo "CONFIG_LOCALVERSION=\"-android${{ env.ANDROID_VERSION }}-8-g${GIT_HASH}-${BUILD_ID}\"" >> "$CONFIG"
-          echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG"
+          # Custom Configurations
+          CONFIG_LOCALVERSION="-android${{ env.ANDROID_VERSION }}-8-g${GIT_HASH}-${BUILD_ID}"
+          CONFIG_LOCALVERSION_AUTO=n
+          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_BIC=n
+          CONFIG_TCP_CONG_WESTWOOD=y
+          CONFIG_TCP_CONG_HTCP=n
+          CONFIG_TCP_CONG_BBR=y
+          CONFIG_DEFAULT_WESTWOOD=y
+          CONFIG_OVERLAY_FS=y
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          CONFIG_F2FS_FS=y
+          CONFIG_F2FS_FS_SECURITY=y
+          CONFIG_ZRAM=y
+          CONFIG_ZRAM_DEF_COMP_LZ4=y
+          CONFIG_ZRAM_DEF_COMP="lz4"
+          CONFIG_LRU_GEN=y
+          CONFIG_LRU_GEN_ENABLED=y
+          CONFIG_SCHED_AUTOGROUP=y
+          CONFIG_MEMCG=y
+          CONFIG_MEMCG_SWAP=y
+          CONFIG_PSI=n
+          CONFIG_PSI_DEFAULT_DISABLED=y
+          CONFIG_HZ_1000=y
+          CONFIG_HZ=1000
+          CONFIG_TCP_BBR2=y
+          CONFIG_NET_SCHED=y
+          CONFIG_NET_SCH_FQ_CODEL=y
+          CONFIG_NET_SCH_FQ=y
+          CONFIG_MODULE_COMPRESS_NONE=y
+          CONFIG_MODULE_SIG=n
+          CONFIG_MODULE_FORCE_LOAD=n
+          # CONFIG_DEBUG_KERNEL is not set
+          # CONFIG_TRACING_SUPPORT is not set
+          # CONFIG_TRACING is not set
+          # CONFIG_FTRACE is not set
+          # CONFIG_TRACEPOINTS is not set
+          # CONFIG_DEBUG_INFO is not set
+          # CONFIG_DEBUG_FS is not set
+          EOF
           
-          # Common optimizations
-          echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> "$CONFIG"
-          echo "CONFIG_TCP_CONG_ADVANCED=y" >> "$CONFIG"
-          echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG"
-          echo "CONFIG_TCP_CONG_WESTWOOD=y" >> "$CONFIG"
-          echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG"
-          echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG"
-          echo "CONFIG_DEFAULT_WESTWOOD=y" >> "$CONFIG"
-          echo "CONFIG_OVERLAY_FS=y" >> "$CONFIG"
-          echo "CONFIG_TMPFS_XATTR=y" >> "$CONFIG"
-          echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG"
-          echo "CONFIG_F2FS_FS=y" >> "$CONFIG"
-          echo "CONFIG_F2FS_FS_SECURITY=y" >> "$CONFIG"
-          echo "CONFIG_ZRAM=y" >> "$CONFIG"
-          echo "CONFIG_ZRAM_DEF_COMP_LZ4=y" >> "$CONFIG"
-          echo "CONFIG_ZRAM_DEF_COMP=\"lz4\"" >> "$CONFIG"
-          echo "CONFIG_LRU_GEN=y" >> "$CONFIG"
-          echo "CONFIG_LRU_GEN_ENABLED=y" >> "$CONFIG"
-          echo "CONFIG_SCHED_AUTOGROUP=y" >> "$CONFIG"
-          echo "CONFIG_MEMCG=y" >> "$CONFIG"
-          echo "CONFIG_MEMCG_SWAP=y" >> "$CONFIG"
-          echo "CONFIG_PSI=n" >> "$CONFIG"
-          echo "CONFIG_PSI_DEFAULT_DISABLED=y" >> "$CONFIG"
-          echo "CONFIG_HZ_1000=y" >> "$CONFIG"
-          echo "CONFIG_HZ=1000" >> "$CONFIG"
-          echo "CONFIG_TCP_BBR2=y" >> "$CONFIG"
-          echo "CONFIG_NET_SCHED=y" >> "$CONFIG"
-          echo "CONFIG_NET_SCH_FQ_CODEL=y" >> "$CONFIG"
-          echo "CONFIG_NET_SCH_FQ=y" >> "$CONFIG"
-          echo "CONFIG_MODULE_COMPRESS_NONE=y" >> "$CONFIG"
-          echo "CONFIG_MODULE_SIG=n" >> "$CONFIG"
-          echo "CONFIG_MODULE_FORCE_LOAD=n" >> "$CONFIG"
-          
-          # Disable ALL debug/tracing (gunakan format "is not set" seperti YASK)
-          echo "# CONFIG_DEBUG_KERNEL is not set" >> "$CONFIG"
-          echo "# CONFIG_TRACING_SUPPORT is not set" >> "$CONFIG"
-          echo "# CONFIG_TRACING is not set" >> "$CONFIG"
-          echo "# CONFIG_FTRACE is not set" >> "$CONFIG"
-          echo "# CONFIG_TRACEPOINTS is not set" >> "$CONFIG"
-          echo "# CONFIG_DEBUG_INFO is not set" >> "$CONFIG"
-          echo "# CONFIG_DEBUG_INFO_DWARF4 is not set" >> "$CONFIG"
-          echo "# CONFIG_DEBUG_INFO_BTF is not set" >> "$CONFIG"
-          echo "# CONFIG_DEBUG_FS is not set" >> "$CONFIG"
-          echo "# CONFIG_DEBUG_PAGEALLOC is not set" >> "$CONFIG"
-          echo "# CONFIG_PAGE_OWNER is not set" >> "$CONFIG"
-          echo "# CONFIG_SLUB_DEBUG is not set" >> "$CONFIG"
-          echo "# CONFIG_STACKTRACE is not set" >> "$CONFIG"
-          echo "# CONFIG_RCU_TRACE is not set" >> "$CONFIG"
-          echo "# CONFIG_PRINTK_TIME is not set" >> "$CONFIG"
-          echo "# CONFIG_PRINTK_CALLER is not set" >> "$CONFIG"
-          
-          # KSU specific configs
           if [ "${{ matrix.variant.enable_ksu }}" = "true" ]; then
-            echo "# === KSU Configurations ===" >> "$CONFIG"
-            echo "CONFIG_KSU=y" >> "$CONFIG"
-            echo "CONFIG_KPROBES=y" >> "$CONFIG"
-            echo "CONFIG_HAVE_KPROBES=y" >> "$CONFIG"
-            echo "CONFIG_KPROBE_EVENTS=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG"
-            echo "CONFIG_BBG=y" >> "$CONFIG"
-            
-            # SUSFS options
-            echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG"
-            echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> "$CONFIG"
-          fi
+            cat >> "$CONFIG" << EOF
           
-          echo "✅ Kernel configured for ${{ matrix.variant.name }}"
+          # KSU Configurations
+          CONFIG_KSU=y
+          CONFIG_KPROBES=y
+          CONFIG_HAVE_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          CONFIG_KSU_SUSFS=y
+          CONFIG_BBG=y
+          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=y
+          EOF
+          fi
       
       - name: Clean git state
         working-directory: common
@@ -319,12 +260,9 @@ jobs:
           git diff-index --quiet HEAD || \
             git commit -m "Build: Apply ${{ matrix.variant.name }} modifications" --no-verify 2>/dev/null || true
           
-          # Create .scmversion untuk kontrol versi
           echo "-android${{ env.ANDROID_VERSION }}-8-g$(git rev-parse --short=12 HEAD)-ab${{ github.run_number }}" > .scmversion
-          
-          echo "✓ Git state cleaned"
       
-      - name: Build kernel (YASK style)
+      - name: Build kernel
         env:
           SKIP_ABI_CHECKS: 1
           SKIP_CP_KERNEL_HDR: 1
@@ -332,30 +270,17 @@ jobs:
           KBUILD_BUILD_HOST: github
           KBUILD_BUILD_TIMESTAMP: "$(date -u '+%a %b %e %H:%M:%S UTC %Y')"
         run: |
-          echo "=== Starting kernel build (YASK method) ==="
-          
-          # Build dengan output terbatas
           BUILD_CONFIG=common/build.config.gki.aarch64 \
           LTO=thin \
-          build/build.sh -j$(nproc) 2>&1 | tail -100
+          build/build.sh -j$(nproc) || {
+            echo "Build failed"
+            exit 1
+          }
           
-          # Check for success
           if [ -f "out/android13-5.15/dist/Image" ]; then
-            echo "✓ Build successful"
-            
-            # Copy with variant suffix
             cp out/android13-5.15/dist/Image "Image.${{ matrix.variant.suffix }}"
-            
-            # Verify version string
-            echo "=== Kernel version ==="
-            strings "Image.${{ matrix.variant.suffix }}" | grep "Linux version" | head -1
-            
-            # Check size
-            echo "Image size: $(du -h Image.${{ matrix.variant.suffix }} | cut -f1)"
           else
-            echo "❌ Build failed - Image not found"
-            echo "Checking build output..."
-            find out -name "*.log" -type f | head -5 | xargs tail -20 2>/dev/null || true
+            echo "Kernel Image not found"
             exit 1
           fi
       
@@ -363,8 +288,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kernel-${{ matrix.variant.suffix }}
-          path: |
-            Image.${{ matrix.variant.suffix }}
+          path: Image.${{ matrix.variant.suffix }}
           retention-days: 1
   
   package:
@@ -387,26 +311,20 @@ jobs:
         run: |
           git clone -q --depth=1 https://github.com/superuseryu/AnyKernel3 ak3
           
-          # Check which variants were built
           HAS_KSU=false
           HAS_NOKSU=false
           
           if [ -f "artifacts/kernel-ksu/Image.ksu" ]; then
             cp artifacts/kernel-ksu/Image.ksu ak3/Image.ksu
             HAS_KSU=true
-            echo "✓ KSU variant found"
           fi
           
           if [ -f "artifacts/kernel-noksu/Image.noksu" ]; then
             cp artifacts/kernel-noksu/Image.noksu ak3/Image.noksu
             HAS_NOKSU=true
-            echo "✓ NoKSU variant found"
           fi
           
-          # Create AIO jika kedua varian ada
           if [ "$HAS_KSU" = true ] && [ "$HAS_NOKSU" = true ]; then
-            echo "Creating AIO package..."
-            # Update anykernel.sh untuk AIO
             cat > ak3/anykernel.sh << 'EOF'
             #!/system/bin/sh
             # AnyKernel3 AIO Installer
@@ -453,11 +371,10 @@ jobs:
             cp ak3/Image.noksu ak3/Image
             ZIP_NAME="GKI-${{ env.DEVICE }}-NoKSU-${{ env.BUILD_DATE }}.zip"
           else
-            echo "❌ No kernel images found!"
+            echo "No kernel images found!"
             exit 1
           fi
           
-          # Create ZIP
           cd ak3
           zip -q -r9 "../$ZIP_NAME" * -x .git\* -x README.md
           cd ..
@@ -483,28 +400,26 @@ jobs:
             ${{ env.VARIANT_INFO }}
             
             ### Features
-            - ✅ **Performance**: MGLRU, CC_OPTIMIZE_FOR_PERFORMANCE
-            - ✅ **TCP**: Westwood (default) + BBR + BBR2 support
-            - ✅ **Filesystem**: F2FS, OverlayFS, TMPFS with XATTR
-            - ✅ **Memory**: ZRAM with LZ4 compression, LRU_GEN
-            - ✅ **Optimized**: No debug, no tracing, no PSI
-            - ✅ **Clean version**: Proper android13-8-gXXXXXXXX format
+            - Performance: MGLRU, CC_OPTIMIZE_FOR_PERFORMANCE
+            - TCP: Westwood (default) + BBR + BBR2 support
+            - Filesystem: F2FS, OverlayFS, TMPFS with XATTR
+            - Memory: ZRAM with LZ4 compression, LRU_GEN
+            - Optimized: No debug, no tracing, no PSI
+            - Clean version: Proper android13-8-gXXXXXXXX format
             ${{ env.VARIANT_INFO == 'KSU' || env.VARIANT_INFO == 'KSU+NoKSU' }}
-            - ✅ **KSU Variant**: Wild-KSU + SUSFS + Baseband Guard
+            - KSU Variant: Wild-KSU + SUSFS + Baseband Guard
             ${{ env.VARIANT_INFO == 'NoKSU' || env.VARIANT_INFO == 'KSU+NoKSU' }}
-            - ✅ **NoKSU Variant**: Stock GKI with optimizations
+            - NoKSU Variant: Stock GKI with optimizations
             
             ### Installation
-            1. Download `${{ env.ZIP_NAME }}`
+            1. Download ${{ env.ZIP_NAME }}
             2. Flash via TWRP/OrangeFox
             3. If AIO: Choose variant with volume keys
             4. Reboot
             
             ### Checksum
-            ```
             SHA256: ${{ env.ZIP_SHA256 }}
             Size:   ${{ env.ZIP_SIZE }}
-            ```
             
             ### Notes
             - Compatible: Redmi Note 13 4G/NFC
@@ -516,30 +431,47 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Send Telegram notification
-        if: always()
+      - name: Send Telegram success notification
+        if: success()
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ] && exit 0
           
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG }}"
+          SHORT_SHA=$(echo "${{ env.ZIP_SHA256 }}" | cut -c1-16)
+          
+          MESSAGE="✅ <b>Build Success!</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
+          MESSAGE="${MESSAGE}<b>Size:</b> ${{ env.ZIP_SIZE }}%0A"
+          MESSAGE="${MESSAGE}<b>SHA256:</b> <code>$SHORT_SHA...</code>%0A"
+          MESSAGE="${MESSAGE}<b>Download:</b> <a href='$RELEASE_URL'>Release</a>"
+          
+          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
+            -d chat_id="$CHAT_ID" \
+            -d text="$MESSAGE" \
+            -d parse_mode="HTML" \
+            -d disable_web_page_preview=true || true
+
+  notify-failure:
+    name: "Notify Build Failure"
+    runs-on: ubuntu-22.04
+    needs: [build]
+    if: failure()
+    
+    steps:
+      - name: Send Telegram failure notification
+        run: |
+          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+          [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ] && exit 0
+          
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
-          if [ "${{ job.status }}" = "success" ]; then
-            SHORT_SHA=$(echo "${{ env.ZIP_SHA256 }}" | cut -c1-16)
-            
-            MESSAGE="✅ <b>Build Success!</b>%0A%0A"
-            MESSAGE="${MESSAGE}<b>File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
-            MESSAGE="${MESSAGE}<b>Size:</b> ${{ env.ZIP_SIZE }}%0A"
-            MESSAGE="${MESSAGE}<b>SHA256:</b> <code>$SHORT_SHA...</code>%0A"
-            MESSAGE="${MESSAGE}<b>Download:</b> <a href='$RELEASE_URL'>Release</a>%0A"
-            MESSAGE="${MESSAGE}<b>Maintainer:</b> @superuseryu"
-          else
-            MESSAGE="❌ <b>Build Failed!</b>%0A%0A"
-            MESSAGE="${MESSAGE}<b>Time:</b> $(date +'%H:%M UTC')%0A"
-            MESSAGE="${MESSAGE}<b>Logs:</b> <a href='$RUN_URL'>View</a>"
-          fi
+          MESSAGE="❌ <b>Build Failed!</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>Run:</b> #${{ github.run_number }}%0A"
+          MESSAGE="${MESSAGE}<b>Time:</b> $(date +'%H:%M UTC')%0A"
+          MESSAGE="${MESSAGE}<b>Logs:</b> <a href='$RUN_URL'>View</a>"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
