@@ -313,16 +313,16 @@ jobs:
       - name: "Copy kernel image"
         working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
-          cp Image "Image.gki"
+          cp Image "Image.ksu"
           echo "📦 Kernel image:"
-          ls -lh Image.gki
+          ls -lh Image.ksu
 
       - name: "Upload kernel artifact"
         uses: actions/upload-artifact@v4
         with:
           name: gki-kernel
           path: |
-            ${{ env.WORK_DIR }}/out/dist/Image.gki
+            ${{ env.WORK_DIR }}/out/dist/Image.ksu
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
           retention-days: 1
 
@@ -356,13 +356,13 @@ jobs:
           
           git clone --depth=1 https://github.com/superuseryu/AnyKernel3
           
-          if [ ! -f "./artifacts/Image.gki" ]; then
-            echo "ERROR: Image.gki not found in artifacts!"
+          if [ ! -f "./artifacts/Image.ksu" ]; then
+            echo "ERROR: Image.ksu not found in artifacts!"
             ls -la ./artifacts/
             exit 1
           fi
           
-          cp ./artifacts/Image.gki AnyKernel3/
+          cp ./artifacts/Image.ksu AnyKernel3/
           
           DATE_TAG=$(date +'%Y.%m.%d')
           ZIP_NAME="GKI_Kernel_${DATE_TAG}.zip"
