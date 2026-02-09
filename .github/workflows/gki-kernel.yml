@@ -1,348 +1,122 @@
-name: "Build GKI Kernel (Minimal)"
+name: Build GKI Kernel
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: '0 0 * * 0'
-  workflow_dispatch:
-    inputs:
-      build_variant:
-        description: 'Build variant'
-        required: true
-        default: 'ksu'
-        type: choice
-        options:
-          - ksu
-          - noksu
-          - both
-      enable_telegram:
-        description: 'Send Telegram notifications'
-        required: false
-        default: true
-        type: boolean
 
 permissions:
   contents: write
 
 env:
-  ANDROID_VERSION: "13"
-  KERNEL_VERSION: "5.15"
-  KERNEL_BRANCH: "android13-5.15-lts"
-  DEVICE: "sapphiren"
-  ANYKERNEL_REPO: "https://github.com/superuseryu/AnyKernel3"
+  KERNEL_BRANCH: android13-5.15-lts
+  CLANG_VERSION: r547379
+  DEVICE: sapphiren
 
 jobs:
-  build-kernel:
-    name: "Build GKI ${{ matrix.variant }}"
+  build:
+    name: Build Kernel
     runs-on: ubuntu-22.04
-    timeout-minutes: 40
-    
-    strategy:
-      fail-fast: false
-      matrix:
-        variant: ${{ github.event.inputs.build_variant == 'both' && fromJSON('["ksu", "noksu"]') || fromJSON(format('["{0}"]', github.event.inputs.build_variant || 'ksu')) }}
     
     steps:
-      # Setup
-      - name: Setup workspace
+      - name: Setup environment
         run: |
           echo "BUILD_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
-          echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
-          echo "Cores: $(nproc --all)"
-      
-      # Cleanup
-      - name: Free up disk space
-        run: |
-          sudo apt-get clean
+          echo "TAG=v$(date +'%Y.%m.%d')" >> $GITHUB_ENV
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          df -h
+          sudo apt-get update -qq && sudo apt-get install -y \
+            bc bison flex libssl-dev libelf-dev build-essential \
+            zip git curl aria2 repo jq
       
-      # Dependencies
-      - name: Install dependencies
+      - name: Download clang
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y bc bison flex libssl-dev make libelf-dev \
-            ccache rsync zip unzip curl git build-essential \
-            libncurses-dev gawk wget aria2 repo jq
-      
-      # Telegram Start
-      - name: Telegram Build Started
-        if: github.event.inputs.enable_telegram != 'false' && always()
-        run: |
-          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          
-          if [ -n "$TOKEN" ] && [ -n "$CHAT_ID" ]; then
-            MESSAGE="<b>🚀 Kernel Build Started</b>%0A%0A"
-            MESSAGE="${MESSAGE}<b>📁 Repository:</b> ${{ github.repository }}%0A"
-            MESSAGE="${MESSAGE}<b>📦 Variant:</b> <code>${{ matrix.variant }}</code>%0A"
-            MESSAGE="${MESSAGE}<b>📍 Branch:</b> ${{ env.KERNEL_BRANCH }}%0A"
-            MESSAGE="${MESSAGE}<b>🔄 Trigger:</b> ${{ github.event_name }}%0A"
-            MESSAGE="${MESSAGE}<b>🆔 Run ID:</b> #${{ github.run_number }}%0A"
-            MESSAGE="${MESSAGE}<b>⏰ Started:</b> $(date +'%Y-%m-%d %H:%M UTC')%0A"
-            MESSAGE="${MESSAGE}<b>⏳ Status:</b> Initializing..."
-            
-            curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-              -d chat_id="$CHAT_ID" \
-              -d text="$MESSAGE" \
-              -d parse_mode="HTML" \
-              -d disable_web_page_preview="true"
-          fi
-      
-      # Download Clang FRESH (Fixed - menggunakan metode dari old.yaml)
-      - name: Download Clang Toolchain
-        run: |
-          set -e
-          rm -rf prebuilts/clang/host/linux-x86
           mkdir -p prebuilts/clang/host/linux-x86
-          
-          echo "Downloading Clang r547379..."
-          aria2c -x 16 -s 16 -o prebuilts/clang/host/linux-x86/clang-r547379.tar.gz \
-            "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz" || {
-            echo "Trying alternative source..."
-            wget --progress=bar:force -O prebuilts/clang/host/linux-x86/clang-r547379.tar.gz \
-              "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
-          }
-          
-          mkdir -p prebuilts/clang/host/linux-x86/clang-r547379
-          tar -xzf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz -C prebuilts/clang/host/linux-x86/clang-r547379
-          rm -f prebuilts/clang/host/linux-x86/clang-r547379.tar.gz
-          
-          # Buat symlink untuk clang
-          cd prebuilts/clang/host/linux-x86/clang-r547379/bin
-          if [ ! -f "clang" ] && [ -f "clang.real" ]; then
-            ln -sf clang.real clang
-          fi
-          cd -
-          
-          # Verify
-          if [ -f "prebuilts/clang/host/linux-x86/clang-r547379/bin/clang" ]; then
-            echo "✅ Clang ready"
-            prebuilts/clang/host/linux-x86/clang-r547379/bin/clang --version | head -1
-          else
-            echo "❌ Clang not found!"
-            ls -la prebuilts/clang/host/linux-x86/clang-r547379/bin/
-            exit 1
-          fi
+          aria2c -x16 -s16 -o clang.tar.gz \
+            "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-${{ env.CLANG_VERSION }}.tar.gz"
+          mkdir -p prebuilts/clang/host/linux-x86/clang-${{ env.CLANG_VERSION }}
+          tar -xzf clang.tar.gz -C prebuilts/clang/host/linux-x86/clang-${{ env.CLANG_VERSION }}
+          rm clang.tar.gz
+          prebuilts/clang/host/linux-x86/clang-${{ env.CLANG_VERSION }}/bin/clang --version
       
-      # Telegram - Download Complete
-      - name: Telegram Download Complete
-        if: github.event.inputs.enable_telegram != 'false' && always()
+      - name: Initialize kernel source
         run: |
-          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          
-          if [ -n "$TOKEN" ] && [ -n "$CHAT_ID" ]; then
-            MESSAGE="<b>📥 Download Complete</b>%0A"
-            MESSAGE="${MESSAGE}<b>✅ Clang:</b> Ready (r547379)%0A"
-            MESSAGE="${MESSAGE}<b>⏱️ Time:</b> $(date +'%H:%M UTC')%0A"
-            MESSAGE="${MESSAGE}<b>⚙️ Stage:</b> Initializing kernel source..."
-            
-            curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-              -d chat_id="$CHAT_ID" \
-              -d text="$MESSAGE" \
-              -d parse_mode="HTML" \
-              -d disable_web_page_preview="true"
-          fi
-      
-      # Initialize Kernel Source FRESH
-      - name: Initialize Kernel Source
-        run: |
-          rm -rf .repo common build
           repo init -u https://android.googlesource.com/kernel/manifest \
-            -b common-android13-5.15-lts --depth=1
-          repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
+            -b common-${{ env.KERNEL_BRANCH }} --depth=1
+          repo sync -c -j$(nproc) --no-tags --no-clone-bundle
           
-          # Hapus toolchain lama yang tidak perlu
-          rm -rf prebuilts/clang/host/linux-x86/clang-3289846
-          rm -rf prebuilts/clang/host/linux-x86/clang-r450784e
-          rm -rf prebuilts/clang/host/linux-x86/clang-stable
+          rm -rf prebuilts/clang/host/linux-x86/clang-{3289846,r450784e,stable}
           
           cd common
-          git checkout -f
+          git checkout -f && git clean -fdx
           
-          # Update build.config.constants dengan clang versi yang benar
-          sed -i \
-           -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
-           -e 's/^CLANG_VERSION=.*/CLANG_VERSION=r547379/' \
-           build.config.constants
+          sed -i -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
+                 -e 's/^CLANG_VERSION=.*/CLANG_VERSION=${{ env.CLANG_VERSION }}/' \
+                 build.config.constants
           
-          echo "✅ Kernel source ready"
+          sed -i 's/^ABI_DEFINITION=/#ABI_DEFINITION=/g' build.config.gki.aarch64
+          sed -i 's/^KMI_SYMBOL_LIST=/#KMI_SYMBOL_LIST=/g' build.config.gki.aarch64
+          sed -i '/^POST_DEFCONFIG_CMDS=/d' build.config.gki
+          echo 'SKIP_ABI_CHECKS=1' >> build.config.gki.aarch64
+          echo 'SKIP_CP_KERNEL_HDR=1' >> build.config.gki.aarch64
+          
+          cd ..
       
-      # Disable ABI Checks
-      - name: Disable ABI Checks
-        working-directory: common
+      - name: Build KSU variant
         run: |
-          touch android/abi_gki_aarch64
+          cp -r common common_ksu
+          cd common_ksu
           
-          if [ -f "build.config.gki.aarch64" ]; then
-            sed -i 's/^ABI_DEFINITION=/#ABI_DEFINITION=/g' build.config.gki.aarch64
-            sed -i 's/^KMI_SYMBOL_LIST=/#KMI_SYMBOL_LIST=/g' build.config.gki.aarch64
-            echo "SKIP_ABI_CHECKS=1" >> build.config.gki.aarch64
-            echo "ABI_DEFINITION=" >> build.config.gki.aarch64
-          fi
-          
-          echo "✅ ABI checks disabled"
-      
-      # Setup KSU (if variant)
-      - name: Setup KernelSU
-        if: matrix.variant == 'ksu'
-        working-directory: common
-        run: |
           curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
+          [ -d "Wild_KSU" ] && ln -sf Wild_KSU drivers/kernelsu || exit 1
           
-          if [ -d "Wild_KSU" ]; then
-            ln -sf Wild_KSU drivers/kernelsu
-            echo "✅ KSU installed"
-          else
-            echo "❌ KSU installation failed!"
-            exit 1
-          fi
-      
-      # Apply SUSFS
-      - name: Apply SUSFS
-        if: matrix.variant == 'ksu'
-        working-directory: common
-        run: |
           git clone -q --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          
-          if [ -f "susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch" ]; then
-            patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch || true
-          fi
-          
+          patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch 2>/dev/null || true
           [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ] && cp susfs4ksu/kernel_patches/fs/susfs.c fs/
-          ls susfs4ksu/kernel_patches/include/linux/susfs*.h 2>/dev/null && \
-            cp susfs4ksu/kernel_patches/include/linux/susfs*.h include/linux/
+          cp susfs4ksu/kernel_patches/include/linux/susfs*.h include/linux/ 2>/dev/null || true
           
+          if [ -f "Wild_KSU/kernel/ksu.c" ]; then
+            grep -q "susfs.h" Wild_KSU/kernel/ksu.c || \
+              sed -i '/#include <linux\/fs.h>/a #include <linux/susfs.h>' Wild_KSU/kernel/ksu.c
+            grep -q "susfs_init" Wild_KSU/kernel/ksu.c || \
+              sed -i '/ksu_core_init();/a \\tsusfs_init();' Wild_KSU/kernel/ksu.c
+          fi
           rm -rf susfs4ksu
-          echo "✅ SUSFS applied"
-      
-      # Setup Baseband Guard
-      - name: Setup Baseband Guard
-        if: matrix.variant == 'ksu'
-        working-directory: common
-        run: |
+          
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
           ln -sf ../Baseband-guard security/baseband-guard
           grep -q "baseband-guard" security/Makefile || \
             echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
-          echo "✅ Baseband Guard setup"
-      
-      # Telegram - Configuration Complete
-      - name: Telegram Config Complete
-        if: github.event.inputs.enable_telegram != 'false' && always()
-        run: |
-          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+          grep -q "baseband-guard/Kconfig" security/Kconfig || \
+            sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
+          sed -i '/^config LSM$/,/^help$/{ /default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
           
-          if [ -n "$TOKEN" ] && [ -n "$CHAT_ID" ]; then
-            MESSAGE="<b>⚙️ Configuration Complete</b>%0A"
-            MESSAGE="${MESSAGE}<b>📦 Variant:</b> <code>${{ matrix.variant }}</code>%0A"
-            MESSAGE="${MESSAGE}<b>✅ Features:</b>"
-            MESSAGE="${MESSAGE}${{ matrix.variant == 'ksu' && ' Wild-KSU + SUSFS + BBG' || ' Stock GKI' }}%0A"
-            MESSAGE="${MESSAGE}<b>⏱️ Time:</b> $(date +'%H:%M UTC')%0A"
-            MESSAGE="${MESSAGE}<b>⏳ Next:</b> Kernel configuration..."
-            
-            curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-              -d chat_id="$CHAT_ID" \
-              -d text="$MESSAGE" \
-              -d parse_mode="HTML" \
-              -d disable_web_page_preview="true"
-          fi
-      
-      # Configure Kernel
-      - name: Configure Kernel
-        working-directory: common
-        run: |
           CONFIG="arch/arm64/configs/gki_defconfig"
-          
-          # Common configs
           cat >> "$CONFIG" << 'EOF'
+          CONFIG_LOCALVERSION="-SuperUserYu-KSU"
+          CONFIG_LOCALVERSION_AUTO=n
           CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
+          CONFIG_KALLSYMS=y
           CONFIG_TCP_CONG_ADVANCED=y
-          CONFIG_TCP_CONG_BIC=n
           CONFIG_TCP_CONG_WESTWOOD=y
-          CONFIG_TCP_CONG_HTCP=n
           CONFIG_TCP_CONG_BBR=y
           CONFIG_DEFAULT_WESTWOOD=y
+          CONFIG_DEFAULT_TCP_CONG="westwood"
           CONFIG_OVERLAY_FS=y
-          CONFIG_DEBUG_KERNEL=n
-          CONFIG_TRACING_SUPPORT=n
-          CONFIG_TRACING=n
-          CONFIG_FTRACE=n
-          CONFIG_TRACEPOINTS=n
-          CONFIG_FUNCTION_TRACER=n
-          CONFIG_FUNCTION_GRAPH_TRACER=n
-          CONFIG_TRACE_PRINTK=n
-          CONFIG_DYNAMIC_FTRACE=n
-          CONFIG_DEBUG_INFO=n
-          CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT=n
-          CONFIG_DEBUG_INFO_DWARF4=n
-          CONFIG_DEBUG_INFO_DWARF5=n
-          CONFIG_DEBUG_INFO_BTF=n
-          CONFIG_DEBUG_INFO_REDUCED=n
-          CONFIG_DEBUG_INFO_COMPRESSED=n
-          CONFIG_DEBUG_FS=n
-          CONFIG_DYNAMIC_DEBUG=n
-          CONFIG_DEBUG_PAGEALLOC=n
-          CONFIG_PAGE_OWNER=n
-          CONFIG_PAGE_POISONING=n
-          CONFIG_SLUB_DEBUG=n
-          CONFIG_SLUB_DEBUG_ON=n
-          CONFIG_DEBUG_OBJECTS=n
-          CONFIG_DEBUG_OBJECTS_TIMERS=n
-          CONFIG_PROVE_LOCKING=n
-          CONFIG_DEBUG_LOCKDEP=n
-          CONFIG_DEBUG_SPINLOCK=n
-          CONFIG_DEBUG_MUTEXES=n
-          CONFIG_LOCK_STAT=n
-          CONFIG_STACKTRACE=n
-          CONFIG_DEBUG_STACK_USAGE=n
-          CONFIG_DEBUG_STACKOVERFLOW=n
-          CONFIG_RCU_TRACE=n
-          CONFIG_RCU_EQS_DEBUG=n
-          CONFIG_PRINTK_TIME=n
-          CONFIG_PRINTK_CALLER=n
-          CONFIG_PRINTK_INDEX=n
-          CONFIG_ZRAM=y
-          CONFIG_ZRAM_DEF_COMP_LZ4=y
-          CONFIG_ZRAM_DEF_COMP="lz4"
-          CONFIG_ZRAM_MEMORY_TRACKING=n
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
           CONFIG_F2FS_FS=y
           CONFIG_F2FS_FS_SECURITY=y
           CONFIG_F2FS_FS_ENCRYPTION=y
-          CONFIG_F2FS_FAULT_INJECTION=n
-          CONFIG_F2FS_STAT_FS=y
-          CONFIG_SCHED_AUTOGROUP=y
-          CONFIG_SCHED_TUNE=y
-          CONFIG_ENERGY_MODEL=y
-          CONFIG_COMPACTION=y
-          CONFIG_PAGE_COUNTER=y
+          CONFIG_ZRAM=y
+          CONFIG_ZRAM_DEF_COMP_LZ4=y
+          CONFIG_ZRAM_DEF_COMP="lz4"
           CONFIG_MEMCG=y
-          CONFIG_MEMCG_SWAP=y
-          CONFIG_PSI=n
-          CONFIG_PSI_DEFAULT_DISABLED=y
-          CONFIG_MODULE_COMPRESS_NONE=y
-          CONFIG_MODULE_SIG=n
-          CONFIG_MODULE_FORCE_LOAD=n
-          CONFIG_NET_SCHED=y
-          CONFIG_NET_SCH_FQ_CODEL=y
-          CONFIG_NET_SCH_FQ=y
-          CONFIG_TCP_BBR2=y
-          CONFIG_NET_NS=y
-          CONFIG_HZ_1000=y
-          CONFIG_HZ=1000
-          EOF
-          
-          # KSU configs
-          if [ "${{ matrix.variant }}" = "ksu" ]; then
-          cat >> "$CONFIG" << 'EOF'
+          CONFIG_LRU_GEN=y
           CONFIG_KSU=y
           CONFIG_KPROBES=y
           CONFIG_HAVE_KPROBES=y
           CONFIG_KPROBE_EVENTS=y
           CONFIG_KSU_SUSFS=y
-          CONFIG_TMPFS_XATTR=y
-          CONFIG_TMPFS_POSIX_ACL=y
           CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
           CONFIG_KSU_SUSFS_SUS_MOUNT=y
@@ -358,252 +132,160 @@ jobs:
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
           CONFIG_KSU_SUSFS_SUS_SU=y
           CONFIG_BBG=y
-          CONFIG_KPM=y
+          # CONFIG_DEBUG_INFO is not set
+          # CONFIG_TRACING is not set
+          # CONFIG_FTRACE is not set
           EOF
-          fi
           
-          echo "✅ Kernel configured"
+          cd ..
+          export KBUILD_BUILD_USER=yu
+          export KBUILD_BUILD_HOST=github
+          export SKIP_ABI_CHECKS=1
+          export SKIP_CP_KERNEL_HDR=1
+          
+          BUILD_CONFIG=common_ksu/build.config.gki.aarch64 \
+          LTO=thin \
+          build/build.sh -j$(nproc) || exit 1
+          
+          cp out/android13-5.15/dist/Image Image.ksu
+          
+          rm -rf out common_ksu
       
-      # Telegram - Compilation Started
-      - name: Telegram Compilation Started
-        if: github.event.inputs.enable_telegram != 'false' && always()
+      - name: Build NoKSU variant
         run: |
-          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          CORES=$(nproc --all)
+          cd common
           
-          MESSAGE="<b>🔨 Compilation Started</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>📦 Variant:</b> <code>${{ matrix.variant }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>🕐 Time:</b> $(date +'%H:%M UTC')%0A"
-          MESSAGE="${MESSAGE}<b>⚙️ Stage:</b> Compiling kernel...%0A"
-          MESSAGE="${MESSAGE}<b>📊 Cores:</b> $CORES%0A"
-          MESSAGE="${MESSAGE}<b>⏳ ETA:</b> 35-40 minutes..."
+          CONFIG="arch/arm64/configs/gki_defconfig"
+          cat >> "$CONFIG" << 'EOF'
+          CONFIG_LOCALVERSION="-SuperUserYu"
+          CONFIG_LOCALVERSION_AUTO=n
+          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
+          CONFIG_KALLSYMS=y
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_WESTWOOD=y
+          CONFIG_TCP_CONG_BBR=y
+          CONFIG_DEFAULT_WESTWOOD=y
+          CONFIG_DEFAULT_TCP_CONG="westwood"
+          CONFIG_OVERLAY_FS=y
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          CONFIG_F2FS_FS=y
+          CONFIG_F2FS_FS_SECURITY=y
+          CONFIG_F2FS_FS_ENCRYPTION=y
+          CONFIG_ZRAM=y
+          CONFIG_ZRAM_DEF_COMP_LZ4=y
+          CONFIG_ZRAM_DEF_COMP="lz4"
+          CONFIG_MEMCG=y
+          CONFIG_LRU_GEN=y
+          # CONFIG_DEBUG_INFO is not set
+          # CONFIG_TRACING is not set
+          # CONFIG_FTRACE is not set
+          EOF
           
-          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-            -d chat_id="$CHAT_ID" \
-            -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview="true"
-      
-      # Build Kernel
-      - name: Build Kernel
-        run: |
-          set -e
-          export PATH="${GITHUB_WORKSPACE}/prebuilts/clang/host/linux-x86/clang-r547379/bin:$PATH"
-          export LTO=thin
-          export LLVM=1
-          export LLVM_IAS=1
+          cd ..
+          export KBUILD_BUILD_USER=yu
+          export KBUILD_BUILD_HOST=github
+          export SKIP_ABI_CHECKS=1
+          export SKIP_CP_KERNEL_HDR=1
           
-          # Build
           BUILD_CONFIG=common/build.config.gki.aarch64 \
-          build/build.sh -j$(nproc --all) || {
-            echo "❌ Build failed!"
-            exit 1
-          }
+          LTO=thin \
+          build/build.sh -j$(nproc) || exit 1
           
-          echo "✅ Build successful"
+          cp out/android13-5.15/dist/Image Image.noksu
       
-      # Verify Output
-      - name: Verify Output
+      - name: Package AIO kernel
         run: |
-          if [ -f "out/dist/Image.gz" ]; then
-            ls -lh out/dist/Image.gz
-            echo "✅ Kernel image found"
-          else
-            echo "❌ Kernel image not found!"
-            echo "Looking for image files..."
-            find out -name "Image*" -type f 2>/dev/null || true
-            exit 1
-          fi
+          git clone -q --depth=1 https://github.com/superuseryu/AnyKernel3 ak3
+          
+          cp Image.ksu ak3/
+          cp Image.noksu ak3/
+          
+          ZIP_NAME="GKI-${{ env.DEVICE }}-AIO-${{ env.BUILD_DATE }}.zip"
+          cd ak3
+          zip -q -r9 "../$ZIP_NAME" * -x .git\* -x README.md
+          cd ..
+          
+          ZIP_SIZE=$(stat -c%s "$ZIP_NAME" | awk '{printf "%.2f MB", $1/1024/1024}')
+          ZIP_SHA256=$(sha256sum "$ZIP_NAME" | cut -d' ' -f1)
+          
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+          echo "ZIP_SIZE=$ZIP_SIZE" >> $GITHUB_ENV
+          echo "ZIP_SHA256=$ZIP_SHA256" >> $GITHUB_ENV
+          
+          echo "✅ Package: $ZIP_NAME ($ZIP_SIZE)"
       
-      # Prepare AnyKernel
-      - name: Prepare AnyKernel
-        run: |
-          git clone --depth=1 ${{ env.ANYKERNEL_REPO }} AnyKernel3
-          cd AnyKernel3
-          rm -rf .git* *.md modules/
-      
-      # Package Kernel
-      - name: Package Kernel
-        run: |
-          cp out/dist/Image.gz AnyKernel3/
-          
-          if [ "${{ matrix.variant }}" = "ksu" ]; then
-            ZIPNAME="GKI-${{ env.DEVICE }}-A${{ env.ANDROID_VERSION }}-${BUILD_DATE}.zip"
-          else
-            ZIPNAME="GKI-${{ env.DEVICE }}-A${{ env.ANDROID_VERSION }}-noksu-${BUILD_DATE}.zip"
-          fi
-          
-          cd AnyKernel3
-          zip -r9 "../${ZIPNAME}" *
-          
-          echo "ZIPNAME=${ZIPNAME}" >> $GITHUB_ENV
-          
-          ZIP_SIZE=$(stat -c%s "../${ZIPNAME}")
-          ZIP_SIZE_MB=$(echo "scale=2; $ZIP_SIZE / 1024 / 1024" | bc)
-          ZIP_SHA256=$(sha256sum "../${ZIPNAME}" | cut -d' ' -f1)
-          
-          echo "ZIP_SIZE_MB=${ZIP_SIZE_MB}" >> $GITHUB_ENV
-          echo "ZIP_SHA256=${ZIP_SHA256}" >> $GITHUB_ENV
-          echo "✅ Package: ${ZIPNAME} (${ZIP_SIZE_MB} MB)"
-      
-      # Telegram - Build Success
-      - name: Telegram Build Success
-        if: github.event.inputs.enable_telegram != 'false' && always()
-        run: |
-          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          SHORT_SHA=$(echo "${{ env.ZIP_SHA256 }}" | cut -c1-16)
-          
-          MESSAGE="<b>✅ Build Successful!</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>📦 Variant:</b> <code>${{ matrix.variant }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>📁 File:</b> <code>${{ env.ZIPNAME }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>💾 Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
-          MESSAGE="${MESSAGE}<b>🔐 SHA256:</b> <code>$SHORT_SHA...</code>%0A"
-          MESSAGE="${MESSAGE}<b>⏱️ Time:</b> $(date +'%H:%M UTC')%0A"
-          MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='$RUN_URL'>View</a>%0A"
-          MESSAGE="${MESSAGE}<b>⏳ Next:</b> Creating release..."
-          
-          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-            -d chat_id="$CHAT_ID" \
-            -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview="true"
-      
-      # Upload Artifact
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: GKI-${{ env.DEVICE }}-${{ matrix.variant }}-${{ github.run_number }}
-          path: ${{ env.ZIPNAME }}
-          retention-days: 7
-      
-      # Telegram - Build Failed (catch-all)
-      - name: Telegram Build Failed
-        if: failure() && github.event.inputs.enable_telegram != 'false'
-        run: |
-          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          
-          MESSAGE="<b>❌ Build Failed!</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>📦 Variant:</b> <code>${{ matrix.variant }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>🆔 Run:</b> #${{ github.run_number }}%0A"
-          MESSAGE="${MESSAGE}<b>⏱️ Time:</b> $(date +'%H:%M UTC')%0A"
-          MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='$RUN_URL'>View Logs</a>%0A"
-          MESSAGE="${MESSAGE}⚠️ Check the logs for details."
-          
-          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-            -d chat_id="$CHAT_ID" \
-            -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview="true"
-
-  release:
-    name: Create Release
-    needs: build-kernel
-    runs-on: ubuntu-22.04
-    if: always() && needs.build-kernel.result == 'success'
-    
-    steps:
-      - name: Generate build info
-        id: build_info
-        run: |
-          DATE_TAG=$(date +'%Y.%m.%d')
-          echo "tag_name=gki-${DATE_TAG}-build${{ github.run_number }}" >> $GITHUB_OUTPUT
-          echo "date_tag=${DATE_TAG}" >> $GITHUB_OUTPUT
-      
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-      
-      - name: Telegram Packaging Started
-        run: |
-          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          
-          if [ -n "$TOKEN" ] && [ -n "$CHAT_ID" ]; then
-            MESSAGE="<b>📦 Packaging Started</b>%0A%0A"
-            MESSAGE="${MESSAGE}<b>🕐 Time:</b> $(date +'%H:%M UTC')%0A"
-            MESSAGE="${MESSAGE}<b>⚙️ Stage:</b> Creating release...%0A"
-            MESSAGE="${MESSAGE}<b>🔧 Version:</b> <code>${{ env.KERNEL_VERSION }}</code>"
-            
-            curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-              -d chat_id="$CHAT_ID" \
-              -d text="$MESSAGE" \
-              -d parse_mode="HTML" \
-              -d disable_web_page_preview="true"
-          fi
-      
-      - name: Prepare release files
-        run: |
-          mkdir -p release_files
-          
-          # Find and copy all zip files
-          find artifacts -name "*.zip" -exec cp {} release_files/ \;
-          
-          echo "Files to release:"
-          ls -lh release_files/
-      
-      - name: Create Release
+      - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.build_info.outputs.tag_name }}
-          name: "GKI Kernel - ${{ steps.build_info.outputs.date_tag }}"
+          tag_name: ${{ env.TAG }}
+          name: "GKI Kernel - ${{ env.BUILD_DATE }}"
           body: |
-            ## GKI Kernel for Redmi Note 13 4G/NFC (sapphiren)
+            ## 📱 GKI Kernel AIO for ${{ env.DEVICE }}
             
-            **Android ${{ env.ANDROID_VERSION }} • Build #${{ github.run_number }} • $(date +'%Y-%m-%d %H:%M UTC')**
+            **Build #${{ github.run_number }} • Android 13-16 • ${{ env.BUILD_DATE }}**
             
-            ### Features:
-            - Kernel ${{ env.KERNEL_VERSION }} GKI
-            - TCP BBR + Westwood (default)
-            - ZRAM with LZ4 compression
-            - Performance optimized
-            - Both KSU and non-KSU variants included
+            ### ✨ Features
+            - 🔐 Wild-KSU + SUSFS v2.0.0 + BBG (KSU variant)
+            - 🚀 TCP BBR + Westwood (default)
+            - ⚡ LTO + Performance optimizations
+            - 💾 ZRAM with LZ4
+            - 🧠 MGLRU + F2FS support
+            - 🔧 Both KSU & NoKSU variants in one ZIP
             
-            ### Installation:
-            1. Download appropriate variant for your needs
-            2. Flash via custom recovery (TWRP/OrangeFox)
-            3. Reboot and enjoy!
+            ### 📥 Installation
+            1. Download `${{ env.ZIP_NAME }}`
+            2. Flash via recovery (TWRP/OrangeFox)
+            3. Choose variant: VOL+ (NoKSU) or VOL- (KSU)
+            4. Reboot
             
-            **Note:** KSU variant includes Wild-KSU, SUSFS, and Baseband Guard
-            
-            ### SHA256 Checksums:
-            ```bash
-            $(for file in release_files/*.zip; do
-              sha256sum "$file" | sed 's|release_files/||'
-            done)
+            ### 🔐 SHA256
             ```
-          files: release_files/*.zip
+            ${{ env.ZIP_SHA256 }}
+            ```
+            
+            ### 📝 Notes
+            - Kernel version: `uname -r` will show proper string
+            - KSU Manager: [Download](https://github.com/WildKernels/Wild_KSU/releases)
+            - Compatible: Redmi Note 13 4G/NFC (sapphire/sapphiren)
+          files: ${{ env.ZIP_NAME }}
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Telegram Release Created
-        if: github.event.inputs.enable_telegram != 'false' && always()
+      - name: Send notification
+        if: always()
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ steps.build_info.outputs.tag_name }}"
+          
+          if [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "Telegram not configured, skipping notification"
+            exit 0
+          fi
+          
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
-          # Count variants
-          VARIANTS_COUNT=$(ls release_files/*.zip 2>/dev/null | wc -l || echo 0)
-          
-          MESSAGE="<b>🎉 Release Published!</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>🏷️ Tag:</b> <code>${{ steps.build_info.outputs.tag_name }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>📅 Date:</b> $(date +'%Y-%m-%d')%0A"
-          MESSAGE="${MESSAGE}<b>📦 Variants:</b> $VARIANTS_COUNT%0A"
-          MESSAGE="${MESSAGE}<b>🔗 Download:</b> <a href='$RELEASE_URL'>Release Page</a>%0A"
-          MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='$RUN_URL'>View Build Logs</a>%0A%0A"
-          MESSAGE="${MESSAGE}<b>👨‍💻 Author/Maintainer:</b> @superuseryu%0A%0A"
-          MESSAGE="${MESSAGE}#kernel #gki #android #sapphiren"
+          if [ "${{ job.status }}" == "success" ]; then
+            SHORT_SHA=$(echo "${{ env.ZIP_SHA256 }}" | cut -c1-16)
+            
+            MESSAGE="<b>✅ Build Success!</b>%0A%0A"
+            MESSAGE="${MESSAGE}<b>📦 File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
+            MESSAGE="${MESSAGE}<b>📊 Size:</b> ${{ env.ZIP_SIZE }}%0A"
+            MESSAGE="${MESSAGE}<b>🔐 SHA256:</b> <code>$SHORT_SHA...</code>%0A"
+            MESSAGE="${MESSAGE}<b>🔗 Download:</b> <a href='$RELEASE_URL'>Release</a>%0A"
+            MESSAGE="${MESSAGE}<b>👨‍💻 Maintainer:</b> @superuseryu%0A%0A"
+            MESSAGE="${MESSAGE}#kernel #gki #wildksu #susfs #${{ env.DEVICE }}"
+          else
+            MESSAGE="<b>❌ Build Failed!</b>%0A%0A"
+            MESSAGE="${MESSAGE}<b>🕐 Time:</b> $(date +'%H:%M UTC')%0A"
+            MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='$RUN_URL'>View</a>"
+          fi
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
             -d text="$MESSAGE" \
             -d parse_mode="HTML" \
-            -d disable_web_page_preview="true"
+            -d disable_web_page_preview="true" || true
+            
