@@ -55,6 +55,8 @@ jobs:
           
           sed -i 's/^ABI_DEFINITION=/#ABI_DEFINITION=/g' build.config.gki.aarch64
           sed -i 's/^KMI_SYMBOL_LIST=/#KMI_SYMBOL_LIST=/g' build.config.gki.aarch64
+          sed -i 's/^ADDITIONAL_KMI_SYMBOL_LISTS=/#ADDITIONAL_KMI_SYMBOL_LISTS=/g' build.config.gki.aarch64
+          sed -i 's/^TRIM_NONLISTED_KMI=/#TRIM_NONLISTED_KMI=/g' build.config.gki.aarch64
           sed -i '/^POST_DEFCONFIG_CMDS=/d' build.config.gki
           echo 'SKIP_ABI_CHECKS=1' >> build.config.gki.aarch64
           echo 'SKIP_CP_KERNEL_HDR=1' >> build.config.gki.aarch64
@@ -92,12 +94,12 @@ jobs:
           
           CONFIG="arch/arm64/configs/gki_defconfig"
           cat >> "$CONFIG" << 'EOF'
-          CONFIG_LOCALVERSION="-SuperUserYu-KSU"
-          CONFIG_LOCALVERSION_AUTO=n
           CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
           CONFIG_KALLSYMS=y
           CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_BIC=n
           CONFIG_TCP_CONG_WESTWOOD=y
+          CONFIG_TCP_CONG_HTCP=n
           CONFIG_TCP_CONG_BBR=y
           CONFIG_DEFAULT_WESTWOOD=y
           CONFIG_DEFAULT_TCP_CONG="westwood"
@@ -107,11 +109,32 @@ jobs:
           CONFIG_F2FS_FS=y
           CONFIG_F2FS_FS_SECURITY=y
           CONFIG_F2FS_FS_ENCRYPTION=y
+          CONFIG_F2FS_FAULT_INJECTION=n
+          CONFIG_F2FS_STAT_FS=y
           CONFIG_ZRAM=y
           CONFIG_ZRAM_DEF_COMP_LZ4=y
           CONFIG_ZRAM_DEF_COMP="lz4"
+          CONFIG_ZRAM_MEMORY_TRACKING=n
           CONFIG_MEMCG=y
+          CONFIG_MEMCG_SWAP=y
           CONFIG_LRU_GEN=y
+          CONFIG_SCHED_AUTOGROUP=y
+          CONFIG_SCHED_TUNE=y
+          CONFIG_ENERGY_MODEL=y
+          CONFIG_COMPACTION=y
+          CONFIG_PAGE_COUNTER=y
+          CONFIG_PSI=n
+          CONFIG_PSI_DEFAULT_DISABLED=y
+          CONFIG_MODULE_COMPRESS_NONE=y
+          CONFIG_MODULE_SIG=n
+          CONFIG_MODULE_FORCE_LOAD=n
+          CONFIG_NET_SCHED=y
+          CONFIG_NET_SCH_FQ_CODEL=y
+          CONFIG_NET_SCH_FQ=y
+          CONFIG_TCP_BBR2=y
+          CONFIG_NET_NS=y
+          CONFIG_HZ_1000=y
+          CONFIG_HZ=1000
           CONFIG_KSU=y
           CONFIG_KPROBES=y
           CONFIG_HAVE_KPROBES=y
@@ -132,9 +155,45 @@ jobs:
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
           CONFIG_KSU_SUSFS_SUS_SU=y
           CONFIG_BBG=y
-          # CONFIG_DEBUG_INFO is not set
+          CONFIG_KPM=y
+          # CONFIG_DEBUG_KERNEL is not set
+          # CONFIG_TRACING_SUPPORT is not set
           # CONFIG_TRACING is not set
           # CONFIG_FTRACE is not set
+          # CONFIG_TRACEPOINTS is not set
+          # CONFIG_FUNCTION_TRACER is not set
+          # CONFIG_FUNCTION_GRAPH_TRACER is not set
+          # CONFIG_TRACE_PRINTK is not set
+          # CONFIG_DYNAMIC_FTRACE is not set
+          # CONFIG_DEBUG_INFO is not set
+          # CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT is not set
+          # CONFIG_DEBUG_INFO_DWARF4 is not set
+          # CONFIG_DEBUG_INFO_DWARF5 is not set
+          # CONFIG_DEBUG_INFO_BTF is not set
+          # CONFIG_DEBUG_INFO_REDUCED is not set
+          # CONFIG_DEBUG_INFO_COMPRESSED is not set
+          # CONFIG_DEBUG_FS is not set
+          # CONFIG_DYNAMIC_DEBUG is not set
+          # CONFIG_DEBUG_PAGEALLOC is not set
+          # CONFIG_PAGE_OWNER is not set
+          # CONFIG_PAGE_POISONING is not set
+          # CONFIG_SLUB_DEBUG is not set
+          # CONFIG_SLUB_DEBUG_ON is not set
+          # CONFIG_DEBUG_OBJECTS is not set
+          # CONFIG_DEBUG_OBJECTS_TIMERS is not set
+          # CONFIG_PROVE_LOCKING is not set
+          # CONFIG_DEBUG_LOCKDEP is not set
+          # CONFIG_DEBUG_SPINLOCK is not set
+          # CONFIG_DEBUG_MUTEXES is not set
+          # CONFIG_LOCK_STAT is not set
+          # CONFIG_STACKTRACE is not set
+          # CONFIG_DEBUG_STACK_USAGE is not set
+          # CONFIG_DEBUG_STACKOVERFLOW is not set
+          # CONFIG_RCU_TRACE is not set
+          # CONFIG_RCU_EQS_DEBUG is not set
+          # CONFIG_PRINTK_TIME is not set
+          # CONFIG_PRINTK_CALLER is not set
+          # CONFIG_PRINTK_INDEX is not set
           EOF
           
           cd ..
@@ -157,12 +216,12 @@ jobs:
           
           CONFIG="arch/arm64/configs/gki_defconfig"
           cat >> "$CONFIG" << 'EOF'
-          CONFIG_LOCALVERSION="-SuperUserYu"
-          CONFIG_LOCALVERSION_AUTO=n
           CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
           CONFIG_KALLSYMS=y
           CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_BIC=n
           CONFIG_TCP_CONG_WESTWOOD=y
+          CONFIG_TCP_CONG_HTCP=n
           CONFIG_TCP_CONG_BBR=y
           CONFIG_DEFAULT_WESTWOOD=y
           CONFIG_DEFAULT_TCP_CONG="westwood"
@@ -172,14 +231,70 @@ jobs:
           CONFIG_F2FS_FS=y
           CONFIG_F2FS_FS_SECURITY=y
           CONFIG_F2FS_FS_ENCRYPTION=y
+          CONFIG_F2FS_FAULT_INJECTION=n
+          CONFIG_F2FS_STAT_FS=y
           CONFIG_ZRAM=y
           CONFIG_ZRAM_DEF_COMP_LZ4=y
           CONFIG_ZRAM_DEF_COMP="lz4"
+          CONFIG_ZRAM_MEMORY_TRACKING=n
           CONFIG_MEMCG=y
+          CONFIG_MEMCG_SWAP=y
           CONFIG_LRU_GEN=y
-          # CONFIG_DEBUG_INFO is not set
+          CONFIG_SCHED_AUTOGROUP=y
+          CONFIG_SCHED_TUNE=y
+          CONFIG_ENERGY_MODEL=y
+          CONFIG_COMPACTION=y
+          CONFIG_PAGE_COUNTER=y
+          CONFIG_PSI=n
+          CONFIG_PSI_DEFAULT_DISABLED=y
+          CONFIG_MODULE_COMPRESS_NONE=y
+          CONFIG_MODULE_SIG=n
+          CONFIG_MODULE_FORCE_LOAD=n
+          CONFIG_NET_SCHED=y
+          CONFIG_NET_SCH_FQ_CODEL=y
+          CONFIG_NET_SCH_FQ=y
+          CONFIG_TCP_BBR2=y
+          CONFIG_NET_NS=y
+          CONFIG_HZ_1000=y
+          CONFIG_HZ=1000
+          # CONFIG_DEBUG_KERNEL is not set
+          # CONFIG_TRACING_SUPPORT is not set
           # CONFIG_TRACING is not set
           # CONFIG_FTRACE is not set
+          # CONFIG_TRACEPOINTS is not set
+          # CONFIG_FUNCTION_TRACER is not set
+          # CONFIG_FUNCTION_GRAPH_TRACER is not set
+          # CONFIG_TRACE_PRINTK is not set
+          # CONFIG_DYNAMIC_FTRACE is not set
+          # CONFIG_DEBUG_INFO is not set
+          # CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT is not set
+          # CONFIG_DEBUG_INFO_DWARF4 is not set
+          # CONFIG_DEBUG_INFO_DWARF5 is not set
+          # CONFIG_DEBUG_INFO_BTF is not set
+          # CONFIG_DEBUG_INFO_REDUCED is not set
+          # CONFIG_DEBUG_INFO_COMPRESSED is not set
+          # CONFIG_DEBUG_FS is not set
+          # CONFIG_DYNAMIC_DEBUG is not set
+          # CONFIG_DEBUG_PAGEALLOC is not set
+          # CONFIG_PAGE_OWNER is not set
+          # CONFIG_PAGE_POISONING is not set
+          # CONFIG_SLUB_DEBUG is not set
+          # CONFIG_SLUB_DEBUG_ON is not set
+          # CONFIG_DEBUG_OBJECTS is not set
+          # CONFIG_DEBUG_OBJECTS_TIMERS is not set
+          # CONFIG_PROVE_LOCKING is not set
+          # CONFIG_DEBUG_LOCKDEP is not set
+          # CONFIG_DEBUG_SPINLOCK is not set
+          # CONFIG_DEBUG_MUTEXES is not set
+          # CONFIG_LOCK_STAT is not set
+          # CONFIG_STACKTRACE is not set
+          # CONFIG_DEBUG_STACK_USAGE is not set
+          # CONFIG_DEBUG_STACKOVERFLOW is not set
+          # CONFIG_RCU_TRACE is not set
+          # CONFIG_RCU_EQS_DEBUG is not set
+          # CONFIG_PRINTK_TIME is not set
+          # CONFIG_PRINTK_CALLER is not set
+          # CONFIG_PRINTK_INDEX is not set
           EOF
           
           cd ..
@@ -212,8 +327,6 @@ jobs:
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
           echo "ZIP_SIZE=$ZIP_SIZE" >> $GITHUB_ENV
           echo "ZIP_SHA256=$ZIP_SHA256" >> $GITHUB_ENV
-          
-          echo "✅ Package: $ZIP_NAME ($ZIP_SIZE)"
       
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -227,16 +340,17 @@ jobs:
             
             ### ✨ Features
             - 🔐 Wild-KSU + SUSFS v2.0.0 + BBG (KSU variant)
-            - 🚀 TCP BBR + Westwood (default)
+            - 🚀 TCP BBR + Westwood (default), BBR2
             - ⚡ LTO + Performance optimizations
-            - 💾 ZRAM with LZ4
-            - 🧠 MGLRU + F2FS support
-            - 🔧 Both KSU & NoKSU variants in one ZIP
+            - 💾 ZRAM with LZ4, F2FS support
+            - 🧩 MGLRU, HZ=1000
+            - 🔇 All debug & tracing disabled
+            - 🔧 Both KSU & NoKSU in one ZIP
             
             ### 📥 Installation
             1. Download `${{ env.ZIP_NAME }}`
             2. Flash via recovery (TWRP/OrangeFox)
-            3. Choose variant: VOL+ (NoKSU) or VOL- (KSU)
+            3. Choose: VOL+ (NoKSU) or VOL- (KSU)
             4. Reboot
             
             ### 🔐 SHA256
@@ -245,9 +359,9 @@ jobs:
             ```
             
             ### 📝 Notes
-            - Kernel version: `uname -r` will show proper string
+            - Stock kernel version (no custom suffix)
+            - TCP: `cat /proc/sys/net/ipv4/tcp_congestion_control` = westwood
             - KSU Manager: [Download](https://github.com/WildKernels/Wild_KSU/releases)
-            - Compatible: Redmi Note 13 4G/NFC (sapphire/sapphiren)
           files: ${{ env.ZIP_NAME }}
           draft: false
         env:
@@ -260,7 +374,7 @@ jobs:
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           
           if [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ]; then
-            echo "Telegram not configured, skipping notification"
+            echo "Telegram not configured"
             exit 0
           fi
           
@@ -288,4 +402,3 @@ jobs:
             -d text="$MESSAGE" \
             -d parse_mode="HTML" \
             -d disable_web_page_preview="true" || true
-            
