@@ -318,22 +318,6 @@ jobs:
           # CONFIG_PRINTK_INDEX is not set
           EOF
       
-      - name: Set kernel version
-        working-directory: common
-        run: |
-          # Set proper kernel version string
-          ACTUAL_COMMIT=$(git rev-parse --short=12 HEAD 2>/dev/null || echo "000000000000")
-          BUILD_NUM=$(printf "ab%08d" ${{ github.run_number }})
-          
-          # Update defconfig with version
-          sed -i '/CONFIG_LOCALVERSION/d' arch/arm64/configs/gki_defconfig
-          echo "CONFIG_LOCALVERSION=\"-android13-8-g${ACTUAL_COMMIT}-${BUILD_NUM}\"" >> arch/arm64/configs/gki_defconfig
-          
-          # Export environment variables for build
-          echo "KERNEL_VERSION_FULL=5.15.0-android13-8-g${ACTUAL_COMMIT}-${BUILD_NUM}" >> $GITHUB_ENV
-          export KBUILD_BUILD_TIMESTAMP="$(date -u '+%a %b %e %H:%M:%S UTC %Y')"
-          echo "KBUILD_BUILD_TIMESTAMP=$KBUILD_BUILD_TIMESTAMP" >> $GITHUB_ENV
-      
       - name: Build kernel
         run: |
           export KBUILD_BUILD_USER=yu
@@ -353,7 +337,6 @@ jobs:
           
           # Copy output image
           cp out/android13-5.15/dist/Image ${{ matrix.variant.output }}
-          echo "Kernel image saved as: ${{ matrix.variant.output }}"
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
