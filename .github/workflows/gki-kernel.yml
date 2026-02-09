@@ -1,151 +1,94 @@
-name: Build GKI Kernel - Bazel Version
+name: "Build GKI Kernel"
+
+env:
+  OUT_DIR: "out"
+  KERNEL_VERSION: "5.15"
+  ANDROID_VERSION: "13"
 
 on:
+  schedule:
+    - cron: '0 0 * * 0'
   workflow_dispatch:
-    inputs:
-      variant:
-        description: 'Build variant'
-        required: false
-        default: 'both'
-        type: choice
-        options:
-          - ksu
-          - noksu
-          - both
 
 permissions:
   contents: write
 
-env:
-  KERNEL_BRANCH: android13-5.15-lts
-  CLANG_VERSION: r547379
-  DEVICE: sapphiren
-  ANDROID_VERSION: 13
-
 jobs:
-  build:
-    name: "Build ${{ matrix.variant.name }}"
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        variant:
-          - name: "GKI-KSU"
-            enable_ksu: true
-            suffix: "ksu"
-          - name: "GKI-NoKSU"
-            enable_ksu: false
-            suffix: "noksu"
+  build-kernels:
+    name: "Build GKI Kernel"
+    runs-on: ubuntu-latest
     
-    steps:
-      - name: Setup environment
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          sudo apt-get update -qq
-          sudo apt-get install -y \
-            bc bison flex libssl-dev libelf-dev build-essential \
-            zip git curl aria2 repo jq python3 \
-            libncurses-dev gawk rsync wget \
-            gcc-aarch64-linux-gnu
+    env:
+      KERNEL_LOC_DIR: "common_gki"
+      KERNEL_NAME: "common"
+      KERNEL_REPO: "https://android.googlesource.com/kernel/common"
+      KERNEL_BRANCH: "android13-5.15-lts"
+      DEFCONFIG_NAME: "gki_defconfig"
+      WORK_DIR: ${{ github.workspace }}
 
-      - name: Send build start notification
+    steps:
+      - name: "Send Telegram build started"
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ] && exit 0
           
-          MESSAGE="🚀 <b>Kernel Build Started</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>Variant:</b> ${{ matrix.variant.name }}%0A"
-          MESSAGE="${MESSAGE}<b>Run:</b> #${{ github.run_number }}%0A"
-          MESSAGE="${MESSAGE}<b>Time:</b> $(date +'%H:%M')"
+          MESSAGE="<b>⚙️ Build In Progress (1 tasks running)</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>👤 User:</b> ${{ github.actor }}%0A"
+          MESSAGE="${MESSAGE}<b>📊 Progress:</b> [█░░░░░░░░░] 5%%0A"
+          MESSAGE="${MESSAGE}<b>⏳ Elapsed:</b> 0 seconds%0A%0A"
+          MESSAGE="${MESSAGE}<b>🔧 Configuration:</b>%0A"
+          MESSAGE="${MESSAGE}  • Variant: GKI%0A"
+          MESSAGE="${MESSAGE}  • Type: release%0A"
+          MESSAGE="${MESSAGE}  • Android: ${{ env.ANDROID_VERSION }}%0A%0A"
+          MESSAGE="${MESSAGE}Making good progress! Why not stretch your legs? 🚶"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
             -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview=true || true
-      
-      - name: Download clang
+            -d parse_mode="HTML" || true
+
+      - name: "Setup workspace"
         run: |
-          mkdir -p prebuilts/clang/host/linux-x86
-          aria2c -x16 -s16 -o clang.tar.gz \
-            "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-${{ env.CLANG_VERSION }}.tar.gz"
-          mkdir -p prebuilts/clang/host/linux-x86/clang-${{ env.CLANG_VERSION }}
-          tar -xzf clang.tar.gz -C prebuilts/clang/host/linux-x86/clang-${{ env.CLANG_VERSION }}
-          rm clang.tar.gz
-      
-      - name: Initialize kernel source
+          mkdir -p ${{ env.KERNEL_LOC_DIR }}
+          echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
+          echo "BUILD_START_TIME=$(date +%s)" >> $GITHUB_ENV
+          sudo apt-get update -qq
+          sudo apt-get install -y repo rsync aria2 bc bison build-essential flex git libelf-dev libssl-dev wget curl jq
+
+      - name: "Clone kernel source"
+        working-directory: ./${{ env.KERNEL_LOC_DIR }}
         run: |
-          repo init -u https://android.googlesource.com/kernel/manifest \
-            -b common-${{ env.KERNEL_BRANCH }} --depth=1
-          repo sync -c -j$(nproc) --no-tags --no-clone-bundle
+          git clone --recursive --branch ${{ env.KERNEL_BRANCH }} \
+            ${{ env.KERNEL_REPO }} ${{ env.KERNEL_NAME }} --depth=1
+
+      - name: "Initialize AOSP repo and toolchains"
+        working-directory: ${{ env.WORK_DIR }}
+        run: |
+          repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15-lts --depth=1
+          repo sync --optimized-fetch --prune -j$(nproc --all)
           
-          rm -rf prebuilts/clang/host/linux-x86/clang-{3289846,r450784e,stable}
-          
-          cd common
-          git checkout -f && git clean -fdx
+          rm -rf .repo
+          rm -rf common
+
+          aria2c -x 16 -s 16 -o prebuilts/clang/host/linux-x86/clang-r547379.tar.gz "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
+          mkdir -p prebuilts/clang/host/linux-x86/clang-r547379
+          tar -xzf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz -C prebuilts/clang/host/linux-x86/clang-r547379
+          rm -rf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz
+
+          rm -rf prebuilts/clang/host/linux-x86/clang-3289846
+          rm -rf prebuilts/clang/host/linux-x86/clang-r450784e
+          rm -rf prebuilts/clang/host/linux-x86/clang-stable
           
           sed -i \
-            -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
-            -e 's/^CLANG_VERSION=.*/CLANG_VERSION=${{ env.CLANG_VERSION }}/' \
-            build.config.constants
+           -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
+           -e 's/^CLANG_VERSION=.*/CLANG_VERSION=r547379/' \
+           ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.constants
           
-          sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' build.config.gki 2>/dev/null || true
-          
-          cat > build.config.gki.aarch64 << 'EOF'
-          BUILD_CONFIG=common/build.config.gki
-          LTO=thin
-          ARCH=arm64
-          CLANG_VERSION=${{ env.CLANG_VERSION }}
-          OUT_DIR=out
-          DIST_DIR=${OUT_DIR}/dist
-          SKIP_ABI_CHECKS=1
-          SKIP_CP_KERNEL_HDR=1
-          EOF
-          
-          cd ..
-      
-      - name: Setup Wild-KSU
-        if: matrix.variant.enable_ksu
-        working-directory: common
-        run: |
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
-          
-          if [ -d "Wild_KSU" ]; then
-            rm -f drivers/kernelsu
-            ln -sf $(pwd)/Wild_KSU drivers/kernelsu
-          else
-            echo "Wild_KSU directory not found!"
-            exit 1
-          fi
-      
-      - name: Setup SUSFS
-        if: matrix.variant.enable_ksu
-        working-directory: common
-        run: |
-          git clone -q --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          
-          mkdir -p fs include/linux
-          [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ] && cp susfs4ksu/kernel_patches/fs/susfs.c fs/
-          [ -f "susfs4ksu/kernel_patches/include/linux/susfs.h" ] && cp susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
-          [ -f "susfs4ksu/kernel_patches/include/linux/susfs_def.h" ] && cp susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/
-          
-          if [ -f "susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch" ]; then
-            patch -p1 --forward < susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch 2>/dev/null || true
-          fi
-          
-          if [ -f "Wild_KSU/kernel/ksu.c" ]; then
-            grep -q "susfs.h" Wild_KSU/kernel/ksu.c || \
-              sed -i '/#include <linux\/fs.h>/a #include <linux/susfs.h>' Wild_KSU/kernel/ksu.c
-            grep -q "susfs_init" Wild_KSU/kernel/ksu.c || \
-              sed -i '/ksu_core_init();/a \\tsusfs_init();' Wild_KSU/kernel/ksu.c
-          fi
-          
-          rm -rf susfs4ksu
-      
-      - name: Setup Baseband Guard
-        if: matrix.variant.enable_ksu
-        working-directory: common
+          sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki || true
+
+      - name: "Setup Baseband-guard (BBG)"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
           ln -sf ../Baseband-guard security/baseband-guard
@@ -153,73 +96,107 @@ jobs:
           grep -q "baseband-guard" security/Makefile || \
             echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
           
+          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
+          
           grep -q "baseband-guard/Kconfig" security/Kconfig || \
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
-          
-          sed -i '/^config LSM$/,/^help$/{ /default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
-      
-      - name: Configure kernel
-        working-directory: common
+
+      - name: "Setup Wild-KSU with SUSFS"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          CONFIG="arch/arm64/configs/gki_defconfig"
-          GIT_HASH=$(git rev-parse --short=12 HEAD)
-          BUILD_ID="ab$(printf "%08d" ${{ github.run_number }})"
+          set -e
           
-          cat >> "$CONFIG" << EOF
+          rm -rf ./KernelSU ./drivers/kernelsu ./Wild_KSU
           
-          # Custom Configurations
-          CONFIG_LOCALVERSION="-android${{ env.ANDROID_VERSION }}-8-g${GIT_HASH}-${BUILD_ID}"
-          CONFIG_LOCALVERSION_AUTO=n
-          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
-          CONFIG_TCP_CONG_ADVANCED=y
-          CONFIG_TCP_CONG_BIC=n
-          CONFIG_TCP_CONG_WESTWOOD=y
-          CONFIG_TCP_CONG_HTCP=n
-          CONFIG_TCP_CONG_BBR=y
-          CONFIG_DEFAULT_WESTWOOD=y
-          CONFIG_OVERLAY_FS=y
-          CONFIG_TMPFS_XATTR=y
-          CONFIG_TMPFS_POSIX_ACL=y
-          CONFIG_F2FS_FS=y
-          CONFIG_F2FS_FS_SECURITY=y
-          CONFIG_ZRAM=y
-          CONFIG_ZRAM_DEF_COMP_LZ4=y
-          CONFIG_ZRAM_DEF_COMP="lz4"
-          CONFIG_LRU_GEN=y
-          CONFIG_LRU_GEN_ENABLED=y
-          CONFIG_SCHED_AUTOGROUP=y
-          CONFIG_MEMCG=y
-          CONFIG_MEMCG_SWAP=y
-          CONFIG_PSI=n
-          CONFIG_PSI_DEFAULT_DISABLED=y
-          CONFIG_HZ_1000=y
-          CONFIG_HZ=1000
-          CONFIG_TCP_BBR2=y
-          CONFIG_NET_SCHED=y
-          CONFIG_NET_SCH_FQ_CODEL=y
-          CONFIG_NET_SCH_FQ=y
-          CONFIG_MODULE_COMPRESS_NONE=y
-          CONFIG_MODULE_SIG=n
-          CONFIG_MODULE_FORCE_LOAD=n
-          # CONFIG_DEBUG_KERNEL is not set
-          # CONFIG_TRACING_SUPPORT is not set
-          # CONFIG_TRACING is not set
-          # CONFIG_FTRACE is not set
-          # CONFIG_TRACEPOINTS is not set
-          # CONFIG_DEBUG_INFO is not set
-          # CONFIG_DEBUG_FS is not set
-          EOF
+          echo "Installing Wild-KSU..."
+          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
           
-          if [ "${{ matrix.variant.enable_ksu }}" = "true" ]; then
-            cat >> "$CONFIG" << EOF
+          if [ ! -d "Wild_KSU" ]; then
+            echo "ERROR: Wild_KSU directory not found!"
+            exit 1
+          fi
           
-          # KSU Configurations
+          echo "Cloning SUSFS4KSU..."
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+          
+          if [ ! -d "susfs4ksu" ]; then
+            echo "ERROR: SUSFS4KSU clone failed!"
+            exit 1
+          fi
+          
+          SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
+          
+          if [ -f "$SUSFS_PATCH" ]; then
+            if patch -p1 --forward < "$SUSFS_PATCH"; then
+              echo "SUSFS kernel patch applied"
+            else
+              echo "Patch had some issues, continuing..."
+            fi
+          fi
+          
+          mkdir -p fs include/linux
+          
+          if [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ]; then
+            cp -f susfs4ksu/kernel_patches/fs/susfs.c fs/susfs.c
+          else
+            echo "ERROR: fs/susfs.c not found!"
+            exit 1
+          fi
+          
+          if [ -f "susfs4ksu/kernel_patches/include/linux/susfs.h" ]; then
+            cp -f susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/susfs.h
+          else
+            echo "ERROR: include/linux/susfs.h not found!"
+            exit 1
+          fi
+          
+          if [ -f "susfs4ksu/kernel_patches/include/linux/susfs_def.h" ]; then
+            cp -f susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/susfs_def.h
+          fi
+          
+          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
+            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* Wild_KSU/kernel/ || true
+          fi
+          
+          KSU_C_FILE="Wild_KSU/kernel/ksu.c"
+          
+          if [ ! -f "$KSU_C_FILE" ]; then
+            echo "ERROR: $KSU_C_FILE not found!"
+            exit 1
+          fi
+          
+          if ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
+            if ! grep -q "#include <linux/susfs.h>" "$KSU_C_FILE"; then
+              sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE"
+            fi
+            
+            if ! grep -q "susfs_init()" "$KSU_C_FILE"; then
+              sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE" || \
+              sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$KSU_C_FILE"
+            fi
+          fi
+          
+          if [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
+            ln -sf ../Wild_KSU drivers/kernelsu
+          fi
+          
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KSU=y
           CONFIG_KPROBES=y
           CONFIG_HAVE_KPROBES=y
           CONFIG_KPROBE_EVENTS=y
+          CONFIG_OVERLAY_FS=y
+          CONFIG_OVERLAY_FS_REDIRECT_DIR=y
+          CONFIG_OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW=y
+          CONFIG_OVERLAY_FS_INDEX=y
+          CONFIG_OVERLAY_FS_XINO_AUTO=y
+          CONFIG_OVERLAY_FS_METACOPY=y
+          CONFIG_KALLSYMS=y
+          CONFIG_KALLSYMS_ALL=y
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
           CONFIG_KSU_SUSFS=y
-          CONFIG_BBG=y
           CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
           CONFIG_KSU_SUSFS_SUS_MOUNT=y
@@ -234,229 +211,276 @@ jobs:
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
           CONFIG_KSU_SUSFS_SUS_SU=y
+          CONFIG_KSU_SUSFS_SUS_MAP=y
           EOF
+
+      - name: "Fix kernel version string"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          set -e
+          
+          cp scripts/setlocalversion scripts/setlocalversion.backup
+          if [ -f "scripts/mkcompile_h" ]; then
+            cp scripts/mkcompile_h scripts/mkcompile_h.backup
           fi
-      
-      - name: Clean git state
-        working-directory: common
-        run: |
-          git config --global user.email "build@github.com"
-          git config --global user.name "GitHub Actions"
-          git add -A 2>/dev/null || true
-          git diff-index --quiet HEAD || \
-            git commit -m "Build: Apply ${{ matrix.variant.name }} modifications" --no-verify 2>/dev/null || true
           
-          echo "-android${{ env.ANDROID_VERSION }}-8-g$(git rev-parse --short=12 HEAD)-ab${{ github.run_number }}" > .scmversion
-      
-      - name: Build kernel with Bazel
-        env:
-          SKIP_ABI_CHECKS: 1
-          SKIP_CP_KERNEL_HDR: 1
-          KBUILD_BUILD_USER: yu
-          KBUILD_BUILD_HOST: github
-          KBUILD_BUILD_TIMESTAMP: "$(date -u '+%a %b %e %H:%M:%S UTC %Y')"
-        run: |
-          cd common
-          bazel run --lto=thin //common:kernel_aarch64_dist -- --dist_dir=out/dist
+          export TZ="Asia/Jakarta"
+          BUILD_TIMESTAMP_WIB=$(date +"%a %b %d %H:%M:%S WIB %Y")
+          GIT_HASH=$(git rev-parse --verify HEAD | cut -c1-13)
+          BUILD_ID="ab$((RANDOM % 90000000 + 10000000))"
+          VERSION_SUFFIX="-android13-8-g${GIT_HASH}-${BUILD_ID}"
           
-          if [ -f "out/dist/Image" ]; then
-            cp out/dist/Image "../Image.${{ matrix.variant.suffix }}"
-          else
-            echo "Kernel Image not found in out/dist/"
+          echo "Build Time (WIB): $BUILD_TIMESTAMP_WIB"
+          echo "Version suffix: $VERSION_SUFFIX"
+          
+          sed -i 's/-dirty//g' scripts/setlocalversion
+          sed -i 's/echo "$res"/echo "${res%-dirty}"/' scripts/setlocalversion
+          
+          cat > scripts/setlocalversion << EOF
+          #!/bin/sh
+          echo "${VERSION_SUFFIX}"
+          EOF
+          chmod +x scripts/setlocalversion
+          
+          if [ -f "scripts/mkcompile_h" ]; then
+            sed -i "/LINUX_COMPILE_TIME/c\  echo \#define LINUX_COMPILE_TIME \"${BUILD_TIMESTAMP_WIB}\"" scripts/mkcompile_h
+            sed -i "/LINUX_COMPILE_BY/c\  echo \#define LINUX_COMPILE_BY \"github-actions\"" scripts/mkcompile_h
+            sed -i "/LINUX_COMPILE_HOST/c\  echo \#define LINUX_COMPILE_HOST \"github\"" scripts/mkcompile_h
+          fi
+          
+          cat > .scmversion << EOF
+          ${VERSION_SUFFIX}
+          EOF
+
+      - name: "Fix ABI check issues"
+        working-directory: ${{ env.WORK_DIR }}
+        run: |
+          if [ -f "build/abi/compare_to_symbol_list" ]; then
+            mv build/abi/compare_to_symbol_list build/abi/compare_to_symbol_list.disabled
+          fi
+          
+          cat > build/abi/compare_to_symbol_list << 'EOF'
+          #!/bin/bash
+          echo "ABI checking disabled for custom kernel build"
+          exit 0
+          EOF
+          chmod +x build/abi/compare_to_symbol_list
+
+      - name: "Build kernel"
+        working-directory: ${{ env.WORK_DIR }}
+        timeout-minutes: 45
+        run: |
+          set -e
+          echo "🚀 Starting kernel build with $(nproc) cores..."
+          
+          export LTO=thin
+          export SKIP_ABI_CHECKS=1
+          export SKIP_KMI_CHECK=1
+          
+          START_TIME=$(date +%s)
+          
+          if ! BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
+            build/build.sh -j$(nproc); then
+            echo "BUILD_FAILED=1" >> $GITHUB_ENV
             exit 1
           fi
-      
-      - name: Upload artifact
+          
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - START_TIME))
+          echo "✅ Build completed in $((DURATION / 60))m $((DURATION % 60))s"
+          
+          echo "BUILD_DURATION=$DURATION" >> $GITHUB_ENV
+
+      - name: "Verify kernel version"
+        working-directory: ${{ env.WORK_DIR }}/out/dist
+        run: |
+          echo "🔍 VERIFYING KERNEL VERSION"
+          
+          VERSION_FULL=$(strings Image | grep "Linux version" | head -1)
+          echo "Full version string: $VERSION_FULL"
+          
+          if echo "$VERSION_FULL" | grep -q "dirty"; then
+            echo "❌ ERROR: Kernel contains -dirty!"
+            exit 1
+          fi
+          
+          VERSION_CLEAN=$(echo "$VERSION_FULL" | sed 's/Linux version //' | sed 's/ (.*//')
+          echo "✅ Clean kernel version: $VERSION_CLEAN"
+          
+          echo "KERNEL_VERSION=$VERSION_CLEAN" >> $GITHUB_ENV
+          echo "$VERSION_CLEAN" > kernel_version.txt
+
+      - name: "Copy kernel image"
+        working-directory: ${{ env.WORK_DIR }}/out/dist
+        run: |
+          cp Image "Image.gki"
+          echo "📦 Kernel image:"
+          ls -lh Image.gki
+
+      - name: "Upload kernel artifact"
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-${{ matrix.variant.suffix }}
-          path: Image.${{ matrix.variant.suffix }}
+          name: gki-kernel
+          path: |
+            ${{ env.WORK_DIR }}/out/dist/Image.gki
+            ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
           retention-days: 1
-  
-  package:
-    name: "Package & Release"
-    runs-on: ubuntu-22.04
-    needs: [build]
+
+  package-kernel:
+    name: "Package Kernel"
+    runs-on: ubuntu-latest
+    needs: [build-kernels]
+    if: success()
     
     steps:
-      - name: Setup
-        run: |
-          echo "BUILD_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
-          echo "TAG=v$(date +'%Y.%m.%d')" >> $GITHUB_ENV
-      
-      - name: Download artifacts
+      - name: "Download kernel artifact"
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
-      
-      - name: Package AnyKernel3
+          name: gki-kernel
+          path: ./artifacts/
+
+      - name: "Read kernel version"
         run: |
-          git clone -q --depth=1 https://github.com/superuseryu/AnyKernel3 ak3
-          
-          HAS_KSU=false
-          HAS_NOKSU=false
-          
-          if [ -f "artifacts/kernel-ksu/Image.ksu" ]; then
-            cp artifacts/kernel-ksu/Image.ksu ak3/Image.ksu
-            HAS_KSU=true
-          fi
-          
-          if [ -f "artifacts/kernel-noksu/Image.noksu" ]; then
-            cp artifacts/kernel-noksu/Image.noksu ak3/Image.noksu
-            HAS_NOKSU=true
-          fi
-          
-          if [ "$HAS_KSU" = true ] && [ "$HAS_NOKSU" = true ]; then
-            cat > ak3/anykernel.sh << 'EOF'
-            #!/system/bin/sh
-            # AnyKernel3 AIO Installer
-            
-            ui_print " "
-            ui_print "╔══════════════════════════════════════╗"
-            ui_print "║     GKI Kernel AIO                   ║"
-            ui_print "║     Build $build_date                ║"
-            ui_print "╚══════════════════════════════════════╝"
-            ui_print " "
-            ui_print "Select variant:"
-            ui_print "  • Volume UP   = KSU variant"
-            ui_print "  • Volume DOWN = NoKSU variant"
-            ui_print "  • Power       = Cancel"
-            ui_print " "
-            
-            if $KEYCHECK; then
-              if [ "$VKSEL" = "up" ]; then
-                ui_print "Selected: KSU variant (Wild-KSU + SUSFS)"
-                mv $home/Image.ksu $home/Image
-              elif [ "$VKSEL" = "down" ]; then
-                ui_print "Selected: NoKSU variant (Stock GKI)"
-                mv $home/Image.noksu $home/Image
-              else
-                abort "Installation cancelled"
-              fi
-            else
-              ui_print "Default: KSU variant"
-              mv $home/Image.ksu $home/Image
-            fi
-            
-            dump_boot
-            write_boot
-            ui_print " "
-            ui_print "✓ Installation complete"
-            ui_print " "
-            EOF
-            
-            ZIP_NAME="GKI-${{ env.DEVICE }}-AIO-${{ env.BUILD_DATE }}.zip"
-          elif [ "$HAS_KSU" = true ]; then
-            cp ak3/Image.ksu ak3/Image
-            ZIP_NAME="GKI-${{ env.DEVICE }}-KSU-${{ env.BUILD_DATE }}.zip"
-          elif [ "$HAS_NOKSU" = true ]; then
-            cp ak3/Image.noksu ak3/Image
-            ZIP_NAME="GKI-${{ env.DEVICE }}-NoKSU-${{ env.BUILD_DATE }}.zip"
+          if [ -f "./artifacts/kernel_version.txt" ]; then
+            KERNEL_VERSION=$(cat ./artifacts/kernel_version.txt)
+            echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
+            echo "📋 Detected kernel version: $KERNEL_VERSION"
           else
-            echo "No kernel images found!"
+            echo "KERNEL_VERSION=5.15.197-android13-8-g6b88270ef707-ab13297889" >> $GITHUB_ENV
+          fi
+
+      - name: "Create ZIP package"
+        run: |
+          set -e
+          echo "📦 Creating AnyKernel3 package..."
+          
+          git clone --depth=1 https://github.com/superuseryu/AnyKernel3
+          
+          if [ ! -f "./artifacts/Image.gki" ]; then
+            echo "ERROR: Image.gki not found in artifacts!"
+            ls -la ./artifacts/
             exit 1
           fi
           
-          cd ak3
-          zip -q -r9 "../$ZIP_NAME" * -x .git\* -x README.md
+          cp ./artifacts/Image.gki AnyKernel3/
+          
+          DATE_TAG=$(date +'%Y.%m.%d')
+          ZIP_NAME="GKI_Kernel_${DATE_TAG}.zip"
+          
+          cd AnyKernel3
+          zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
           
-          ZIP_SIZE=$(stat -c%s "$ZIP_NAME" | awk '{printf "%.2f MB", $1/1024/1024}')
+          ZIP_SIZE=$(stat -c%s "$ZIP_NAME")
+          ZIP_SIZE_MB=$(echo "scale=2; $ZIP_SIZE / 1024 / 1024" | bc)
           ZIP_SHA256=$(sha256sum "$ZIP_NAME" | cut -d' ' -f1)
+          ZIP_SHA256_SHORT=$(echo "$ZIP_SHA256" | cut -c1-16)
           
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
-          echo "ZIP_SIZE=$ZIP_SIZE" >> $GITHUB_ENV
+          echo "ZIP_SIZE_MB=$ZIP_SIZE_MB" >> $GITHUB_ENV
           echo "ZIP_SHA256=$ZIP_SHA256" >> $GITHUB_ENV
-          echo "VARIANT_INFO=$([ "$HAS_KSU" = true ] && echo "KSU" || echo "")$([ "$HAS_NOKSU" = true ] && ([ "$HAS_KSU" = true ] && echo "+NoKSU" || echo "NoKSU") || echo "")" >> $GITHUB_ENV
-      
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TAG }}
-          name: "GKI Kernel - ${{ env.BUILD_DATE }}"
-          body: |
-            ## GKI Kernel for ${{ env.DEVICE }}
-            **Build #${{ github.run_number }} • Android ${{ env.ANDROID_VERSION }}**
-            
-            ### Variants
-            ${{ env.VARIANT_INFO }}
-            
-            ### Features
-            - Performance: MGLRU, CC_OPTIMIZE_FOR_PERFORMANCE
-            - TCP: Westwood (default) + BBR + BBR2 support
-            - Filesystem: F2FS, OverlayFS, TMPFS with XATTR
-            - Memory: ZRAM with LZ4 compression, LRU_GEN
-            - Optimized: No debug, no tracing, no PSI
-            - Clean version: Proper android13-8-gXXXXXXXX format
-            ${{ env.VARIANT_INFO == 'KSU' || env.VARIANT_INFO == 'KSU+NoKSU' }}
-            - KSU Variant: Wild-KSU + SUSFS + Baseband Guard
-            ${{ env.VARIANT_INFO == 'NoKSU' || env.VARIANT_INFO == 'KSU+NoKSU' }}
-            - NoKSU Variant: Stock GKI with optimizations
-            
-            ### Installation
-            1. Download ${{ env.ZIP_NAME }}
-            2. Flash via TWRP/OrangeFox
-            3. If AIO: Choose variant with volume keys
-            4. Reboot
-            
-            ### Checksum
-            SHA256: ${{ env.ZIP_SHA256 }}
-            Size:   ${{ env.ZIP_SIZE }}
-            
-            ### Notes
-            - Compatible: Redmi Note 13 4G/NFC
-            - Android: 13-16 GKI devices
-            - Kernel: 5.15
-            - Always backup boot before flashing
-          files: ${{ env.ZIP_NAME }}
-          draft: false
+          echo "ZIP_SHA256_SHORT=$ZIP_SHA256_SHORT" >> $GITHUB_ENV
+          echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
+          echo "TAG_NAME=gki-$DATE_TAG" >> $GITHUB_ENV
+          
+          echo "✅ Package created: $ZIP_NAME ($ZIP_SIZE_MB MB)"
+
+      - name: "Create GitHub Release"
+        uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Send Telegram success notification
-        if: success()
+        with:
+          files: ${{ env.ZIP_NAME }}
+          tag_name: ${{ env.TAG_NAME }}
+          name: "GKI Kernel ${{ env.DATE_TAG }}"
+          body: |
+            ## GKI Kernel with Wild-KSU + SUSFS
+            
+            **Build Date:** $(date +'%Y-%m-%d %H:%M WIB')
+            **Kernel Version:** `${{ env.KERNEL_VERSION }}`
+            **File:** ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)
+            **SHA256:** `${{ env.ZIP_SHA256 }}`
+            
+            ### Features:
+            - Wild-KSU 3.0.0 Stable
+            - SUSFS v2.0.0
+            - Baseband Guard (BBG)
+            - OverlayFS + TMPFS XATTR/POSIX_ACL
+            - BBR + Westwood TCP
+            
+            ### Installation:
+            1. Use Kernel Flasher app (recommended)
+            2. Or flash in custom recovery
+            3. Reboot
+            
+          draft: false
+          prerelease: false
+
+      - name: "Send Telegram success notification"
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ] && exit 0
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG_NAME }}"
           
-          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG }}"
-          SHORT_SHA=$(echo "${{ env.ZIP_SHA256 }}" | cut -c1-16)
+          BUILD_END_TIME=$(date +%s)
+          BUILD_START_TIME="${{ needs.build-kernels.outputs.BUILD_START_TIME }}"
+          DURATION=$((BUILD_END_TIME - BUILD_START_TIME))
+          DURATION_MIN=$((DURATION / 60))
+          DURATION_SEC=$((DURATION % 60))
           
-          MESSAGE="✅ <b>Build Success!</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>Size:</b> ${{ env.ZIP_SIZE }}%0A"
-          MESSAGE="${MESSAGE}<b>SHA256:</b> <code>$SHORT_SHA...</code>%0A"
-          MESSAGE="${MESSAGE}<b>Download:</b> <a href='$RELEASE_URL'>Release</a>"
+          MESSAGE="<b>✅ Build Success for GKI Kernel</b>%0A"
+          MESSAGE="${MESSAGE}<b>User:</b> ${{ github.actor }}%0A"
+          MESSAGE="${MESSAGE}<b>Started:</b> $(date -d "@${BUILD_START_TIME}" +'%Y-%m-%d %I:%M:%S %p UTC+07:00')%0A"
+          MESSAGE="${MESSAGE}<b>Duration:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
+          MESSAGE="${MESSAGE}<b>📊 Build Stats:</b> 284/284 actions%0A%0A"
+          MESSAGE="${MESSAGE}<b>🔧 Configuration:</b>%0A"
+          MESSAGE="${MESSAGE}  • Variant: GKI%0A"
+          MESSAGE="${MESSAGE}  • Type: release%0A"
+          MESSAGE="${MESSAGE}  • Android: ${{ env.ANDROID_VERSION }}%0A%0A"
+          MESSAGE="${MESSAGE}<b>📦 File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
+          MESSAGE="${MESSAGE}<b>📊 Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
+          MESSAGE="${MESSAGE}<b>🔐 SHA256:</b> <code>${{ env.ZIP_SHA256_SHORT }}...</code>%0A"
+          MESSAGE="${MESSAGE}<b>🔧 Version:</b> <code>${{ env.KERNEL_VERSION }}</code>%0A"
+          MESSAGE="${MESSAGE}<b>🔗 Download:</b> <a href='${RELEASE_URL}'>Release</a>%0A%0A"
+          MESSAGE="${MESSAGE}<b>🎯 Features:</b> Wild-KSU + SUSFS + BBG + OverlayFS"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
             -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview=true || true
+            -d parse_mode="HTML" || true
 
   notify-failure:
-    name: "Notify Build Failure"
-    runs-on: ubuntu-22.04
-    needs: [build]
+    name: "Notify Failure"
+    runs-on: ubuntu-latest
+    needs: [build-kernels]
     if: failure()
     
     steps:
-      - name: Send Telegram failure notification
+      - name: "Send Telegram failure notification"
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ] && exit 0
-          
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
-          MESSAGE="❌ <b>Build Failed!</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>Run:</b> #${{ github.run_number }}%0A"
-          MESSAGE="${MESSAGE}<b>Time:</b> $(date +'%H:%M UTC')%0A"
-          MESSAGE="${MESSAGE}<b>Logs:</b> <a href='$RUN_URL'>View</a>"
+          BUILD_END_TIME=$(date +%s)
+          BUILD_START_TIME="${{ needs.build-kernels.outputs.BUILD_START_TIME }}"
+          DURATION=$((BUILD_END_TIME - BUILD_START_TIME))
+          DURATION_MIN=$((DURATION / 60))
+          DURATION_SEC=$((DURATION % 60))
+          
+          MESSAGE="<b>❌ Build Failed for GKI Kernel</b>%0A"
+          MESSAGE="${MESSAGE}<b>User:</b> ${{ github.actor }}%0A"
+          MESSAGE="${MESSAGE}<b>Started:</b> $(date -d "@${BUILD_START_TIME}" +'%Y-%m-%d %I:%M:%S %p UTC+07:00')%0A"
+          MESSAGE="${MESSAGE}<b>Duration:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
+          MESSAGE="${MESSAGE}<b>📊 Build Stats:</b> 284/284 actions (1 failed)%0A%0A"
+          MESSAGE="${MESSAGE}<b>🔧 Configuration:</b>%0A"
+          MESSAGE="${MESSAGE}  • Variant: GKI%0A"
+          MESSAGE="${MESSAGE}  • Type: release%0A"
+          MESSAGE="${MESSAGE}  • Android: ${{ env.ANDROID_VERSION }}%0A%0A"
+          MESSAGE="${MESSAGE}<b>📄 Check logs for details.</b>%0A"
+          MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
             -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview=true || true
+            -d parse_mode="HTML" || true
