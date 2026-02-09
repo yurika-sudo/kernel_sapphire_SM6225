@@ -1,4 +1,4 @@
-name: Build GKI Kernel - Fixed
+name: Build GKI Kernel - Simple & Clean
 
 on:
   workflow_dispatch:
@@ -41,23 +41,11 @@ jobs:
       - name: Setup environment
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          sudo apt-get update -qq && sudo apt-get install -y \
+          sudo apt-get update -qq
+          sudo apt-get install -y \
             bc bison flex libssl-dev libelf-dev build-essential \
-            zip git curl aria2 repo jq python3 make gcc ccache \
-            libncurses-dev gawk rsync
-      
-      - name: Setup ccache
-        uses: actions/cache@v3
-        with:
-          path: ~/.ccache
-          key: ccache-${{ github.run_id }}
-          restore-keys: ccache-
-      
-      - name: Initialize ccache
-        run: |
-          mkdir -p ~/.ccache
-          ccache -M 2G
-          ccache -z
+            zip git curl aria2 repo jq python3 \
+            libncurses-dev gawk rsync wget
       
       - name: Send Telegram notification
         run: |
@@ -68,8 +56,7 @@ jobs:
           MESSAGE="🚀 <b>Kernel Build Started</b>%0A%0A"
           MESSAGE="${MESSAGE}<b>Variant:</b> ${{ matrix.variant.name }}%0A"
           MESSAGE="${MESSAGE}<b>Run:</b> #${{ github.run_number }}%0A"
-          MESSAGE="${MESSAGE}<b>Time:</b> $(date +'%H:%M')%0A"
-          MESSAGE="${MESSAGE}<b>Trigger:</b> ${{ github.event_name }}"
+          MESSAGE="${MESSAGE}<b>Time:</b> $(date +'%H:%M')"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -99,39 +86,25 @@ jobs:
           git checkout -f && git clean -fdx
           
           # Update build config
-          sed -i -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
-                 -e 's/^CLANG_VERSION=.*/CLANG_VERSION=${{ env.CLANG_VERSION }}/' \
-                 build.config.constants
+          sed -i \
+            -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
+            -e 's/^CLANG_VERSION=.*/CLANG_VERSION=${{ env.CLANG_VERSION }}/' \
+            build.config.constants
           
-          # === FIX 1: Bypass ALL ABI checks ===
-          echo "Disabling all ABI checks..."
+          # === DISABLE ALL ABI CHECKS ===
+          echo "Disabling ABI checks..."
           
-          # Comment out ALL ABI related lines in build.config.gki.aarch64
-          sed -i '/^ABI_DEFINITION=/s/^/#/' build.config.gki.aarch64
-          sed -i '/^KMI_SYMBOL_LIST=/s/^/#/' build.config.gki.aarch64
-          sed -i '/^ADDITIONAL_KMI_SYMBOL_LISTS=/s/^/#/' build.config.gki.aarch64
-          sed -i '/^TRIM_NONLISTED_KMI=/s/^/#/' build.config.gki.aarch64
-          sed -i '/^GKI_MODULES_LIST=/s/^/#/' build.config.gki.aarch64
+          # Remove check_defconfig from build.config.gki
+          sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' build.config.gki 2>/dev/null || true
           
-          # Add override flags at the END of file
+          # Add skip flags to build.config.gki.aarch64
           echo '' >> build.config.gki.aarch64
-          echo '# ===== MANUAL OVERRIDE =====' >> build.config.gki.aarch64
+          echo '# Skip ABI checks' >> build.config.gki.aarch64
           echo 'SKIP_ABI_CHECKS=1' >> build.config.gki.aarch64
           echo 'SKIP_CP_KERNEL_HDR=1' >> build.config.gki.aarch64
           echo 'ABI_DEFINITION=' >> build.config.gki.aarch64
           echo 'KMI_SYMBOL_LIST=' >> build.config.gki.aarch64
           echo 'ADDITIONAL_KMI_SYMBOL_LISTS=' >> build.config.gki.aarch64
-          echo 'GKI_MODULES_LIST=' >> build.config.gki.aarch64
-          
-          # Remove POST_DEFCONFIG_CMDS
-          sed -i '/^POST_DEFCONFIG_CMDS=/d' build.config.gki
-          
-          # Create dummy ABI files to avoid "file not found"
-          mkdir -p android
-          for file in abi_gki_aarch64 abi_gki_aarch64_virtual_device abi_gki_aarch64_db845c abi_symbollist.raw; do
-            touch android/$file
-            echo "# Dummy file - ABI checks disabled" > android/$file
-          done
           
           cd ..
       
@@ -196,122 +169,135 @@ jobs:
           
           echo "✓ Baseband Guard setup complete"
       
-      - name: Clean git state (prevent -dirty)
+      - name: Configure Kernel
         working-directory: common
         run: |
-          git config --global user.email "build@github.com"
-          git config --global user.name "GitHub Actions"
-          git add -A 2>/dev/null || true
-          git diff-index --quiet HEAD || \
-            git commit -m "Build: Apply modifications" --no-verify 2>/dev/null || true
+          CONFIG="arch/arm64/configs/gki_defconfig"
           
-          # Create .scmversion to control version string
-          echo "-android${{ env.ANDROID_VERSION }}-8-00000-g$(git rev-parse --short=12 HEAD)-ab${{ github.run_number }}" > .scmversion
-          
-          echo "✓ Git state cleaned"
-      
-      - name: Configure kernel via Kconfig
-        working-directory: common
-        env:
-          PATH: ${{ github.workspace }}/prebuilts/clang/host/linux-x86/clang-${{ env.CLANG_VERSION }}/bin:$PATH
-        run: |
-          # Create initial config
-          make O=out ARCH=arm64 CC=clang gki_defconfig
-          
-          # Use scripts/config to modify
-          CONFIG_TOOL="./scripts/config"
-          
-          # === Performance optimizations ===
-          $CONFIG_TOOL --file out/.config -e CC_OPTIMIZE_FOR_PERFORMANCE
-          $CONFIG_TOOL --file out/.config -e LRU_GEN
-          $CONFIG_TOOL --file out/.config -e LRU_GEN_ENABLED
-          $CONFIG_TOOL --file out/.config -d LRU_GEN_STATS
-          
-          # === TCP Congestion Control ===
-          $CONFIG_TOOL --file out/.config -e TCP_CONG_ADVANCED
-          $CONFIG_TOOL --file out/.config -e TCP_CONG_WESTWOOD
-          $CONFIG_TOOL --file out/.config -e TCP_CONG_BBR
-          $CONFIG_TOOL --file out/.config -d TCP_CONG_BIC
-          $CONFIG_TOOL --file out/.config -d TCP_CONG_HTCP
-          $CONFIG_TOOL --file out/.config -e DEFAULT_WESTWOOD
-          $CONFIG_TOOL --file out/.config -d DEFAULT_CUBIC
-          $CONFIG_TOOL --file out/.config -d DEFAULT_BBR
-          $CONFIG_TOOL --file out/.config --set-str DEFAULT_TCP_CONG "westwood"
-          
-          # === Filesystem support ===
-          $CONFIG_TOOL --file out/.config -e OVERLAY_FS
-          $CONFIG_TOOL --file out/.config -e TMPFS_XATTR
-          $CONFIG_TOOL --file out/.config -e TMPFS_POSIX_ACL
-          $CONFIG_TOOL --file out/.config -e F2FS_FS
-          $CONFIG_TOOL --file out/.config -e F2FS_FS_SECURITY
-          
-          # === Memory/ZRAM ===
-          $CONFIG_TOOL --file out/.config -e ZRAM
-          $CONFIG_TOOL --file out/.config -e ZRAM_DEF_COMP_LZ4
-          $CONFIG_TOOL --file out/.config --set-str ZRAM_DEF_COMP "lz4"
-          
-          # === Disable debug/tracing ===
-          $CONFIG_TOOL --file out/.config -d DEBUG_KERNEL
-          $CONFIG_TOOL --file out/.config -d DEBUG_INFO
-          $CONFIG_TOOL --file out/.config -d DEBUG_FS
-          $CONFIG_TOOL --file out/.config -d TRACING_SUPPORT
-          $CONFIG_TOOL --file out/.config -d TRACING
-          $CONFIG_TOOL --file out/.config -d FTRACE
-          $CONFIG_TOOL --file out/.config -d TRACEPOINTS
-          $CONFIG_TOOL --file out/.config -d PSI
-          $CONFIG_TOOL --file out/.config -d PSI_DEFAULT_DISABLED
-          
-          # === KSU specific ===
-          if [ "${{ matrix.variant.enable_ksu }}" = "true" ]; then
-            $CONFIG_TOOL --file out/.config -e KSU
-            $CONFIG_TOOL --file out/.config -e KSU_SUSFS
-            $CONFIG_TOOL --file out/.config -e BBG
-            $CONFIG_TOOL --file out/.config -e KPROBES
-          else
-            $CONFIG_TOOL --file out/.config -d KSU
-            $CONFIG_TOOL --file out/.config -d KSU_SUSFS
-            $CONFIG_TOOL --file out/.config -d BBG
-          fi
-          
-          # === Set proper LOCALVERSION ===
-          # Get actual git hash
+          # Get git info for version
           GIT_HASH=$(git rev-parse --short=12 HEAD)
           BUILD_ID="ab$(printf "%08d" ${{ github.run_number }})"
-          LOCAL_VER="-android${{ env.ANDROID_VERSION }}-8-g${GIT_HASH}-${BUILD_ID}"
           
-          $CONFIG_TOOL --file out/.config --set-str LOCALVERSION "$LOCAL_VER"
-          echo "LOCALVERSION=$LOCAL_VER" >> $GITHUB_ENV
+          # Set LOCALVERSION and disable auto versioning
+          echo "CONFIG_LOCALVERSION=\"-android${{ env.ANDROID_VERSION }}-8-g${GIT_HASH}-${BUILD_ID}\"" >> "$CONFIG"
+          echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG"
           
-          # Finalize config
-          make O=out ARCH=arm64 CC=clang olddefconfig
+          # Common configs for ALL variants
+          cat >> "$CONFIG" << 'EOF'
+          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_BIC=n
+          CONFIG_TCP_CONG_WESTWOOD=y
+          CONFIG_TCP_CONG_HTCP=n
+          CONFIG_TCP_CONG_BBR=y
+          CONFIG_DEFAULT_WESTWOOD=y
+          CONFIG_OVERLAY_FS=y
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          CONFIG_F2FS_FS=y
+          CONFIG_F2FS_FS_SECURITY=y
+          CONFIG_F2FS_FS_ENCRYPTION=y
+          CONFIG_ZRAM=y
+          CONFIG_ZRAM_DEF_COMP_LZ4=y
+          CONFIG_ZRAM_DEF_COMP="lz4"
+          CONFIG_LRU_GEN=y
+          CONFIG_LRU_GEN_ENABLED=y
+          CONFIG_SCHED_AUTOGROUP=y
+          CONFIG_SCHED_TUNE=y
+          CONFIG_MEMCG=y
+          CONFIG_MEMCG_SWAP=y
+          CONFIG_PSI=n
+          CONFIG_PSI_DEFAULT_DISABLED=y
+          CONFIG_HZ_1000=y
+          CONFIG_HZ=1000
+          CONFIG_TCP_BBR2=y
+          CONFIG_NET_SCHED=y
+          CONFIG_NET_SCH_FQ_CODEL=y
+          CONFIG_NET_SCH_FQ=y
+          CONFIG_MODULE_COMPRESS_NONE=y
+          CONFIG_MODULE_SIG=n
+          CONFIG_MODULE_FORCE_LOAD=n
+          EOF
           
-          echo "✓ Kernel configuration complete"
-      
-      - name: Verify config
-        working-directory: common
-        run: |
-          echo "=== Configuration Verification ==="
-          echo "LOCALVERSION: $(grep 'CONFIG_LOCALVERSION=' out/.config || echo 'Not found')"
-          echo "TCP Westwood: $(grep 'CONFIG_DEFAULT_WESTWOOD' out/.config || echo 'Not found')"
-          echo "MGLRU: $(grep 'CONFIG_LRU_GEN' out/.config || echo 'Not found')"
-          echo "KSU: $(grep 'CONFIG_KSU' out/.config || echo 'Not found')"
-          echo "Debug: $(grep 'CONFIG_DEBUG_KERNEL' out/.config || echo 'Disabled')"
-          echo "Tracing: $(grep 'CONFIG_TRACING' out/.config || echo 'Disabled')"
+          # Disable ALL debug and tracing
+          cat >> "$CONFIG" << 'EOF'
+          # CONFIG_DEBUG_KERNEL is not set
+          # CONFIG_TRACING_SUPPORT is not set
+          # CONFIG_TRACING is not set
+          # CONFIG_FTRACE is not set
+          # CONFIG_TRACEPOINTS is not set
+          # CONFIG_FUNCTION_TRACER is not set
+          # CONFIG_FUNCTION_GRAPH_TRACER is not set
+          # CONFIG_TRACE_PRINTK is not set
+          # CONFIG_DYNAMIC_FTRACE is not set
+          # CONFIG_DEBUG_INFO is not set
+          # CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT is not set
+          # CONFIG_DEBUG_INFO_DWARF4 is not set
+          # CONFIG_DEBUG_INFO_DWARF5 is not set
+          # CONFIG_DEBUG_INFO_BTF is not set
+          # CONFIG_DEBUG_INFO_REDUCED is not set
+          # CONFIG_DEBUG_INFO_COMPRESSED is not set
+          # CONFIG_DEBUG_FS is not set
+          # CONFIG_DYNAMIC_DEBUG is not set
+          # CONFIG_DEBUG_PAGEALLOC is not set
+          # CONFIG_PAGE_OWNER is not set
+          # CONFIG_PAGE_POISONING is not set
+          # CONFIG_SLUB_DEBUG is not set
+          # CONFIG_SLUB_DEBUG_ON is not set
+          # CONFIG_DEBUG_OBJECTS is not set
+          # CONFIG_DEBUG_OBJECTS_TIMERS is not set
+          # CONFIG_PROVE_LOCKING is not set
+          # CONFIG_DEBUG_LOCKDEP is not set
+          # CONFIG_DEBUG_SPINLOCK is not set
+          # CONFIG_DEBUG_MUTEXES is not set
+          # CONFIG_LOCK_STAT is not set
+          # CONFIG_STACKTRACE is not set
+          # CONFIG_DEBUG_STACK_USAGE is not set
+          # CONFIG_DEBUG_STACKOVERFLOW is not set
+          # CONFIG_RCU_TRACE is not set
+          # CONFIG_RCU_EQS_DEBUG is not set
+          # CONFIG_PRINTK_TIME is not set
+          # CONFIG_PRINTK_CALLER is not set
+          # CONFIG_PRINTK_INDEX is not set
+          EOF
+          
+          # KSU specific configs
+          if [ "${{ matrix.variant.enable_ksu }}" = "true" ]; then
+            cat >> "$CONFIG" << 'EOF'
+          CONFIG_KSU=y
+          CONFIG_KPROBES=y
+          CONFIG_HAVE_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=y
+          CONFIG_BBG=y
+          EOF
+          fi
+          
+          echo "✅ Kernel configured for ${{ matrix.variant.name }}"
       
       - name: Build kernel
         env:
           SKIP_ABI_CHECKS: 1
           SKIP_CP_KERNEL_HDR: 1
-          USE_CCACHE: 1
-          CCACHE_DIR: ~/.ccache
           KBUILD_BUILD_USER: yu
           KBUILD_BUILD_HOST: github
           KBUILD_BUILD_TIMESTAMP: "$(date -u '+%a %b %e %H:%M:%S UTC %Y')"
         run: |
-          export PATH="${{ github.workspace }}/prebuilts/clang/host/linux-x86/clang-${{ env.CLANG_VERSION }}/bin:$PATH"
-          
           echo "=== Starting kernel build ==="
-          echo "Using clang: $(clang --version | head -1)"
           
           # Build with full output
           BUILD_CONFIG=common/build.config.gki.aarch64 \
@@ -328,8 +314,13 @@ jobs:
             # Verify version string
             echo "=== Kernel version ==="
             strings "Image.${{ matrix.variant.suffix }}" | grep "Linux version" | head -1
+            
+            # Check size
+            echo "Image size: $(du -h Image.${{ matrix.variant.suffix }} | cut -f1)"
           else
             echo "❌ Build failed - Image not found"
+            echo "=== Build log tail ==="
+            tail -50 build.log
             exit 1
           fi
       
@@ -377,12 +368,17 @@ jobs:
             echo "✓ NoKSU variant found"
           fi
           
-          # Update AnyKernel3 script for AIO
+          # Create AIO installer if both variants exist
           if [ "$HAS_KSU" = true ] && [ "$HAS_NOKSU" = true ]; then
+            echo "Creating AIO package..."
             cat > ak3/anykernel.sh << 'EOF'
             #!/system/bin/sh
             # AnyKernel3 AIO Installer
             
+            ui_print " "
+            ui_print "╔══════════════════════════════════════╗"
+            ui_print "║     GKI Kernel AIO - $build_date     ║"
+            ui_print "╚══════════════════════════════════════╝"
             ui_print " "
             ui_print "Select variant:"
             ui_print "  • Volume UP   = KSU variant (Wild-KSU + SUSFS)"
@@ -405,7 +401,6 @@ jobs:
               mv $home/Image.ksu $home/Image
             fi
             
-            # Continue with standard install
             dump_boot
             write_boot
             ui_print " "
@@ -454,7 +449,7 @@ jobs:
             - ✅ **Performance**: MGLRU, CC_OPTIMIZE_FOR_PERFORMANCE
             - ✅ **TCP**: Westwood (default) + BBR support
             - ✅ **Filesystem**: F2FS, OverlayFS, TMPFS with XATTR
-            - ✅ **Memory**: ZRAM with LZ4 compression
+            - ✅ **Memory**: ZRAM with LZ4 compression, LRU_GEN
             - ✅ **Optimized**: No debug, no tracing, no PSI
             - ✅ **Clean version**: Proper android13-8-gXXXXXXXX format
             ${{ env.VARIANT_INFO == 'KSU' || env.VARIANT_INFO == 'KSU+NoKSU' }}
@@ -502,8 +497,7 @@ jobs:
             MESSAGE="${MESSAGE}<b>Size:</b> ${{ env.ZIP_SIZE }}%0A"
             MESSAGE="${MESSAGE}<b>SHA256:</b> <code>$SHORT_SHA...</code>%0A"
             MESSAGE="${MESSAGE}<b>Download:</b> <a href='$RELEASE_URL'>Release</a>%0A"
-            MESSAGE="${MESSAGE}<b>Maintainer:</b> @superuseryu%0A%0A"
-            MESSAGE="${MESSAGE}#kernel #gki #wildksu #susfs"
+            MESSAGE="${MESSAGE}<b>Maintainer:</b> @superuseryu"
           else
             MESSAGE="❌ <b>Build Failed!</b>%0A%0A"
             MESSAGE="${MESSAGE}<b>Time:</b> $(date +'%H:%M UTC')%0A"
