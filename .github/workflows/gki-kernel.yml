@@ -14,15 +14,23 @@ env:
   DEVICE: sapphiren
 
 jobs:
-  build:
-    name: Build Kernel
+  build-kernels:
+    name: "Build ${{ matrix.variant.name }}"
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - name: "GKI-KSU"
+            output: "Image.ksu"
+            enable_ksu: true
+          - name: "GKI-NoKSU"
+            output: "Image.noksu"
+            enable_ksu: false
     
     steps:
       - name: Setup environment
         run: |
-          echo "BUILD_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
-          echo "TAG=v$(date +'%Y.%m.%d')" >> $GITHUB_ENV
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt-get update -qq && sudo apt-get install -y \
             bc bison flex libssl-dev libelf-dev build-essential \
@@ -36,7 +44,6 @@ jobs:
           mkdir -p prebuilts/clang/host/linux-x86/clang-${{ env.CLANG_VERSION }}
           tar -xzf clang.tar.gz -C prebuilts/clang/host/linux-x86/clang-${{ env.CLANG_VERSION }}
           rm clang.tar.gz
-          prebuilts/clang/host/linux-x86/clang-${{ env.CLANG_VERSION }}/bin/clang --version
       
       - name: Initialize kernel source
         run: |
@@ -53,21 +60,36 @@ jobs:
                  -e 's/^CLANG_VERSION=.*/CLANG_VERSION=${{ env.CLANG_VERSION }}/' \
                  build.config.constants
           
+          # Disable ALL ABI checks completely
           sed -i 's/^ABI_DEFINITION=/#ABI_DEFINITION=/g' build.config.gki.aarch64
           sed -i 's/^KMI_SYMBOL_LIST=/#KMI_SYMBOL_LIST=/g' build.config.gki.aarch64
           sed -i 's/^ADDITIONAL_KMI_SYMBOL_LISTS=/#ADDITIONAL_KMI_SYMBOL_LISTS=/g' build.config.gki.aarch64
           sed -i 's/^TRIM_NONLISTED_KMI=/#TRIM_NONLISTED_KMI=/g' build.config.gki.aarch64
+          sed -i 's/^GKI_MODULES_LIST=/#GKI_MODULES_LIST=/g' build.config.gki.aarch64
+          sed -i 's/^GKI_BUILD_CONFIG_FRAGMENT=/#GKI_BUILD_CONFIG_FRAGMENT=/g' build.config.gki.aarch64
           sed -i '/^POST_DEFCONFIG_CMDS=/d' build.config.gki
+          
+          # Add skip flags
+          echo '' >> build.config.gki.aarch64
           echo 'SKIP_ABI_CHECKS=1' >> build.config.gki.aarch64
           echo 'SKIP_CP_KERNEL_HDR=1' >> build.config.gki.aarch64
+          echo 'ABI_DEFINITION=' >> build.config.gki.aarch64
+          echo 'KMI_SYMBOL_LIST=' >> build.config.gki.aarch64
+          echo 'ADDITIONAL_KMI_SYMBOL_LISTS=' >> build.config.gki.aarch64
+          
+          # Create empty ABI files to avoid "file not found" errors
+          mkdir -p android
+          touch android/abi_gki_aarch64
+          touch android/abi_gki_aarch64_virtual_device
+          touch android/abi_gki_aarch64_db845c
+          touch android/abi_symbollist.raw
           
           cd ..
       
-      - name: Build KSU variant
+      - name: Setup Wild-KSU
+        if: matrix.variant.enable_ksu
+        working-directory: common
         run: |
-          cp -r common common_ksu
-          cd common_ksu
-          
           curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
           [ -d "Wild_KSU" ] && ln -sf Wild_KSU drivers/kernelsu || exit 1
           
@@ -83,7 +105,11 @@ jobs:
               sed -i '/ksu_core_init();/a \\tsusfs_init();' Wild_KSU/kernel/ksu.c
           fi
           rm -rf susfs4ksu
-          
+      
+      - name: Setup Baseband Guard
+        if: matrix.variant.enable_ksu
+        working-directory: common
+        run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
           ln -sf ../Baseband-guard security/baseband-guard
           grep -q "baseband-guard" security/Makefile || \
@@ -91,9 +117,12 @@ jobs:
           grep -q "baseband-guard/Kconfig" security/Kconfig || \
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
           sed -i '/^config LSM$/,/^help$/{ /default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
-          
-          CONFIG="arch/arm64/configs/gki_defconfig"
-          cat >> "$CONFIG" << 'EOF'
+      
+      - name: Configure kernel (KSU)
+        if: matrix.variant.enable_ksu
+        working-directory: common
+        run: |
+          cat >> "arch/arm64/configs/gki_defconfig" << 'EOF'
           CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
           CONFIG_KALLSYMS=y
           CONFIG_TCP_CONG_ADVANCED=y
@@ -195,27 +224,12 @@ jobs:
           # CONFIG_PRINTK_CALLER is not set
           # CONFIG_PRINTK_INDEX is not set
           EOF
-          
-          cd ..
-          export KBUILD_BUILD_USER=yu
-          export KBUILD_BUILD_HOST=github
-          export SKIP_ABI_CHECKS=1
-          export SKIP_CP_KERNEL_HDR=1
-          
-          BUILD_CONFIG=common_ksu/build.config.gki.aarch64 \
-          LTO=thin \
-          build/build.sh -j$(nproc) || exit 1
-          
-          cp out/android13-5.15/dist/Image Image.ksu
-          
-          rm -rf out common_ksu
       
-      - name: Build NoKSU variant
+      - name: Configure kernel (NoKSU)
+        if: ${{ !matrix.variant.enable_ksu }}
+        working-directory: common
         run: |
-          cd common
-          
-          CONFIG="arch/arm64/configs/gki_defconfig"
-          cat >> "$CONFIG" << 'EOF'
+          cat >> "arch/arm64/configs/gki_defconfig" << 'EOF'
           CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
           CONFIG_KALLSYMS=y
           CONFIG_TCP_CONG_ADVANCED=y
@@ -296,8 +310,9 @@ jobs:
           # CONFIG_PRINTK_CALLER is not set
           # CONFIG_PRINTK_INDEX is not set
           EOF
-          
-          cd ..
+      
+      - name: Build kernel
+        run: |
           export KBUILD_BUILD_USER=yu
           export KBUILD_BUILD_HOST=github
           export SKIP_ABI_CHECKS=1
@@ -307,14 +322,37 @@ jobs:
           LTO=thin \
           build/build.sh -j$(nproc) || exit 1
           
-          cp out/android13-5.15/dist/Image Image.noksu
+          cp out/android13-5.15/dist/Image ${{ matrix.variant.output }}
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.variant.name }}-kernel
+          path: ${{ matrix.variant.output }}
+          retention-days: 1
+  
+  package-release:
+    name: "Package & Release"
+    runs-on: ubuntu-22.04
+    needs: [build-kernels]
+    
+    steps:
+      - name: Setup environment
+        run: |
+          echo "BUILD_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
+          echo "TAG=v$(date +'%Y.%m.%d')" >> $GITHUB_ENV
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
       
       - name: Package AIO kernel
         run: |
           git clone -q --depth=1 https://github.com/superuseryu/AnyKernel3 ak3
           
-          cp Image.ksu ak3/
-          cp Image.noksu ak3/
+          cp artifacts/GKI-KSU-kernel/Image.ksu ak3/
+          cp artifacts/GKI-NoKSU-kernel/Image.noksu ak3/
           
           ZIP_NAME="GKI-${{ env.DEVICE }}-AIO-${{ env.BUILD_DATE }}.zip"
           cd ak3
@@ -332,20 +370,20 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
-          name: "GKI Kernel - ${{ env.BUILD_DATE }}"
+          name: "Build #${{ github.run_number }}"
           body: |
             ## 📱 GKI Kernel AIO for ${{ env.DEVICE }}
             
-            **Build #${{ github.run_number }} • Android 13-16 • ${{ env.BUILD_DATE }}**
+            **Build #${{ github.run_number }} • Android 13-16**
             
             ### ✨ Features
             - 🔐 Wild-KSU + SUSFS v2.0.0 + BBG (KSU variant)
-            - 🚀 TCP BBR + Westwood (default), BBR2
-            - ⚡ LTO + Performance optimizations
-            - 💾 ZRAM with LZ4, F2FS support
-            - 🧩 MGLRU, HZ=1000
-            - 🔇 All debug & tracing disabled
-            - 🔧 Both KSU & NoKSU in one ZIP
+            - 🚀 TCP BBR + BBR2 + Westwood (default)
+            - ⚡ Performance optimizations (LTO, HZ=1000)
+            - 💾 ZRAM LZ4 + F2FS support
+            - 🧩 MGLRU memory management
+            - 🔇 Debug & tracing disabled
+            - 📦 AIO: Both variants in one ZIP
             
             ### 📥 Installation
             1. Download `${{ env.ZIP_NAME }}`
@@ -353,14 +391,15 @@ jobs:
             3. Choose: VOL+ (NoKSU) or VOL- (KSU)
             4. Reboot
             
-            ### 🔐 SHA256
+            ### 🔐 Checksum
             ```
-            ${{ env.ZIP_SHA256 }}
+            SHA256: ${{ env.ZIP_SHA256 }}
+            Size: ${{ env.ZIP_SIZE }}
             ```
             
             ### 📝 Notes
-            - Stock kernel version (no custom suffix)
-            - TCP: `cat /proc/sys/net/ipv4/tcp_congestion_control` = westwood
+            - Compatible: Redmi Note 13 4G/NFC (sapphire/sapphiren)
+            - TCP check: `cat /proc/sys/net/ipv4/tcp_congestion_control`
             - KSU Manager: [Download](https://github.com/WildKernels/Wild_KSU/releases)
           files: ${{ env.ZIP_NAME }}
           draft: false
@@ -374,7 +413,6 @@ jobs:
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           
           if [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ]; then
-            echo "Telegram not configured"
             exit 0
           fi
           
@@ -402,3 +440,4 @@ jobs:
             -d text="$MESSAGE" \
             -d parse_mode="HTML" \
             -d disable_web_page_preview="true" || true
+            
