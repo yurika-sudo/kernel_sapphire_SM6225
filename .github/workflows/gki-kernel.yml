@@ -34,7 +34,7 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt-get update -qq && sudo apt-get install -y \
             bc bison flex libssl-dev libelf-dev build-essential \
-            zip git curl aria2 repo jq patch
+            zip git curl aria2 repo jq
       
       - name: Download clang
         run: |
@@ -60,36 +60,29 @@ jobs:
                  -e 's/^CLANG_VERSION=.*/CLANG_VERSION=${{ env.CLANG_VERSION }}/' \
                  build.config.constants
           
-          # HAPUS SEMUA REFERENSI ABI untuk menghindari error
-          sed -i '/ABI_DEFINITION/d' build.config.gki.aarch64
-          sed -i '/KMI_SYMBOL_LIST/d' build.config.gki.aarch64
-          sed -i '/ADDITIONAL_KMI_SYMBOL_LISTS/d' build.config.gki.aarch64
-          sed -i '/GKI_MODULES_LIST/d' build.config.gki.aarch64
-          sed -i '/abi_gki_aarch64/d' build.config.gki.aarch64
-          
-          # Komentari semua baris yang terkait ABI/GKI checks
-          sed -i 's/^\(.*abi_gki_aarch64.*\)/#\1/' build.config.gki.aarch64
-          sed -i 's/^\(.*KMI_SYMBOL_LIST.*\)/#\1/' build.config.gki.aarch64
-          sed -i 's/^\(.*ABI_DEFINITION.*\)/#\1/' build.config.gki.aarch64
-          
-          # Hapus POST_DEFCONFIG_CMDS yang bermasalah
+          # Disable ALL ABI checks completely
+          sed -i 's/^ABI_DEFINITION=/#ABI_DEFINITION=/g' build.config.gki.aarch64
+          sed -i 's/^KMI_SYMBOL_LIST=/#KMI_SYMBOL_LIST=/g' build.config.gki.aarch64
+          sed -i 's/^ADDITIONAL_KMI_SYMBOL_LISTS=/#ADDITIONAL_KMI_SYMBOL_LISTS=/g' build.config.gki.aarch64
+          sed -i 's/^TRIM_NONLISTED_KMI=/#TRIM_NONLISTED_KMI=/g' build.config.gki.aarch64
+          sed -i 's/^GKI_MODULES_LIST=/#GKI_MODULES_LIST=/g' build.config.gki.aarch64
+          sed -i 's/^GKI_BUILD_CONFIG_FRAGMENT=/#GKI_BUILD_CONFIG_FRAGMENT=/g' build.config.gki.aarch64
           sed -i '/^POST_DEFCONFIG_CMDS=/d' build.config.gki
-          sed -i '/check_defconfig/d' build.config.gki
-          sed -i '/check_buildtime_symbol_protection/d' build.config.gki.aarch64
           
-          # Tambahkan flag skip secara eksplisit
+          # Add skip flags
           echo '' >> build.config.gki.aarch64
           echo 'SKIP_ABI_CHECKS=1' >> build.config.gki.aarch64
           echo 'SKIP_CP_KERNEL_HDR=1' >> build.config.gki.aarch64
-          echo 'SKIP_DEFCONFIG_CHECK=1' >> build.config.gki.aarch64
-          echo 'SKIP_EXT_MODULES=1' >> build.config.gki.aarch64
+          echo 'ABI_DEFINITION=' >> build.config.gki.aarch64
+          echo 'KMI_SYMBOL_LIST=' >> build.config.gki.aarch64
+          echo 'ADDITIONAL_KMI_SYMBOL_LISTS=' >> build.config.gki.aarch64
           
-          # Buat file ABI dummy untuk menghindari error file not found
+          # Create empty ABI files to avoid "file not found" errors
           mkdir -p android
-          echo "# Dummy ABI file - Skipping ABI checks" > android/abi_gki_aarch64
-          echo "# Dummy ABI file - Skipping ABI checks" > android/abi_gki_aarch64_virtual_device
-          echo "# Dummy ABI file - Skipping ABI checks" > android/abi_gki_aarch64_db845c
-          echo "# Dummy symbol list - Skipping ABI checks" > android/abi_symbollist.raw
+          touch android/abi_gki_aarch64
+          touch android/abi_gki_aarch64_virtual_device
+          touch android/abi_gki_aarch64_db845c
+          touch android/abi_symbollist.raw
           
           cd ..
       
@@ -315,8 +308,7 @@ jobs:
           # CONFIG_RCU_EQS_DEBUG is not set
           # CONFIG_PRINTK_TIME is not set
           # CONFIG_PRINTK_CALLER is not set
-          # CONFIG_PRINTK_INDEX is not set
-          EOF
+          # CONFIG_PRINTK_INDEX is not setEOF
       
       - name: Build kernel
         run: |
@@ -324,18 +316,11 @@ jobs:
           export KBUILD_BUILD_HOST=github
           export SKIP_ABI_CHECKS=1
           export SKIP_CP_KERNEL_HDR=1
-          export SKIP_DEFCONFIG_CHECK=1
           
-          echo "Starting kernel build with SKIP flags..."
-          echo "Build timestamp: $KBUILD_BUILD_TIMESTAMP"
-          echo "Expected kernel version: $KERNEL_VERSION_FULL"
-          
-          # Build kernel
           BUILD_CONFIG=common/build.config.gki.aarch64 \
           LTO=thin \
-          build/build.sh -j$(nproc) 2>&1 | tee build.log || exit 1
+          build/build.sh -j$(nproc) || exit 1
           
-          # Copy output image
           cp out/android13-5.15/dist/Image ${{ matrix.variant.output }}
       
       - name: Upload artifact
@@ -454,3 +439,9 @@ jobs:
             -d text="$MESSAGE" \
             -d parse_mode="HTML" \
             -d disable_web_page_preview="true" || true
+
+            
+masalah log workflownya:
+Run export KBUILD_BUILD_USER=yu
+/home/runner/work/gki-kernel/gki-kernel/common/build.config.gki.aarch64: line 14: android/abi_gki_aarch64_virtual_device: No such file or directory
+Error: Process completed with exit code 1.                
