@@ -45,16 +45,17 @@ jobs:
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+          RUN_NUMBER="${{ github.run_number }}"
+          BRANCH="${{ env.KERNEL_BRANCH }}"
           
-          MESSAGE="<b>⚙️ Build In Progress (1 tasks running)</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>👤 User:</b> ${{ github.actor }}%0A"
-          MESSAGE="${MESSAGE}<b>📊 Progress:</b> [█░░░░░░░░░] 5%%0A"
-          MESSAGE="${MESSAGE}<b>⏳ Elapsed:</b> 0 seconds%0A%0A"
-          MESSAGE="${MESSAGE}<b>🔧 Configuration:</b>%0A"
-          MESSAGE="${MESSAGE}  • Variant: GKI%0A"
-          MESSAGE="${MESSAGE}  • Type: release%0A"
-          MESSAGE="${MESSAGE}  • Android: ${{ env.ANDROID_VERSION }}%0A%0A"
-          MESSAGE="${MESSAGE}Making good progress! Why not stretch your legs? 🚶"
+          MESSAGE="<b>🚀 Kernel Build Started</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>📦 Variant:</b> ksu%0A"
+          MESSAGE="${MESSAGE}<b>📁 Repository:</b> ${{ github.repository }}%0A"
+          MESSAGE="${MESSAGE}<b>📍 Branch:</b> ${BRANCH}%0A"
+          MESSAGE="${MESSAGE}<b>🔄 Trigger:</b> ${{ github.event_name }}%0A"
+          MESSAGE="${MESSAGE}<b>🆔 Run:</b> #${RUN_NUMBER}%0A"
+          MESSAGE="${MESSAGE}<b>⏰ Started:</b> $(TZ='UTC' date +'%Y-%m-%d %H:%M UTC')%0A"
+          MESSAGE="${MESSAGE}<b>⏳ Status:</b> Initializing..."
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -242,6 +243,26 @@ jobs:
           CONFIG_IP_NF_TARGET_TTL=y
           CONFIG_IP6_NF_TARGET_HL=y
           CONFIG_IP6_NF_MATCH_HL=y
+          CONFIG_HZ_250=n
+          CONFIG_HZ_300=y
+          CONFIG_HZ=300
+          CONFIG_MODULE_SIG_SHA1=n
+          CONFIG_MODULE_SIG_FORCE=y
+          CONFIG_MODULE_SIG_SHA256=y
+          CONFIG_MODULE_SIG_HASH="sha256"
+          CONFIG_FTRACE=n
+          CONFIG_TRACING=n
+          CONFIG_TRACING_SUPPORT=n
+          CONFIG_EVENT_TRACING=n
+          CONFIG_LOG_BUF_SHIFT=16
+          CONFIG_SLUB_DEBUG=n
+          CONFIG_DEBUG_KERNEL=n
+          CONFIG_DEBUG_FS=n
+          CONFIG_PRINTK=n
+          CONFIG_DEBUG_KINFO=n
+          CONFIG_DEBUG_BUGVERBOSE=n
+          CONFIG_DEBUG_LIST=n
+          CONFIG_DEBUG_MEMORY_INIT=n
           EOF
 
       - name: "Configure kernel name and remove dirty"
@@ -250,9 +271,14 @@ jobs:
           export TZ="Asia/Jakarta"
           CURRENT_TIME=$(date -u +"%a %b %d %H:%M:%S UTC %Y")
           
-          echo "CURRENT_TIME=$CURRENT_TIME"
+          # Generate random hash-like suffix
+          RANDOM_HASH=$(openssl rand -hex 6)
+          KERNEL_SUFFIX="-ab${RANDOM_HASH}"
           
-          sed -i '$s|echo "\$res"|echo "\$res-Wild-GKI"|' ./scripts/setlocalversion
+          echo "CURRENT_TIME=$CURRENT_TIME"
+          echo "KERNEL_SUFFIX=$KERNEL_SUFFIX"
+          
+          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res${KERNEL_SUFFIX}\"|" ./scripts/setlocalversion
           
           perl -pi -e "s{UTS_VERSION=\"\\\$\(echo \\\$UTS_VERSION \\\$CONFIG_FLAGS \\\$TIMESTAMP \\| cut -b -\\\$UTS_LEN\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $CURRENT_TIME\"}" ./scripts/mkcompile_h
           
@@ -421,25 +447,26 @@ jobs:
             
             ### Features:
             - Wild-KSU 3.0.0 Stable
-            - SUSFS v2.0.0
+            - SUSFS ඞ v2.0.0
             - Baseband Guard (BBG)
             - OverlayFS Full Support
             - TMPFS XATTR/POSIX_ACL
-            - BBR TCP Congestion
+            - BBR Westwood TCP Congestion
             
             ### Installation:
-            1. Use Kernel Flasher app
+            1. Use Kernel Flasher app (recommended)
             2. Or flash in custom recovery
             3. Reboot
             
           draft: false
           prerelease: false
 
-      - name: "Send Telegram success notification"
+      - name: "Send Telegram success notification with ZIP"
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG_NAME }}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
           BUILD_END_TIME=$(date +%s)
           BUILD_START_TIME="${{ needs.build-kernels.outputs.build_start_time }}"
@@ -447,26 +474,23 @@ jobs:
           DURATION_MIN=$((DURATION / 60))
           DURATION_SEC=$((DURATION % 60))
           
-          MESSAGE="<b>✅ Build Success for GKI Kernel</b>%0A"
-          MESSAGE="${MESSAGE}<b>User:</b> ${{ github.actor }}%0A"
-          MESSAGE="${MESSAGE}<b>Started:</b> $(TZ='Asia/Jakarta' date -d "@${BUILD_START_TIME}" +'%Y-%m-%d %I:%M:%S %p WIB')%0A"
-          MESSAGE="${MESSAGE}<b>Duration:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
-          MESSAGE="${MESSAGE}<b>📊 Build Stats:</b> Complete%0A%0A"
-          MESSAGE="${MESSAGE}<b>🔧 Configuration:</b>%0A"
-          MESSAGE="${MESSAGE}  • Variant: GKI%0A"
-          MESSAGE="${MESSAGE}  • Type: release%0A"
-          MESSAGE="${MESSAGE}  • Android: 13%0A%0A"
-          MESSAGE="${MESSAGE}<b>📦 File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>📊 Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
-          MESSAGE="${MESSAGE}<b>🔐 SHA256:</b> <code>${{ env.ZIP_SHA256_SHORT }}...</code>%0A"
-          MESSAGE="${MESSAGE}<b>🔧 Version:</b> <code>${{ env.KERNEL_VERSION }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>🔗 Download:</b> <a href='${RELEASE_URL}'>Release</a>%0A%0A"
-          MESSAGE="${MESSAGE}<b>🎯 Features:</b> Wild-KSU + SUSFS + BBG + OverlayFS"
+          CAPTION="<b>✅ Build Success!</b>%0A%0A"
+          CAPTION="${CAPTION}<b>📦 File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
+          CAPTION="${CAPTION}<b>📊 Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
+          CAPTION="${CAPTION}<b>🔐 SHA256:</b> <code>${{ env.ZIP_SHA256_SHORT }}...</code>%0A"
+          CAPTION="${CAPTION}<b>🔧 Kernel:</b> <code>${{ env.KERNEL_VERSION }}</code>%0A"
+          CAPTION="${CAPTION}<b>🔗 Download:</b> <a href='${RELEASE_URL}'>Release</a>%0A"
+          CAPTION="${CAPTION}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A"
+          CAPTION="${CAPTION}<b>🕐 Time:</b> $(TZ='Asia/Jakarta' date +'%H:%M:%S WIB')%0A"
+          CAPTION="${CAPTION}<b>🎯 Features:</b> Wild-KSU • SUSFS ඞ • BBG%0A%0A"
+          CAPTION="${CAPTION}<b>👨‍💻 Author/Maintainer:</b> @superuseryu%0A%0A"
+          CAPTION="${CAPTION}#kernel #gki #wildksu #susfs"
           
-          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-            -d chat_id="$CHAT_ID" \
-            -d text="$MESSAGE" \
-            -d parse_mode="HTML" || true
+          curl -F chat_id="$CHAT_ID" \
+               -F document=@"${{ env.ZIP_NAME }}" \
+               -F caption="$CAPTION" \
+               -F parse_mode="HTML" \
+               "https://api.telegram.org/bot$TOKEN/sendDocument" || true
 
   notify-failure:
     name: "Notify Failure"
@@ -481,31 +505,11 @@ jobs:
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
-          BUILD_END_TIME=$(date +%s)
-          BUILD_START_TIME="${{ needs.build-kernels.outputs.build_start_time }}"
-          
-          if [ -n "$BUILD_START_TIME" ]; then
-            DURATION=$((BUILD_END_TIME - BUILD_START_TIME))
-            DURATION_MIN=$((DURATION / 60))
-            DURATION_SEC=$((DURATION % 60))
-            DURATION_TEXT="${DURATION_MIN}m ${DURATION_SEC}s"
-          else
-            DURATION_TEXT="N/A"
-          fi
-          
-          MESSAGE="<b>❌ Build Failed for GKI Kernel</b>%0A"
-          MESSAGE="${MESSAGE}<b>User:</b> ${{ github.actor }}%0A"
-          if [ -n "$BUILD_START_TIME" ]; then
-            MESSAGE="${MESSAGE}<b>Started:</b> $(TZ='Asia/Jakarta' date -d "@${BUILD_START_TIME}" +'%Y-%m-%d %I:%M:%S %p WIB')%0A"
-          fi
-          MESSAGE="${MESSAGE}<b>Duration:</b> ${DURATION_TEXT}%0A"
-          MESSAGE="${MESSAGE}<b>📊 Build Stats:</b> Failed%0A%0A"
-          MESSAGE="${MESSAGE}<b>🔧 Configuration:</b>%0A"
-          MESSAGE="${MESSAGE}  • Variant: GKI%0A"
-          MESSAGE="${MESSAGE}  • Type: release%0A"
-          MESSAGE="${MESSAGE}  • Android: 13%0A%0A"
-          MESSAGE="${MESSAGE}<b>📄 Check logs for details.</b>%0A"
-          MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>"
+          MESSAGE="<b>❌ Build Failed!</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>📦 Variant:</b> ksu%0A"
+          MESSAGE="${MESSAGE}<b>🕐 Time:</b> $(TZ='UTC' date +'%H:%M:%S UTC')%0A"
+          MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>%0A"
+          MESSAGE="${MESSAGE}<b>⚠️ Check the logs for details.</b>"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
