@@ -1,4 +1,4 @@
-name: Build GKI Kernel - Simple & Clean
+name: Build GKI Kernel - Fixed Version
 
 on:
   workflow_dispatch:
@@ -91,20 +91,64 @@ jobs:
             -e 's/^CLANG_VERSION=.*/CLANG_VERSION=${{ env.CLANG_VERSION }}/' \
             build.config.constants
           
-          # === DISABLE ALL ABI CHECKS ===
-          echo "Disabling ABI checks..."
+          # === CARA YASK: Bypass semua ABI checks dengan benar ===
+          echo "Disabling all ABI and KMI checks like YASK..."
           
-          # Remove check_defconfig from build.config.gki
+          # 1. Hapus POST_DEFCONFIG_CMDS yang memeriksa defconfig
           sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' build.config.gki 2>/dev/null || true
           
-          # Add skip flags to build.config.gki.aarch64
-          echo '' >> build.config.gki.aarch64
-          echo '# Skip ABI checks' >> build.config.gki.aarch64
-          echo 'SKIP_ABI_CHECKS=1' >> build.config.gki.aarch64
-          echo 'SKIP_CP_KERNEL_HDR=1' >> build.config.gki.aarch64
-          echo 'ABI_DEFINITION=' >> build.config.gki.aarch64
-          echo 'KMI_SYMBOL_LIST=' >> build.config.gki.aarch64
-          echo 'ADDITIONAL_KMI_SYMBOL_LISTS=' >> build.config.gki.aarch64
+          # 2. Edit build.config.gki.aarch64 untuk disable SEMUA ABI checks
+          # Backup dulu
+          cp build.config.gki.aarch64 build.config.gki.aarch64.orig
+          
+          # Buat file baru yang clean
+          cat > build.config.gki.aarch64 << 'EOF'
+          # Build configuration for GKI aarch64 with ABI checks DISABLED
+          
+          # Base config
+          BUILD_CONFIG=common/build.config.gki
+          LTO=thin
+          
+          # Architecture
+          ARCH=arm64
+          CROSS_COMPILE=aarch64-linux-gnu-
+          
+          # Toolchain
+          CLANG_VERSION=${{ env.CLANG_VERSION }}
+          
+          # Output
+          OUT_DIR=out
+          DIST_DIR=${OUT_DIR}/dist
+          
+          # ===== CRITICAL: DISABLE ALL ABI/KMI CHECKS =====
+          SKIP_ABI_CHECKS=1
+          SKIP_CP_KERNEL_HDR=1
+          SKIP_KMI_SYMBOLS=1
+          
+          # Empty ABI definitions
+          ABI_DEFINITION=
+          KMI_SYMBOL_LIST=
+          ADDITIONAL_KMI_SYMBOL_LISTS=
+          GKI_MODULES_LIST=
+          
+          # Disable trimming
+          TRIM_NONLISTED_KMI=
+          
+          # Build flags
+          BUILD_INITRAMFS=1
+          EXT_MODULES=
+          GKI_BUILD_CONFIG=
+          
+          # Post defconfig commands - DISABLED
+          POST_DEFCONFIG_CMDS=""
+          EOF
+          
+          # 3. Hapus juga dari build.config.gki jika ada
+          sed -i '/ABI_DEFINITION/d' build.config.gki 2>/dev/null || true
+          sed -i '/KMI_SYMBOL_LIST/d' build.config.gki 2>/dev/null || true
+          sed -i '/TRIM_NONLISTED_KMI/d' build.config.gki 2>/dev/null || true
+          
+          echo "✓ ABI checks disabled completely"
           
           cd ..
       
@@ -120,25 +164,25 @@ jobs:
             echo "✓ Wild-KSU linked"
           else
             echo "❌ Wild_KSU directory not found!"
-            ls -la
             exit 1
           fi
       
-      - name: Setup SUSFS
+      - name: Setup SUSFS (like YASK)
         if: matrix.variant.enable_ksu
         working-directory: common
         run: |
           git clone -q --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
           
-          # Apply patch if exists
-          [ -f "susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch" ] && \
-            patch -p1 --forward < susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch 2>/dev/null || true
-          
-          # Copy SUSFS files
+          # Simple copy like YASK
           mkdir -p fs include/linux
           [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ] && cp susfs4ksu/kernel_patches/fs/susfs.c fs/
           [ -f "susfs4ksu/kernel_patches/include/linux/susfs.h" ] && cp susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
-          [ -f "susfs4ksu/kernel_patches/include/linux/susfs_def.h" ] && cp susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/
+          [ -f "susfs4ksu/kernel_patches/include/linux/susfs_def.h" ] && cp susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/ || true
+          
+          # Patch KSU
+          if [ -f "susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch" ]; then
+            patch -p1 --forward < susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch 2>/dev/null || true
+          fi
           
           # Integrate with KSU
           if [ -f "Wild_KSU/kernel/ksu.c" ]; then
@@ -169,127 +213,118 @@ jobs:
           
           echo "✓ Baseband Guard setup complete"
       
-      - name: Configure Kernel
+      - name: Configure kernel (YASK style)
         working-directory: common
         run: |
           CONFIG="arch/arm64/configs/gki_defconfig"
           
-          # Get git info for version
+          # Get git info
           GIT_HASH=$(git rev-parse --short=12 HEAD)
           BUILD_ID="ab$(printf "%08d" ${{ github.run_number }})"
           
-          # Set LOCALVERSION and disable auto versioning
+          # === CARA YASK: Tambah di akhir file, bukan edit existing ===
+          echo "" >> "$CONFIG"
+          echo "# === Custom Configurations ===" >> "$CONFIG"
+          
+          # Version string (like YASK)
           echo "CONFIG_LOCALVERSION=\"-android${{ env.ANDROID_VERSION }}-8-g${GIT_HASH}-${BUILD_ID}\"" >> "$CONFIG"
           echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG"
           
-          # Common configs for ALL variants
-          cat >> "$CONFIG" << 'EOF'
-          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
-          CONFIG_TCP_CONG_ADVANCED=y
-          CONFIG_TCP_CONG_BIC=n
-          CONFIG_TCP_CONG_WESTWOOD=y
-          CONFIG_TCP_CONG_HTCP=n
-          CONFIG_TCP_CONG_BBR=y
-          CONFIG_DEFAULT_WESTWOOD=y
-          CONFIG_OVERLAY_FS=y
-          CONFIG_TMPFS_XATTR=y
-          CONFIG_TMPFS_POSIX_ACL=y
-          CONFIG_F2FS_FS=y
-          CONFIG_F2FS_FS_SECURITY=y
-          CONFIG_F2FS_FS_ENCRYPTION=y
-          CONFIG_ZRAM=y
-          CONFIG_ZRAM_DEF_COMP_LZ4=y
-          CONFIG_ZRAM_DEF_COMP="lz4"
-          CONFIG_LRU_GEN=y
-          CONFIG_LRU_GEN_ENABLED=y
-          CONFIG_SCHED_AUTOGROUP=y
-          CONFIG_SCHED_TUNE=y
-          CONFIG_MEMCG=y
-          CONFIG_MEMCG_SWAP=y
-          CONFIG_PSI=n
-          CONFIG_PSI_DEFAULT_DISABLED=y
-          CONFIG_HZ_1000=y
-          CONFIG_HZ=1000
-          CONFIG_TCP_BBR2=y
-          CONFIG_NET_SCHED=y
-          CONFIG_NET_SCH_FQ_CODEL=y
-          CONFIG_NET_SCH_FQ=y
-          CONFIG_MODULE_COMPRESS_NONE=y
-          CONFIG_MODULE_SIG=n
-          CONFIG_MODULE_FORCE_LOAD=n
-          EOF
+          # Common optimizations
+          echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> "$CONFIG"
+          echo "CONFIG_TCP_CONG_ADVANCED=y" >> "$CONFIG"
+          echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG"
+          echo "CONFIG_TCP_CONG_WESTWOOD=y" >> "$CONFIG"
+          echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG"
+          echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG"
+          echo "CONFIG_DEFAULT_WESTWOOD=y" >> "$CONFIG"
+          echo "CONFIG_OVERLAY_FS=y" >> "$CONFIG"
+          echo "CONFIG_TMPFS_XATTR=y" >> "$CONFIG"
+          echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG"
+          echo "CONFIG_F2FS_FS=y" >> "$CONFIG"
+          echo "CONFIG_F2FS_FS_SECURITY=y" >> "$CONFIG"
+          echo "CONFIG_ZRAM=y" >> "$CONFIG"
+          echo "CONFIG_ZRAM_DEF_COMP_LZ4=y" >> "$CONFIG"
+          echo "CONFIG_ZRAM_DEF_COMP=\"lz4\"" >> "$CONFIG"
+          echo "CONFIG_LRU_GEN=y" >> "$CONFIG"
+          echo "CONFIG_LRU_GEN_ENABLED=y" >> "$CONFIG"
+          echo "CONFIG_SCHED_AUTOGROUP=y" >> "$CONFIG"
+          echo "CONFIG_MEMCG=y" >> "$CONFIG"
+          echo "CONFIG_MEMCG_SWAP=y" >> "$CONFIG"
+          echo "CONFIG_PSI=n" >> "$CONFIG"
+          echo "CONFIG_PSI_DEFAULT_DISABLED=y" >> "$CONFIG"
+          echo "CONFIG_HZ_1000=y" >> "$CONFIG"
+          echo "CONFIG_HZ=1000" >> "$CONFIG"
+          echo "CONFIG_TCP_BBR2=y" >> "$CONFIG"
+          echo "CONFIG_NET_SCHED=y" >> "$CONFIG"
+          echo "CONFIG_NET_SCH_FQ_CODEL=y" >> "$CONFIG"
+          echo "CONFIG_NET_SCH_FQ=y" >> "$CONFIG"
+          echo "CONFIG_MODULE_COMPRESS_NONE=y" >> "$CONFIG"
+          echo "CONFIG_MODULE_SIG=n" >> "$CONFIG"
+          echo "CONFIG_MODULE_FORCE_LOAD=n" >> "$CONFIG"
           
-          # Disable ALL debug and tracing
-          cat >> "$CONFIG" << 'EOF'
-          # CONFIG_DEBUG_KERNEL is not set
-          # CONFIG_TRACING_SUPPORT is not set
-          # CONFIG_TRACING is not set
-          # CONFIG_FTRACE is not set
-          # CONFIG_TRACEPOINTS is not set
-          # CONFIG_FUNCTION_TRACER is not set
-          # CONFIG_FUNCTION_GRAPH_TRACER is not set
-          # CONFIG_TRACE_PRINTK is not set
-          # CONFIG_DYNAMIC_FTRACE is not set
-          # CONFIG_DEBUG_INFO is not set
-          # CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT is not set
-          # CONFIG_DEBUG_INFO_DWARF4 is not set
-          # CONFIG_DEBUG_INFO_DWARF5 is not set
-          # CONFIG_DEBUG_INFO_BTF is not set
-          # CONFIG_DEBUG_INFO_REDUCED is not set
-          # CONFIG_DEBUG_INFO_COMPRESSED is not set
-          # CONFIG_DEBUG_FS is not set
-          # CONFIG_DYNAMIC_DEBUG is not set
-          # CONFIG_DEBUG_PAGEALLOC is not set
-          # CONFIG_PAGE_OWNER is not set
-          # CONFIG_PAGE_POISONING is not set
-          # CONFIG_SLUB_DEBUG is not set
-          # CONFIG_SLUB_DEBUG_ON is not set
-          # CONFIG_DEBUG_OBJECTS is not set
-          # CONFIG_DEBUG_OBJECTS_TIMERS is not set
-          # CONFIG_PROVE_LOCKING is not set
-          # CONFIG_DEBUG_LOCKDEP is not set
-          # CONFIG_DEBUG_SPINLOCK is not set
-          # CONFIG_DEBUG_MUTEXES is not set
-          # CONFIG_LOCK_STAT is not set
-          # CONFIG_STACKTRACE is not set
-          # CONFIG_DEBUG_STACK_USAGE is not set
-          # CONFIG_DEBUG_STACKOVERFLOW is not set
-          # CONFIG_RCU_TRACE is not set
-          # CONFIG_RCU_EQS_DEBUG is not set
-          # CONFIG_PRINTK_TIME is not set
-          # CONFIG_PRINTK_CALLER is not set
-          # CONFIG_PRINTK_INDEX is not set
-          EOF
+          # Disable ALL debug/tracing (gunakan format "is not set" seperti YASK)
+          echo "# CONFIG_DEBUG_KERNEL is not set" >> "$CONFIG"
+          echo "# CONFIG_TRACING_SUPPORT is not set" >> "$CONFIG"
+          echo "# CONFIG_TRACING is not set" >> "$CONFIG"
+          echo "# CONFIG_FTRACE is not set" >> "$CONFIG"
+          echo "# CONFIG_TRACEPOINTS is not set" >> "$CONFIG"
+          echo "# CONFIG_DEBUG_INFO is not set" >> "$CONFIG"
+          echo "# CONFIG_DEBUG_INFO_DWARF4 is not set" >> "$CONFIG"
+          echo "# CONFIG_DEBUG_INFO_BTF is not set" >> "$CONFIG"
+          echo "# CONFIG_DEBUG_FS is not set" >> "$CONFIG"
+          echo "# CONFIG_DEBUG_PAGEALLOC is not set" >> "$CONFIG"
+          echo "# CONFIG_PAGE_OWNER is not set" >> "$CONFIG"
+          echo "# CONFIG_SLUB_DEBUG is not set" >> "$CONFIG"
+          echo "# CONFIG_STACKTRACE is not set" >> "$CONFIG"
+          echo "# CONFIG_RCU_TRACE is not set" >> "$CONFIG"
+          echo "# CONFIG_PRINTK_TIME is not set" >> "$CONFIG"
+          echo "# CONFIG_PRINTK_CALLER is not set" >> "$CONFIG"
           
           # KSU specific configs
           if [ "${{ matrix.variant.enable_ksu }}" = "true" ]; then
-            cat >> "$CONFIG" << 'EOF'
-          CONFIG_KSU=y
-          CONFIG_KPROBES=y
-          CONFIG_HAVE_KPROBES=y
-          CONFIG_KPROBE_EVENTS=y
-          CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_PATH=y
-          CONFIG_KSU_SUSFS_SUS_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_KSTAT=y
-          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-          CONFIG_KSU_SUSFS_ENABLE_LOG=y
-          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=y
-          CONFIG_BBG=y
-          EOF
+            echo "# === KSU Configurations ===" >> "$CONFIG"
+            echo "CONFIG_KSU=y" >> "$CONFIG"
+            echo "CONFIG_KPROBES=y" >> "$CONFIG"
+            echo "CONFIG_HAVE_KPROBES=y" >> "$CONFIG"
+            echo "CONFIG_KPROBE_EVENTS=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG"
+            echo "CONFIG_BBG=y" >> "$CONFIG"
+            
+            # SUSFS options
+            echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG"
+            echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> "$CONFIG"
           fi
           
           echo "✅ Kernel configured for ${{ matrix.variant.name }}"
       
-      - name: Build kernel
+      - name: Clean git state
+        working-directory: common
+        run: |
+          git config --global user.email "build@github.com"
+          git config --global user.name "GitHub Actions"
+          git add -A 2>/dev/null || true
+          git diff-index --quiet HEAD || \
+            git commit -m "Build: Apply ${{ matrix.variant.name }} modifications" --no-verify 2>/dev/null || true
+          
+          # Create .scmversion untuk kontrol versi
+          echo "-android${{ env.ANDROID_VERSION }}-8-g$(git rev-parse --short=12 HEAD)-ab${{ github.run_number }}" > .scmversion
+          
+          echo "✓ Git state cleaned"
+      
+      - name: Build kernel (YASK style)
         env:
           SKIP_ABI_CHECKS: 1
           SKIP_CP_KERNEL_HDR: 1
@@ -297,12 +332,12 @@ jobs:
           KBUILD_BUILD_HOST: github
           KBUILD_BUILD_TIMESTAMP: "$(date -u '+%a %b %e %H:%M:%S UTC %Y')"
         run: |
-          echo "=== Starting kernel build ==="
+          echo "=== Starting kernel build (YASK method) ==="
           
-          # Build with full output
+          # Build dengan output terbatas
           BUILD_CONFIG=common/build.config.gki.aarch64 \
           LTO=thin \
-          build/build.sh -j$(nproc) 2>&1 | tee build.log
+          build/build.sh -j$(nproc) 2>&1 | tail -100
           
           # Check for success
           if [ -f "out/android13-5.15/dist/Image" ]; then
@@ -319,8 +354,8 @@ jobs:
             echo "Image size: $(du -h Image.${{ matrix.variant.suffix }} | cut -f1)"
           else
             echo "❌ Build failed - Image not found"
-            echo "=== Build log tail ==="
-            tail -50 build.log
+            echo "Checking build output..."
+            find out -name "*.log" -type f | head -5 | xargs tail -20 2>/dev/null || true
             exit 1
           fi
       
@@ -368,30 +403,32 @@ jobs:
             echo "✓ NoKSU variant found"
           fi
           
-          # Create AIO installer if both variants exist
+          # Create AIO jika kedua varian ada
           if [ "$HAS_KSU" = true ] && [ "$HAS_NOKSU" = true ]; then
             echo "Creating AIO package..."
+            # Update anykernel.sh untuk AIO
             cat > ak3/anykernel.sh << 'EOF'
             #!/system/bin/sh
             # AnyKernel3 AIO Installer
             
             ui_print " "
             ui_print "╔══════════════════════════════════════╗"
-            ui_print "║     GKI Kernel AIO - $build_date     ║"
+            ui_print "║     GKI Kernel AIO                   ║"
+            ui_print "║     Build $build_date                ║"
             ui_print "╚══════════════════════════════════════╝"
             ui_print " "
             ui_print "Select variant:"
-            ui_print "  • Volume UP   = KSU variant (Wild-KSU + SUSFS)"
-            ui_print "  • Volume DOWN = NoKSU variant (Stock GKI)"
+            ui_print "  • Volume UP   = KSU variant"
+            ui_print "  • Volume DOWN = NoKSU variant"
             ui_print "  • Power       = Cancel"
             ui_print " "
             
             if $KEYCHECK; then
               if [ "$VKSEL" = "up" ]; then
-                ui_print "Selected: KSU variant"
+                ui_print "Selected: KSU variant (Wild-KSU + SUSFS)"
                 mv $home/Image.ksu $home/Image
               elif [ "$VKSEL" = "down" ]; then
-                ui_print "Selected: NoKSU variant"
+                ui_print "Selected: NoKSU variant (Stock GKI)"
                 mv $home/Image.noksu $home/Image
               else
                 abort "Installation cancelled"
@@ -447,7 +484,7 @@ jobs:
             
             ### Features
             - ✅ **Performance**: MGLRU, CC_OPTIMIZE_FOR_PERFORMANCE
-            - ✅ **TCP**: Westwood (default) + BBR support
+            - ✅ **TCP**: Westwood (default) + BBR + BBR2 support
             - ✅ **Filesystem**: F2FS, OverlayFS, TMPFS with XATTR
             - ✅ **Memory**: ZRAM with LZ4 compression, LRU_GEN
             - ✅ **Optimized**: No debug, no tracing, no PSI
