@@ -238,7 +238,7 @@ jobs:
           CONFIG_TCP_CONG_BBR=y
           CONFIG_NET_SCH_FQ=y
           CONFIG_TCP_CONG_BIC=n
-          CONFIG_TCP_CONG_WESTWOOD=n
+          CONFIG_TCP_CONG_WESTWOOD=y
           CONFIG_TCP_CONG_HTCP=n
           CONFIG_IP_NF_TARGET_TTL=y
           CONFIG_IP6_NF_TARGET_HL=y
@@ -454,7 +454,7 @@ jobs:
             - BBR Westwood TCP Congestion
             
             ### Installation:
-            1. Use Kernel Flasher app (recommended)
+            1. Use Kernel Flasher app
             2. Or flash in custom recovery
             3. Reboot
             
