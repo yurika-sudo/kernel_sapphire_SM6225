@@ -17,6 +17,10 @@ jobs:
   build-kernels:
     name: "Build GKI Kernel"
     runs-on: ubuntu-latest
+    outputs:
+      build_start_time: ${{ steps.set_time.outputs.start_time }}
+      build_duration: ${{ steps.build.outputs.duration }}
+      build_success: ${{ steps.build.outcome }}
     
     env:
       KERNEL_LOC_DIR: "common_gki"
@@ -25,8 +29,18 @@ jobs:
       KERNEL_BRANCH: "android13-5.15-lts"
       DEFCONFIG_NAME: "gki_defconfig"
       WORK_DIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
 
     steps:
+      - name: "Set build start time"
+        id: set_time
+        run: |
+          START_TIME=$(date +%s)
+          echo "start_time=$START_TIME" >> $GITHUB_OUTPUT
+          echo "BUILD_START_TIME=$START_TIME" >> $GITHUB_ENV
+
       - name: "Send Telegram build started"
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
@@ -52,9 +66,16 @@ jobs:
           mkdir -p ${{ env.KERNEL_LOC_DIR }}
           echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
-          echo "BUILD_START_TIME=$(date +%s)" >> $GITHUB_ENV
           sudo apt-get update -qq
-          sudo apt-get install -y repo rsync aria2 bc bison build-essential flex git libelf-dev libssl-dev wget curl jq
+          sudo apt-get install -y repo rsync aria2 bc bison build-essential flex git libelf-dev libssl-dev wget curl jq ccache
+
+      - name: "Configure ccache"
+        run: |
+          mkdir -p ~/.cache/ccache
+          ccache --version
+          ccache --max-size=2G
+          ccache --set-config=compression=true
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
 
       - name: "Clone kernel source"
         working-directory: ./${{ env.KERNEL_LOC_DIR }}
@@ -179,8 +200,12 @@ jobs:
           if [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
             ln -sf ../Wild_KSU drivers/kernelsu
           fi
-          
+
+      - name: "Add kernel configurations"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          
           cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KSU=y
           CONFIG_KPROBES=y
@@ -192,12 +217,10 @@ jobs:
           CONFIG_OVERLAY_FS_INDEX=y
           CONFIG_OVERLAY_FS_XINO_AUTO=y
           CONFIG_OVERLAY_FS_METACOPY=y
-          CONFIG_KALLSYMS=y
-          CONFIG_KALLSYMS_ALL=y
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
           CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_MAP=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
           CONFIG_KSU_SUSFS_SUS_MOUNT=y
           CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
@@ -210,49 +233,37 @@ jobs:
           CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=y
-          CONFIG_KSU_SUSFS_SUS_MAP=y
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_BBR=y
+          CONFIG_NET_SCH_FQ=y
+          CONFIG_TCP_CONG_BIC=n
+          CONFIG_TCP_CONG_WESTWOOD=n
+          CONFIG_TCP_CONG_HTCP=n
+          CONFIG_IP_NF_TARGET_TTL=y
+          CONFIG_IP6_NF_TARGET_HL=y
+          CONFIG_IP6_NF_MATCH_HL=y
           EOF
 
-      - name: "Fix kernel version string"
+      - name: "Configure kernel name and remove dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          set -e
-          
-          cp scripts/setlocalversion scripts/setlocalversion.backup
-          if [ -f "scripts/mkcompile_h" ]; then
-            cp scripts/mkcompile_h scripts/mkcompile_h.backup
-          fi
-          
           export TZ="Asia/Jakarta"
-          BUILD_TIMESTAMP_WIB=$(date +"%a %b %d %H:%M:%S WIB %Y")
-          GIT_HASH=$(git rev-parse --verify HEAD | cut -c1-13)
-          BUILD_ID="ab$((RANDOM % 90000000 + 10000000))"
-          VERSION_SUFFIX="-android13-8-g${GIT_HASH}-${BUILD_ID}"
+          CURRENT_TIME=$(date -u +"%a %b %d %H:%M:%S UTC %Y")
           
-          echo "Build Time (WIB): $BUILD_TIMESTAMP_WIB"
-          echo "Version suffix: $VERSION_SUFFIX"
+          echo "CURRENT_TIME=$CURRENT_TIME"
           
-          sed -i 's/-dirty//g' scripts/setlocalversion
-          sed -i 's/echo "$res"/echo "${res%-dirty}"/' scripts/setlocalversion
+          sed -i '$s|echo "\$res"|echo "\$res-Wild-GKI"|' ./scripts/setlocalversion
           
-          cat > scripts/setlocalversion << EOF
-          #!/bin/sh
-          echo "${VERSION_SUFFIX}"
-          EOF
-          chmod +x scripts/setlocalversion
+          perl -pi -e "s{UTS_VERSION=\"\\\$\(echo \\\$UTS_VERSION \\\$CONFIG_FLAGS \\\$TIMESTAMP \\| cut -b -\\\$UTS_LEN\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $CURRENT_TIME\"}" ./scripts/mkcompile_h
           
-          if [ -f "scripts/mkcompile_h" ]; then
-            sed -i "/LINUX_COMPILE_TIME/c\  echo \#define LINUX_COMPILE_TIME \"${BUILD_TIMESTAMP_WIB}\"" scripts/mkcompile_h
-            sed -i "/LINUX_COMPILE_BY/c\  echo \#define LINUX_COMPILE_BY \"github-actions\"" scripts/mkcompile_h
-            sed -i "/LINUX_COMPILE_HOST/c\  echo \#define LINUX_COMPILE_HOST \"github\"" scripts/mkcompile_h
-          fi
+          sed -i 's/-dirty//' ./scripts/setlocalversion
           
-          cat > .scmversion << EOF
-          ${VERSION_SUFFIX}
-          EOF
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Wild: Clean Dirty Flag" || true
 
-      - name: "Fix ABI check issues"
+      - name: "Fix ABI and build configs"
         working-directory: ${{ env.WORK_DIR }}
         run: |
           if [ -f "build/abi/compare_to_symbol_list" ]; then
@@ -265,8 +276,13 @@ jobs:
           exit 0
           EOF
           chmod +x build/abi/compare_to_symbol_list
+          
+          sed -i 's/BUILD_SYSTEM_DLKM=1/BUILD_SYSTEM_DLKM=0/' ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64
+          sed -i '/MODULES_ORDER=android\/gki_aarch64_modules/d' ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64
+          sed -i '/KMI_SYMBOL_LIST_STRICT_MODE/d' ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64
 
       - name: "Build kernel"
+        id: build
         working-directory: ${{ env.WORK_DIR }}
         timeout-minutes: 45
         run: |
@@ -277,19 +293,21 @@ jobs:
           export SKIP_ABI_CHECKS=1
           export SKIP_KMI_CHECK=1
           
-          START_TIME=$(date +%s)
+          START_BUILD=$(date +%s)
           
           if ! BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
-            build/build.sh -j$(nproc); then
+            build/build.sh CC="/usr/bin/ccache clang" -j$(nproc); then
             echo "BUILD_FAILED=1" >> $GITHUB_ENV
             exit 1
           fi
           
-          END_TIME=$(date +%s)
-          DURATION=$((END_TIME - START_TIME))
+          ccache --show-stats
+          
+          END_BUILD=$(date +%s)
+          DURATION=$((END_BUILD - START_BUILD))
           echo "✅ Build completed in $((DURATION / 60))m $((DURATION % 60))s"
           
-          echo "BUILD_DURATION=$DURATION" >> $GITHUB_ENV
+          echo "duration=$DURATION" >> $GITHUB_OUTPUT
 
       - name: "Verify kernel version"
         working-directory: ${{ env.WORK_DIR }}/out/dist
@@ -346,7 +364,7 @@ jobs:
             echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
             echo "📋 Detected kernel version: $KERNEL_VERSION"
           else
-            echo "KERNEL_VERSION=5.15.197-android13-8-g6b88270ef707-ab13297889" >> $GITHUB_ENV
+            echo "KERNEL_VERSION=5.15.x-Wild-GKI" >> $GITHUB_ENV
           fi
 
       - name: "Create ZIP package"
@@ -405,11 +423,12 @@ jobs:
             - Wild-KSU 3.0.0 Stable
             - SUSFS v2.0.0
             - Baseband Guard (BBG)
-            - OverlayFS + TMPFS XATTR/POSIX_ACL
-            - BBR + Westwood TCP
+            - OverlayFS Full Support
+            - TMPFS XATTR/POSIX_ACL
+            - BBR TCP Congestion
             
             ### Installation:
-            1. Use Kernel Flasher app (recommended)
+            1. Use Kernel Flasher app
             2. Or flash in custom recovery
             3. Reboot
             
@@ -423,20 +442,20 @@ jobs:
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG_NAME }}"
           
           BUILD_END_TIME=$(date +%s)
-          BUILD_START_TIME="${{ needs.build-kernels.outputs.BUILD_START_TIME }}"
+          BUILD_START_TIME="${{ needs.build-kernels.outputs.build_start_time }}"
           DURATION=$((BUILD_END_TIME - BUILD_START_TIME))
           DURATION_MIN=$((DURATION / 60))
           DURATION_SEC=$((DURATION % 60))
           
           MESSAGE="<b>✅ Build Success for GKI Kernel</b>%0A"
           MESSAGE="${MESSAGE}<b>User:</b> ${{ github.actor }}%0A"
-          MESSAGE="${MESSAGE}<b>Started:</b> $(date -d "@${BUILD_START_TIME}" +'%Y-%m-%d %I:%M:%S %p UTC+07:00')%0A"
+          MESSAGE="${MESSAGE}<b>Started:</b> $(TZ='Asia/Jakarta' date -d "@${BUILD_START_TIME}" +'%Y-%m-%d %I:%M:%S %p WIB')%0A"
           MESSAGE="${MESSAGE}<b>Duration:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
-          MESSAGE="${MESSAGE}<b>📊 Build Stats:</b> 284/284 actions%0A%0A"
+          MESSAGE="${MESSAGE}<b>📊 Build Stats:</b> Complete%0A%0A"
           MESSAGE="${MESSAGE}<b>🔧 Configuration:</b>%0A"
           MESSAGE="${MESSAGE}  • Variant: GKI%0A"
           MESSAGE="${MESSAGE}  • Type: release%0A"
-          MESSAGE="${MESSAGE}  • Android: ${{ env.ANDROID_VERSION }}%0A%0A"
+          MESSAGE="${MESSAGE}  • Android: 13%0A%0A"
           MESSAGE="${MESSAGE}<b>📦 File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
           MESSAGE="${MESSAGE}<b>📊 Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
           MESSAGE="${MESSAGE}<b>🔐 SHA256:</b> <code>${{ env.ZIP_SHA256_SHORT }}...</code>%0A"
@@ -463,20 +482,28 @@ jobs:
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
           BUILD_END_TIME=$(date +%s)
-          BUILD_START_TIME="${{ needs.build-kernels.outputs.BUILD_START_TIME }}"
-          DURATION=$((BUILD_END_TIME - BUILD_START_TIME))
-          DURATION_MIN=$((DURATION / 60))
-          DURATION_SEC=$((DURATION % 60))
+          BUILD_START_TIME="${{ needs.build-kernels.outputs.build_start_time }}"
+          
+          if [ -n "$BUILD_START_TIME" ]; then
+            DURATION=$((BUILD_END_TIME - BUILD_START_TIME))
+            DURATION_MIN=$((DURATION / 60))
+            DURATION_SEC=$((DURATION % 60))
+            DURATION_TEXT="${DURATION_MIN}m ${DURATION_SEC}s"
+          else
+            DURATION_TEXT="N/A"
+          fi
           
           MESSAGE="<b>❌ Build Failed for GKI Kernel</b>%0A"
           MESSAGE="${MESSAGE}<b>User:</b> ${{ github.actor }}%0A"
-          MESSAGE="${MESSAGE}<b>Started:</b> $(date -d "@${BUILD_START_TIME}" +'%Y-%m-%d %I:%M:%S %p UTC+07:00')%0A"
-          MESSAGE="${MESSAGE}<b>Duration:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
-          MESSAGE="${MESSAGE}<b>📊 Build Stats:</b> 284/284 actions (1 failed)%0A%0A"
+          if [ -n "$BUILD_START_TIME" ]; then
+            MESSAGE="${MESSAGE}<b>Started:</b> $(TZ='Asia/Jakarta' date -d "@${BUILD_START_TIME}" +'%Y-%m-%d %I:%M:%S %p WIB')%0A"
+          fi
+          MESSAGE="${MESSAGE}<b>Duration:</b> ${DURATION_TEXT}%0A"
+          MESSAGE="${MESSAGE}<b>📊 Build Stats:</b> Failed%0A%0A"
           MESSAGE="${MESSAGE}<b>🔧 Configuration:</b>%0A"
           MESSAGE="${MESSAGE}  • Variant: GKI%0A"
           MESSAGE="${MESSAGE}  • Type: release%0A"
-          MESSAGE="${MESSAGE}  • Android: ${{ env.ANDROID_VERSION }}%0A%0A"
+          MESSAGE="${MESSAGE}  • Android: 13%0A%0A"
           MESSAGE="${MESSAGE}<b>📄 Check logs for details.</b>%0A"
           MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>"
           
