@@ -19,8 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_start_time: ${{ steps.set_time.outputs.start_time }}
-      build_duration: ${{ steps.build.outputs.duration }}
-      build_success: ${{ steps.build.outcome }}
     
     env:
       KERNEL_LOC_DIR: "common_gki"
@@ -29,9 +27,6 @@ jobs:
       KERNEL_BRANCH: "android13-5.15-lts"
       DEFCONFIG_NAME: "gki_defconfig"
       WORK_DIR: ${{ github.workspace }}
-      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
-      CCACHE_NOHASHDIR: "true"
-      CCACHE_HARDLINK: "true"
 
     steps:
       - name: "Set build start time"
@@ -45,16 +40,17 @@ jobs:
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+          RUN_NUMBER="${{ github.run_number }}"
+          BRANCH="${{ env.KERNEL_BRANCH }}"
           
-          MESSAGE="<b>⚙️ Build In Progress (1 tasks running)</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>👤 User:</b> ${{ github.actor }}%0A"
-          MESSAGE="${MESSAGE}<b>📊 Progress:</b> [█░░░░░░░░░] 5%%0A"
-          MESSAGE="${MESSAGE}<b>⏳ Elapsed:</b> 0 seconds%0A%0A"
-          MESSAGE="${MESSAGE}<b>🔧 Configuration:</b>%0A"
-          MESSAGE="${MESSAGE}  • Variant: GKI%0A"
-          MESSAGE="${MESSAGE}  • Type: release%0A"
-          MESSAGE="${MESSAGE}  • Android: ${{ env.ANDROID_VERSION }}%0A%0A"
-          MESSAGE="${MESSAGE}Making good progress! Why not stretch your legs? 🚶"
+          MESSAGE="<b>🚀 Kernel Build Started</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>📦 Variant:</b> ksu%0A"
+          MESSAGE="${MESSAGE}<b>📁 Repository:</b> ${{ github.repository }}%0A"
+          MESSAGE="${MESSAGE}<b>📍 Branch:</b> ${BRANCH}%0A"
+          MESSAGE="${MESSAGE}<b>🔄 Trigger:</b> ${{ github.event_name }}%0A"
+          MESSAGE="${MESSAGE}<b>🆔 Run:</b> #${RUN_NUMBER}%0A"
+          MESSAGE="${MESSAGE}<b>⏰ Started:</b> $(TZ='UTC' date +'%Y-%m-%d %H:%M UTC')%0A"
+          MESSAGE="${MESSAGE}<b>⏳ Status:</b> Initializing..."
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -67,15 +63,17 @@ jobs:
           echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
           sudo apt-get update -qq
-          sudo apt-get install -y repo rsync aria2 bc bison build-essential flex git libelf-dev libssl-dev wget curl jq ccache
+          sudo apt-get install -y repo rsync aria2 bc bison build-essential flex git libelf-dev libssl-dev curl jq
 
-      - name: "Configure ccache"
+      - name: "Setup SWAP 8GB"
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 8
+          
+      - name: "Tune Swap"
         run: |
-          mkdir -p ~/.cache/ccache
-          ccache --version
-          ccache --max-size=2G
-          ccache --set-config=compression=true
-          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+          echo "vm.swappiness=80" | sudo tee -a /etc/sysctl.conf
+          sudo sysctl -p
 
       - name: "Clone kernel source"
         working-directory: ./${{ env.KERNEL_LOC_DIR }}
@@ -87,7 +85,7 @@ jobs:
         working-directory: ${{ env.WORK_DIR }}
         run: |
           repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15-lts --depth=1
-          repo sync --optimized-fetch --prune -j$(nproc --all)
+          repo sync --optimized-fetch --prune --no-clone-bundle --no-tags -j$(nproc --all)
           
           rm -rf .repo
           rm -rf common
@@ -200,6 +198,8 @@ jobs:
           if [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
             ln -sf ../Wild_KSU drivers/kernelsu
           fi
+          
+          rm -rf susfs4ksu
 
       - name: "Add kernel configurations"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -207,6 +207,7 @@ jobs:
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           
           cat >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_KALLSYMS=y
           CONFIG_KSU=y
           CONFIG_KPROBES=y
           CONFIG_HAVE_KPROBES=y
@@ -233,48 +234,35 @@ jobs:
           CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=y
           CONFIG_TCP_CONG_ADVANCED=y
           CONFIG_TCP_CONG_BBR=y
-          CONFIG_NET_SCH_FQ=y
-          CONFIG_TCP_CONG_BIC=n
           CONFIG_TCP_CONG_WESTWOOD=y
-          CONFIG_DEFAULT_WESTWOOD=y
+          CONFIG_TCP_CONG_BIC=n
           CONFIG_TCP_CONG_HTCP=n
+          CONFIG_DEFAULT_WESTWOOD=y
+          CONFIG_NET_SCH_FQ=y
           CONFIG_IP_NF_TARGET_TTL=y
           CONFIG_IP6_NF_TARGET_HL=y
           CONFIG_IP6_NF_MATCH_HL=y
-          CONFIG_HZ_PERIODIC=n
-          CONFIG_HZ_100=n
-          CONFIG_HZ_250=n
-          CONFIG_HZ_300=y
-          CONFIG_HZ_1000=n
-          CONFIG_HZ=300
-          CONFIG_NO_HZ_FULL=y
-          CONFIG_MODULE_SIG_FORCE=y
-          CONFIG_FTRACE=n
-          CONFIG_TRACING=n
-          CONFIG_TRACING_SUPPORT=n
-          CONFIG_EVENT_TRACING=n
-          CONFIG_LOG_BUF_SHIFT=16
-          CONFIG_SLUB_DEBUG=n
-          CONFIG_DEBUG_KERNEL=n
-          CONFIG_DEBUG_FS=n
-          CONFIG_PRINTK=n
-          CONFIG_DEBUG_KINFO=n
-          CONFIG_DEBUG_BUGVERBOSE=n
-          CONFIG_DEBUG_LIST=n
-          CONFIG_DEBUG_MEMORY_INIT=n
           EOF
-
+          
+          echo "✅ Kernel configurations added successfully"
+          
       - name: "Configure kernel name and remove dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           export TZ="Asia/Jakarta"
           CURRENT_TIME=$(date -u +"%a %b %d %H:%M:%S UTC %Y")
           
-          echo "CURRENT_TIME=$CURRENT_TIME"
+          # Generate random hash-like suffix (looks like stock kernel)
+          RANDOM_HASH=$(openssl rand -hex 6)
+          KERNEL_SUFFIX="-ab${RANDOM_HASH}"
           
-          sed -i '$s|echo "\$res"|echo "\$res-Wild-GKI"|' ./scripts/setlocalversion
+          echo "CURRENT_TIME=$CURRENT_TIME"
+          echo "KERNEL_SUFFIX=$KERNEL_SUFFIX"
+          
+          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res${KERNEL_SUFFIX}\"|" ./scripts/setlocalversion
           
           perl -pi -e "s{UTS_VERSION=\"\\\$\(echo \\\$UTS_VERSION \\\$CONFIG_FLAGS \\\$TIMESTAMP \\| cut -b -\\\$UTS_LEN\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $CURRENT_TIME\"}" ./scripts/mkcompile_h
           
@@ -318,12 +306,10 @@ jobs:
           START_BUILD=$(date +%s)
           
           if ! BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
-            build/build.sh CC="/usr/bin/ccache clang" -j$(nproc); then
+            build/build.sh -j$(nproc); then
             echo "BUILD_FAILED=1" >> $GITHUB_ENV
             exit 1
           fi
-          
-          ccache --show-stats
           
           END_BUILD=$(date +%s)
           DURATION=$((END_BUILD - START_BUILD))
@@ -336,7 +322,7 @@ jobs:
         run: |
           echo "🔍 VERIFYING KERNEL VERSION"
           
-          VERSION_FULL=$(strings Image | grep "Linux version" | head -1)
+          VERSION_FULL=$(strings Image | grep "Linux version 5" | head -1)
           echo "Full version string: $VERSION_FULL"
           
           if echo "$VERSION_FULL" | grep -q "dirty"; then
@@ -386,44 +372,51 @@ jobs:
             echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
             echo "📋 Detected kernel version: $KERNEL_VERSION"
           else
-            echo "KERNEL_VERSION=5.15.x-Wild-GKI" >> $GITHUB_ENV
+            echo "⚠️ kernel_version.txt not found, using placeholder"
+            echo "KERNEL_VERSION=5.15.x-unknown" >> $GITHUB_ENV
           fi
 
       - name: "Create ZIP package"
         run: |
           set -e
           echo "📦 Creating AnyKernel3 package..."
-          
+         
           git clone --depth=1 https://github.com/superuseryu/AnyKernel3
-          
+         
           if [ ! -f "./artifacts/Image.ksu" ]; then
             echo "ERROR: Image.ksu not found in artifacts!"
             ls -la ./artifacts/
             exit 1
           fi
-          
+         
           cp ./artifacts/Image.ksu AnyKernel3/
-          
-          DATE_TAG=$(date +'%Y.%m.%d')
-          ZIP_NAME="GKI_Kernel_${DATE_TAG}.zip"
-          
+         
+          DATE_TAG=$(date +'%Y%m%d')
+          ZIP_NAME="Anykernel3_WildKSU_${DATE_TAG}.zip"
+         
           cd AnyKernel3
           zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
-          
+         
           ZIP_SIZE=$(stat -c%s "$ZIP_NAME")
           ZIP_SIZE_MB=$(echo "scale=2; $ZIP_SIZE / 1024 / 1024" | bc)
           ZIP_SHA256=$(sha256sum "$ZIP_NAME" | cut -d' ' -f1)
           ZIP_SHA256_SHORT=$(echo "$ZIP_SHA256" | cut -c1-16)
-          
+         
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
           echo "ZIP_SIZE_MB=$ZIP_SIZE_MB" >> $GITHUB_ENV
           echo "ZIP_SHA256=$ZIP_SHA256" >> $GITHUB_ENV
           echo "ZIP_SHA256_SHORT=$ZIP_SHA256_SHORT" >> $GITHUB_ENV
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
-          echo "TAG_NAME=gki-$DATE_TAG" >> $GITHUB_ENV
-          
+         
           echo "✅ Package created: $ZIP_NAME ($ZIP_SIZE_MB MB)"
+          echo "📊 Size: $ZIP_SIZE_MB MB"
+          echo "🔐 SHA256: $ZIP_SHA256"
+          
+          # Verify ZIP integrity
+          unzip -t "$ZIP_NAME"
+          file "$ZIP_NAME"
+          ls -la "$ZIP_NAME"
 
       - name: "Create GitHub Release"
         uses: softprops/action-gh-release@v1
@@ -431,37 +424,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: ${{ env.ZIP_NAME }}
-          tag_name: ${{ env.TAG_NAME }}
-          name: "GKI Kernel ${{ env.DATE_TAG }}"
-          body: |
-            ## GKI Kernel with Wild-KSU + SUSFS
-            
-            **Build Date:** $(date +'%Y-%m-%d %H:%M WIB')
-            **Kernel Version:** `${{ env.KERNEL_VERSION }}`
-            **File:** ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)
-            **SHA256:** `${{ env.ZIP_SHA256 }}`
-            
-            ### Features:
-            - Wild-KSU 3.0.0 Stable
-            - SUSFS ඞ v2.0.0
-            - Baseband Guard (BBG)
-            - OverlayFS Full Support
-            - TMPFS XATTR/POSIX_ACL
-            - BBR TCP Congestion
-            
-            ### Installation:
-            1. Use Kernel Flasher app
-            2. Or flash in custom recovery
-            3. Reboot
-            
-          draft: false
-          prerelease: false
+          tag_name: "Wild_KSU"
 
       - name: "Send Telegram success notification"
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG_NAME }}"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/Wild_KSU"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
           BUILD_END_TIME=$(date +%s)
           BUILD_START_TIME="${{ needs.build-kernels.outputs.build_start_time }}"
@@ -469,65 +439,76 @@ jobs:
           DURATION_MIN=$((DURATION / 60))
           DURATION_SEC=$((DURATION % 60))
           
-          MESSAGE="<b>✅ Build Success for GKI Kernel</b>%0A"
-          MESSAGE="${MESSAGE}<b>User:</b> ${{ github.actor }}%0A"
-          MESSAGE="${MESSAGE}<b>Started:</b> $(TZ='Asia/Jakarta' date -d "@${BUILD_START_TIME}" +'%Y-%m-%d %I:%M:%S %p WIB')%0A"
-          MESSAGE="${MESSAGE}<b>Duration:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
-          MESSAGE="${MESSAGE}<b>📊 Build Stats:</b> Complete%0A%0A"
-          MESSAGE="${MESSAGE}<b>🔧 Configuration:</b>%0A"
-          MESSAGE="${MESSAGE}  • Variant: GKI%0A"
-          MESSAGE="${MESSAGE}  • Type: release%0A"
-          MESSAGE="${MESSAGE}  • Android: 13%0A%0A"
+          SHORT_SHA=$(echo "${{ env.ZIP_SHA256 }}" | cut -c1-20)
+          
+          MESSAGE="<b>🎉 Build Success!</b>%0A%0A"
           MESSAGE="${MESSAGE}<b>📦 File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
           MESSAGE="${MESSAGE}<b>📊 Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
-          MESSAGE="${MESSAGE}<b>🔐 SHA256:</b> <code>${{ env.ZIP_SHA256_SHORT }}...</code>%0A"
-          MESSAGE="${MESSAGE}<b>🔧 Version:</b> <code>${{ env.KERNEL_VERSION }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>🔗 Download:</b> <a href='${RELEASE_URL}'>Release</a>%0A%0A"
-          MESSAGE="${MESSAGE}<b>🎯 Features:</b> Wild-KSU + SUSFS ඞ + BBG + OverlayFS"
+          MESSAGE="${MESSAGE}<b>🔐 SHA256:</b> <code>${SHORT_SHA}...</code>%0A"
+          MESSAGE="${MESSAGE}<b>🪧 Kernel:</b> <code>${{ env.KERNEL_VERSION }}</code>%0A"
+          MESSAGE="${MESSAGE}<b>🔗 Release:</b> <a href='${RELEASE_URL}'>click-here</a>%0A"
+          MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A"
+          MESSAGE="${MESSAGE}<b>🗓️ Build Time:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
+          MESSAGE="${MESSAGE}<b>📌 Variant:</b> KSU%0A"
+          MESSAGE="${MESSAGE}   - Wild-KSU%0A"
+          MESSAGE="${MESSAGE}   - SUSFS ඞ%0A"
+          MESSAGE="${MESSAGE}   - BBG%0A"
+          MESSAGE="${MESSAGE}   - BBRv1 Westwood TCP%0A%0A"
+          MESSAGE="${MESSAGE}<b>📣 Author/Maintainer:</b> @superuseryu%0A%0A"
+          MESSAGE="${MESSAGE}#kernel #gki #sapphire #sapphiren"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
             -d text="$MESSAGE" \
-            -d parse_mode="HTML" || true
+            -d parse_mode="HTML" \
+            -d disable_web_page_preview=true
+          
+          if (( $(echo "${{ env.ZIP_SIZE_MB }} < 50" | bc -l) )); then
+            echo "📤 Sending ZIP file to Telegram..."
+            curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendDocument" \
+              -F chat_id="$CHAT_ID" \
+              -F document=@"${{ env.ZIP_NAME }}" \
+              -F caption="📦 ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)%0A🔐 SHA256: ${{ env.ZIP_SHA256 }}"
+          else
+            echo "ℹ️ File size (${{ env.ZIP_SIZE_MB }} MB) too large, sending download link only."
+          fi
 
   notify-failure:
     name: "Notify Failure"
     runs-on: ubuntu-latest
     needs: [build-kernels]
-    if: failure()
-    
+    if: always() && needs.build-kernels.result != 'success'
     steps:
       - name: "Send Telegram failure notification"
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          JOB_STATUS="${{ needs.build-kernels.result }}"
           
-          BUILD_END_TIME=$(date +%s)
-          BUILD_START_TIME="${{ needs.build-kernels.outputs.build_start_time }}"
-          
-          if [ -n "$BUILD_START_TIME" ]; then
-            DURATION=$((BUILD_END_TIME - BUILD_START_TIME))
-            DURATION_MIN=$((DURATION / 60))
-            DURATION_SEC=$((DURATION % 60))
-            DURATION_TEXT="${DURATION_MIN}m ${DURATION_SEC}s"
+          if [ "$JOB_STATUS" = "cancelled" ]; then
+            STATUS_ICON="⚠️"
+            STATUS_TEXT="Workflow Cancelled"
+          elif [ "$JOB_STATUS" = "failure" ]; then
+            STATUS_ICON="❌"
+            STATUS_TEXT="Build Failed"
           else
-            DURATION_TEXT="N/A"
+            STATUS_ICON="❓"
+            STATUS_TEXT="Unknown Status ($JOB_STATUS)"
           fi
           
-          MESSAGE="<b>❌ Build Failed for GKI Kernel</b>%0A"
-          MESSAGE="${MESSAGE}<b>User:</b> ${{ github.actor }}%0A"
-          if [ -n "$BUILD_START_TIME" ]; then
-            MESSAGE="${MESSAGE}<b>Started:</b> $(TZ='Asia/Jakarta' date -d "@${BUILD_START_TIME}" +'%Y-%m-%d %I:%M:%S %p WIB')%0A"
+          MESSAGE="<b>${STATUS_ICON} ${STATUS_TEXT}!</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>📦 Variant:</b> ksu%0A"
+          MESSAGE="${MESSAGE}<b>🕐 Time:</b> $(TZ='Asia/Jakarta' date +'%H:%M:%S WIB')%0A"
+          MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>%0A"
+          MESSAGE="${MESSAGE}<b>📌 Status:</b> ${JOB_STATUS}%0A"
+          
+          # Tambahan info jika OOM atau sistem error bisa dilihat dari logs, tapi kita kasih hint
+          if [ "$JOB_STATUS" = "cancelled" ]; then
+            MESSAGE="${MESSAGE}<b>⚠️ Possible causes:</b> Manual cancel, OOM killer, or infrastructure issue.%0A"
           fi
-          MESSAGE="${MESSAGE}<b>Duration:</b> ${DURATION_TEXT}%0A"
-          MESSAGE="${MESSAGE}<b>📊 Build Stats:</b> Failed%0A%0A"
-          MESSAGE="${MESSAGE}<b>🔧 Configuration:</b>%0A"
-          MESSAGE="${MESSAGE}  • Variant: GKI%0A"
-          MESSAGE="${MESSAGE}  • Type: release%0A"
-          MESSAGE="${MESSAGE}  • Android: 13%0A%0A"
-          MESSAGE="${MESSAGE}<b>📄 Check logs for details.</b>%0A"
-          MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>"
+          
+          MESSAGE="${MESSAGE}<b>⚠️ Check the logs for details.</b>"
           
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
