@@ -201,6 +201,42 @@ jobs:
           
           rm -rf susfs4ksu
 
+      - name: "Fix SUSFS compatibility (susfs_reorder_mnt_id)"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          set -e
+          SUSFS_C="fs/susfs.c"
+          SUSFS_H="include/linux/susfs.h"
+          SETUID_HOOK="drivers/kernelsu/setuid_hook.c"
+
+          echo "🔍 Checking susfs_reorder_mnt_id compatibility..."
+
+          # Check if the function is missing from susfs.c
+          if grep -q "susfs_reorder_mnt_id" "$SETUID_HOOK" 2>/dev/null; then
+            if ! grep -q "susfs_reorder_mnt_id" "$SUSFS_C" 2>/dev/null; then
+              echo "⚠️  susfs_reorder_mnt_id called in setuid_hook.c but missing from susfs.c"
+              echo "✏️  Adding stub implementation to susfs.c..."
+
+              # Append stub function at end of susfs.c
+              printf '\n/* Compatibility stub: susfs_reorder_mnt_id not in this SUSFS version */\n' >> "$SUSFS_C"
+              printf 'void susfs_reorder_mnt_id(struct task_struct *task)\n' >> "$SUSFS_C"
+              printf '{\n\treturn;\n}\n' >> "$SUSFS_C"
+
+              # Make sure the declaration exists in susfs.h
+              if ! grep -q "susfs_reorder_mnt_id" "$SUSFS_H" 2>/dev/null; then
+                echo "✏️  Adding declaration to susfs.h..."
+                # Add before last #endif
+                sed -i '/^#endif/i void susfs_reorder_mnt_id(struct task_struct *task);' "$SUSFS_H"
+              fi
+
+              echo "✅ susfs_reorder_mnt_id stub added successfully"
+            else
+              echo "✅ susfs_reorder_mnt_id already defined in susfs.c — no fix needed"
+            fi
+          else
+            echo "✅ susfs_reorder_mnt_id not referenced in setuid_hook.c — no fix needed"
+          fi
+
       - name: "Add kernel configurations"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -465,10 +501,11 @@ jobs:
           
           if (( $(echo "${{ env.ZIP_SIZE_MB }} < 50" | bc -l) )); then
             echo "📤 Sending ZIP file to Telegram..."
+            CAPTION=$'📦 ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)\n🔐 SHA256: ${{ env.ZIP_SHA256 }}'
             curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendDocument" \
               -F chat_id="$CHAT_ID" \
               -F document=@"${{ env.ZIP_NAME }}" \
-              -F caption="📦 ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)%0A🔐 SHA256: ${{ env.ZIP_SHA256 }}"
+              -F caption="$CAPTION"
           else
             echo "ℹ️ File size (${{ env.ZIP_SIZE_MB }} MB) too large, sending download link only."
           fi
@@ -503,7 +540,6 @@ jobs:
           MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>%0A"
           MESSAGE="${MESSAGE}<b>📌 Status:</b> ${JOB_STATUS}%0A"
           
-          # Tambahan info jika OOM atau sistem error bisa dilihat dari logs, tapi kita kasih hint
           if [ "$JOB_STATUS" = "cancelled" ]; then
             MESSAGE="${MESSAGE}<b>⚠️ Possible causes:</b> Manual cancel, OOM killer, or infrastructure issue.%0A"
           fi
