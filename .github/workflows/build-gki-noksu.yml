@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build-kernels:
-    name: "Build GKI Kernel (NoGKI-NoKSU)"
+    name: "Build GKI Kernel (NoKSU)"
     runs-on: ubuntu-latest
     outputs:
       build_start_time: ${{ steps.set_time.outputs.start_time }}
@@ -149,87 +149,6 @@ jobs:
           
           grep -q "baseband-guard/Kconfig" security/Kconfig || \
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' security/Kconfig
-
-      - name: "Setup Wild-GKI-NoKSU with SUSFS"
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          set -e
-          
-          rm -rf ./KernelSU ./drivers/kernelsu ./Wild_GKI-NoKSU
-          
-          echo "Installing Wild-GKI-NoKSU..."
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_GKI-NoKSU/wild/kernel/setup.sh" | bash -s stable
-          
-          if [ ! -d "Wild_GKI-NoKSU" ]; then
-            echo "ERROR: Wild_GKI-NoKSU directory not found!"
-            exit 1
-          fi
-          
-          echo "Cloning SUSFS4GKI-NoKSU..."
-          git clone --depth=1 https://gitlab.com/simonpunk/susfs4noksu.git -b gki-android13-5.15
-          
-          if [ ! -d "susfs4noksu" ]; then
-            echo "ERROR: SUSFS4GKI-NoKSU clone failed!"
-            exit 1
-          fi
-          
-          SUSFS_PATCH="susfs4noksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-          
-          if [ -f "$SUSFS_PATCH" ]; then
-            if patch -p1 --forward < "$SUSFS_PATCH"; then
-              echo "SUSFS kernel patch applied"
-            else
-              echo "Patch had some issues, continuing..."
-            fi
-          fi
-          
-          mkdir -p fs include/linux
-          
-          if [ -f "susfs4noksu/kernel_patches/fs/susfs.c" ]; then
-            cp -f susfs4noksu/kernel_patches/fs/susfs.c fs/susfs.c
-          else
-            echo "ERROR: fs/susfs.c not found!"
-            exit 1
-          fi
-          
-          if [ -f "susfs4noksu/kernel_patches/include/linux/susfs.h" ]; then
-            cp -f susfs4noksu/kernel_patches/include/linux/susfs.h include/linux/susfs.h
-          else
-            echo "ERROR: include/linux/susfs.h not found!"
-            exit 1
-          fi
-          
-          if [ -f "susfs4noksu/kernel_patches/include/linux/susfs_def.h" ]; then
-            cp -f susfs4noksu/kernel_patches/include/linux/susfs_def.h include/linux/susfs_def.h
-          fi
-          
-          if [ -d "susfs4noksu/kernel_patches/KernelSU/kernel" ]; then
-            cp -rf susfs4noksu/kernel_patches/KernelSU/kernel/* Wild_GKI-NoKSU/kernel/ || true
-          fi
-          
-          GKI-NoKSU_C_FILE="Wild_GKI-NoKSU/kernel/noksu.c"
-          
-          if [ ! -f "$GKI-NoKSU_C_FILE" ]; then
-            echo "ERROR: $GKI-NoKSU_C_FILE not found!"
-            exit 1
-          fi
-          
-          if ! grep -q "susfs_init" "$GKI-NoKSU_C_FILE" 2>/dev/null; then
-            if ! grep -q "#include <linux/susfs.h>" "$GKI-NoKSU_C_FILE"; then
-              sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$GKI-NoKSU_C_FILE"
-            fi
-            
-            if ! grep -q "susfs_init()" "$GKI-NoKSU_C_FILE"; then
-              sed -i '/noksu_core_init();/a \\tsusfs_init();' "$GKI-NoKSU_C_FILE" || \
-              sed -i '/int __init noksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$GKI-NoKSU_C_FILE"
-            fi
-          fi
-          
-          if [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
-            ln -sf ../Wild_GKI-NoKSU drivers/kernelsu
-          fi
-          
-          rm -rf susfs4noksu
 
       - name: "Add kernel configurations"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
