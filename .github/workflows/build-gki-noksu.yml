@@ -1,4 +1,4 @@
-name: "Build GKI Kernel (NoKSU)"
+name: "Build GKI Kernel (NoGKI-NoKSU)"
 
 env:
   OUT_DIR: "out"
@@ -477,8 +477,6 @@ jobs:
           MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A"
           MESSAGE="${MESSAGE}<b>🗓️ Build Time:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
           MESSAGE="${MESSAGE}<b>📌 Variant:</b> GKI-NoKSU%0A"
-          MESSAGE="${MESSAGE}   - Wild-GKI-NoKSU%0A"
-          MESSAGE="${MESSAGE}"
           MESSAGE="${MESSAGE}   - BBG%0A"
           MESSAGE="${MESSAGE}   - BBRv1 Westwood TCP%0A%0A"
           MESSAGE="${MESSAGE}<b>📣 Author/Maintainer:</b> @superuseryu%0A%0A"
