@@ -380,8 +380,6 @@ jobs:
           MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A"
           MESSAGE="${MESSAGE}<b>🗓️ Build Time:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
           MESSAGE="${MESSAGE}<b>📌 Variant:</b> CLO-NoKSU%0A"
-          MESSAGE="${MESSAGE}"
-          MESSAGE="${MESSAGE}"
           MESSAGE="${MESSAGE}   - BBG%0A"
           MESSAGE="${MESSAGE}   - BBRv1 Westwood TCP%0A%0A"
           MESSAGE="${MESSAGE}<b>📣 Author/Maintainer:</b> @superuseryu%0A%0A"
