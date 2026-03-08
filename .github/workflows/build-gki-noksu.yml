@@ -1,4 +1,4 @@
-name: "Build GKI Kernel (NoGKI-NoKSU)"
+name: "Build GKI Kernel (NoKSU)"
 
 env:
   OUT_DIR: "out"
