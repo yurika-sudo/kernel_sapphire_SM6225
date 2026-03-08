@@ -354,7 +354,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: ${{ env.ZIP_NAME }}
-          tag_name: "NoKSU_CLO"
+          tag_name: "NoKSU"
 
       - name: "Send Telegram success notification"
         run: |
