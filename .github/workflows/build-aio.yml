@@ -333,12 +333,13 @@ jobs:
           fi
 
           # -- Fix 2: susfs_set_i_state_on_external_dir (supercalls.c) --
+          # Called with 1 arg: susfs_set_i_state_on_external_dir(arg)
           if grep -q "susfs_set_i_state_on_external_dir" "$SUPERCALLS" 2>/dev/null; then
             add_stub_c "susfs_set_i_state_on_external_dir" \
-              "void susfs_set_i_state_on_external_dir(struct inode *inode, bool enable)" \
+              "void susfs_set_i_state_on_external_dir(struct inode *inode)" \
               "return;"
             add_stub_h "susfs_set_i_state_on_external_dir" \
-              "void susfs_set_i_state_on_external_dir(struct inode *inode, bool enable);"
+              "void susfs_set_i_state_on_external_dir(struct inode *inode);"
           else
             echo "✅ susfs_set_i_state_on_external_dir not referenced — skip"
           fi
