@@ -286,8 +286,8 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # -- KSU only: Fix susfs_reorder_mnt_id symbol mismatch --
-      - name: "🔧 Fix SUSFS compatibility (susfs_reorder_mnt_id)"
+      # -- KSU only: Fix SUSFS symbol mismatches (Wild-KSU newer than SUSFS branch) --
+      - name: "🔧 Fix SUSFS compatibility stubs"
         if: matrix.kernel.enable_ksu == true
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -295,24 +295,52 @@ jobs:
           SUSFS_C="fs/susfs.c"
           SUSFS_H="include/linux/susfs.h"
           SETUID_HOOK="drivers/kernelsu/setuid_hook.c"
+          SUPERCALLS="drivers/kernelsu/supercalls.c"
 
-          echo "🔍 Checking susfs_reorder_mnt_id compatibility..."
-
-          if grep -q "susfs_reorder_mnt_id" "$SETUID_HOOK" 2>/dev/null; then
-            if ! grep -q "susfs_reorder_mnt_id" "$SUSFS_C" 2>/dev/null; then
-              echo "⚠️  susfs_reorder_mnt_id missing from susfs.c — adding stub..."
-              printf '\n/* Compatibility stub: susfs_reorder_mnt_id not in this SUSFS version */\n' >> "$SUSFS_C"
-              printf 'void susfs_reorder_mnt_id(struct task_struct *task)\n' >> "$SUSFS_C"
-              printf '{\n\treturn;\n}\n' >> "$SUSFS_C"
-              if ! grep -q "susfs_reorder_mnt_id" "$SUSFS_H" 2>/dev/null; then
-                sed -i '/^#endif/i void susfs_reorder_mnt_id(struct task_struct *task);' "$SUSFS_H"
-              fi
-              echo "✅ susfs_reorder_mnt_id stub added"
+          add_stub_c() {
+            local func="$1"
+            local signature="$2"
+            local body="$3"
+            if ! grep -q "$func" "$SUSFS_C" 2>/dev/null; then
+              echo "⚠️  $func missing from susfs.c — adding stub..."
+              printf "\n/* Compatibility stub: $func not in this SUSFS version */\n" >> "$SUSFS_C"
+              printf "%s\n" "$signature" >> "$SUSFS_C"
+              printf "{\n\t$body\n}\n" >> "$SUSFS_C"
+              echo "✅ $func stub added to susfs.c"
             else
-              echo "✅ Already defined — no fix needed"
+              echo "✅ $func already defined — skip"
             fi
+          }
+
+          add_stub_h() {
+            local func="$1"
+            local decl="$2"
+            if ! grep -q "$func" "$SUSFS_H" 2>/dev/null; then
+              sed -i "/^#endif/i $decl" "$SUSFS_H"
+              echo "✅ $func declaration added to susfs.h"
+            fi
+          }
+
+          # -- Fix 1: susfs_reorder_mnt_id (setuid_hook.c) --
+          if grep -q "susfs_reorder_mnt_id" "$SETUID_HOOK" 2>/dev/null; then
+            add_stub_c "susfs_reorder_mnt_id" \
+              "void susfs_reorder_mnt_id(struct task_struct *task)" \
+              "return;"
+            add_stub_h "susfs_reorder_mnt_id" \
+              "void susfs_reorder_mnt_id(struct task_struct *task);"
           else
-            echo "✅ Not referenced in setuid_hook.c — no fix needed"
+            echo "✅ susfs_reorder_mnt_id not referenced — skip"
+          fi
+
+          # -- Fix 2: susfs_set_i_state_on_external_dir (supercalls.c) --
+          if grep -q "susfs_set_i_state_on_external_dir" "$SUPERCALLS" 2>/dev/null; then
+            add_stub_c "susfs_set_i_state_on_external_dir" \
+              "void susfs_set_i_state_on_external_dir(struct inode *inode, bool enable)" \
+              "return;"
+            add_stub_h "susfs_set_i_state_on_external_dir" \
+              "void susfs_set_i_state_on_external_dir(struct inode *inode, bool enable);"
+          else
+            echo "✅ susfs_set_i_state_on_external_dir not referenced — skip"
           fi
 
       # -- Base kernel configs (all variants) --
