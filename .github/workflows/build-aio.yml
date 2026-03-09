@@ -340,6 +340,13 @@ jobs:
               "return;"
             add_stub_h "susfs_set_i_state_on_external_dir" \
               "void susfs_set_i_state_on_external_dir(struct inode *inode);"
+            # Ensure supercalls.c includes susfs.h so it can see the declaration
+            if ! grep -q "#include <linux/susfs.h>" "$SUPERCALLS" 2>/dev/null; then
+              sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$SUPERCALLS"
+              echo "✅ Added susfs.h include to supercalls.c"
+            else
+              echo "✅ susfs.h already included in supercalls.c"
+            fi
           else
             echo "✅ susfs_set_i_state_on_external_dir not referenced — skip"
           fi
