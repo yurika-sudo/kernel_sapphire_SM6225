@@ -24,6 +24,9 @@ All variants include: **BBG** · **BBRv1 + Westwood TCP** · **OverlayFS** · **
 
 ## Build Details
 
+<details>
+<summary>Click to expand</summary>
+
 | | GKI | CLO |
 |-|-----|-----|
 | Source | `android.googlesource.com/kernel/common` | `git.codelinaro.org/clo/la/kernel/msm-5.15` |
@@ -31,6 +34,8 @@ All variants include: **BBG** · **BBRv1 + Westwood TCP** · **OverlayFS** · **
 | Toolchain | Clang r547379 | Clang r547379 |
 | LTO | Thin | Thin |
 | Build Time | ~40 min | ~43 min |
+
+</details>
 
 Auto-build every Sunday 00:00 UTC (all 4 variants in parallel).
 
@@ -62,6 +67,9 @@ All 4 variants build in parallel, packaged into a single AIO ZIP on completion.
 
 ## Installation
 
+<details>
+<summary>Click to expand</summary>
+
 > ⚠️ **Flash via OrangeFox / TWRP only.** Volume key selection does not work in flasher apps.
 
 1. Download the ZIP from [Releases](https://github.com/superuseryu/android13.5.15-lts_SM6225/releases)
@@ -81,6 +89,8 @@ Step 2 — KSU variant
 4. Reboot
 
 > ⚠️ Using **Magisk**? Re-patch your boot image after flashing. `no_magisk_check` is intentionally disabled.
+
+</details>
 
 ---
 
