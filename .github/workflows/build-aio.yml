@@ -369,15 +369,31 @@ jobs:
             echo "⚠️  mm/vmscan.c not found, skip"
             exit 0
           fi
-          # Patch default lru_gen_enabled from BIT(LRU_GEN) to all 3 bits
-          # BIT(LRU_GEN)|BIT(LRU_GEN_MM_WALK)|BIT(LRU_GEN_NONLEAF_YOUNG) = 0x0007
-          if grep -q "lru_gen_enabled" "$VMSCAN"; then
-            sed -i 's/lru_gen_enabled = BIT(LRU_GEN);/lru_gen_enabled = BIT(LRU_GEN) | BIT(LRU_GEN_MM_WALK) | BIT(LRU_GEN_NONLEAF_YOUNG);/g' "$VMSCAN"
-            sed -i 's/lru_gen_enabled = 1;/lru_gen_enabled = 7;/g' "$VMSCAN"
-            echo "✅ MGLRU patched to 0x0007"
-          else
-            echo "⚠️  lru_gen_enabled not found in vmscan.c, skip"
-          fi
+
+          echo "--- Original lru_gen_enabled lines ---"
+          grep -n "lru_gen_enabled" "$VMSCAN" | head -20
+          echo "--------------------------------------"
+
+          # Patch 1: BIT(LRU_GEN) pattern (upstream)
+          sed -i 's/lru_gen_enabled = BIT(LRU_GEN);/lru_gen_enabled = BIT(LRU_GEN) | BIT(LRU_GEN_MM_WALK) | BIT(LRU_GEN_NONLEAF_YOUNG);/g' "$VMSCAN"
+
+          # Patch 2: LRU_GEN_CORE pattern (many trees)
+          sed -i 's/lru_gen_enabled __read_mostly = LRU_GEN_CORE;/lru_gen_enabled __read_mostly = LRU_GEN_CORE | BIT(LRU_GEN_MM_WALK) | BIT(LRU_GEN_NONLEAF_YOUNG);/g' "$VMSCAN"
+          sed -i 's/lru_gen_enabled = LRU_GEN_CORE;/lru_gen_enabled = LRU_GEN_CORE | BIT(LRU_GEN_MM_WALK) | BIT(LRU_GEN_NONLEAF_YOUNG);/g' "$VMSCAN"
+
+          # Patch 3: plain integer = 0 or = 1 pattern
+          sed -i 's/lru_gen_enabled __read_mostly = 0;/lru_gen_enabled __read_mostly = 7;/g' "$VMSCAN"
+          sed -i 's/lru_gen_enabled __read_mostly = 1;/lru_gen_enabled __read_mostly = 7;/g' "$VMSCAN"
+          sed -i 's/lru_gen_enabled = 1;/lru_gen_enabled = 7;/g' "$VMSCAN"
+
+          # Patch 4: Remove sysfs write handler masking (clamps write back to 1)
+          # Pattern: enabled &= BIT(LRU_GEN); or enabled = enabled ? BIT(LRU_GEN) : 0;
+          sed -i 's/enabled &= BIT(LRU_GEN);/enabled \&= 7;/g' "$VMSCAN"
+          sed -i 's/enabled = enabled ? BIT(LRU_GEN) : 0;/enabled = enabled ? 7 : 0;/g' "$VMSCAN"
+
+          echo "--- Patched lru_gen_enabled lines ---"
+          grep -n "lru_gen_enabled\|enabled &=" "$VMSCAN" | head -20
+          echo "✅ MGLRU patch applied"
 
       # -- Base kernel configs (all variants) --
       - name: "⚙️ Add base kernel configs"
