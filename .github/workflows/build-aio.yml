@@ -24,6 +24,28 @@ jobs:
         id: ts
         run: echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
 
+      - name: "📣 Send Telegram — Build started"
+        run: |
+          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MESSAGE="<b>🚀 Kernel Build Started</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>📁 Repository:</b> ${{ github.repository }}%0A"
+          MESSAGE="${MESSAGE}<b>🔄 Trigger:</b> ${{ github.event_name }}%0A"
+          MESSAGE="${MESSAGE}<b>🆔 Run:</b> #${{ github.run_number }}%0A"
+          MESSAGE="${MESSAGE}<b>⏰ Started:</b> $(TZ='UTC' date +'%Y-%m-%d %H:%M UTC')%0A"
+          MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A%0A"
+          MESSAGE="${MESSAGE}<b>📌 Variants:</b>%0A"
+          MESSAGE="${MESSAGE}   • GKI + Wild-KSU + SUSFS + BBG%0A"
+          MESSAGE="${MESSAGE}   • CLO + Wild-KSU + SUSFS + BBG%0A"
+          MESSAGE="${MESSAGE}   • GKI Vanilla + BBG%0A"
+          MESSAGE="${MESSAGE}   • CLO Vanilla + BBG"
+          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
+            -d chat_id="$CHAT_ID" \
+            -d text="$MESSAGE" \
+            -d parse_mode="HTML" \
+            -d disable_web_page_preview=true || true
+
   # -- matrix build job --
   build-kernels:
     name: "🔨 Build ${{ matrix.kernel.name }}"
@@ -94,23 +116,6 @@ jobs:
       WORK_DIR: ${{ github.workspace }}
 
     steps:
-
-      - name: "📣 Send Telegram — Build started"
-        run: |
-          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          MESSAGE="<b>🚀 Kernel Build Started</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>📦 Variant:</b> ${{ matrix.kernel.tg_variant }}%0A"
-          MESSAGE="${MESSAGE}<b>📁 Repository:</b> ${{ github.repository }}%0A"
-          MESSAGE="${MESSAGE}<b>📍 Branch:</b> ${{ matrix.kernel.branch }}%0A"
-          MESSAGE="${MESSAGE}<b>🔄 Trigger:</b> ${{ github.event_name }}%0A"
-          MESSAGE="${MESSAGE}<b>🆔 Run:</b> #${{ github.run_number }}%0A"
-          MESSAGE="${MESSAGE}<b>⏰ Started:</b> $(TZ='UTC' date +'%Y-%m-%d %H:%M UTC')%0A"
-          MESSAGE="${MESSAGE}<b>⏳ Status:</b> Initializing..."
-          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-            -d chat_id="$CHAT_ID" \
-            -d text="$MESSAGE" \
-            -d parse_mode="HTML" || true
 
       - name: "🛠️ Setup workspace"
         run: |
@@ -355,6 +360,25 @@ jobs:
             echo "✅ susfs_set_i_state_on_external_dir not referenced — skip"
           fi
 
+      # -- Force MGLRU enabled = 0x0007 (all 3 bits) --
+      - name: "🧠 Patch MGLRU to enable all features"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          VMSCAN="mm/vmscan.c"
+          if [ ! -f "$VMSCAN" ]; then
+            echo "⚠️  mm/vmscan.c not found, skip"
+            exit 0
+          fi
+          # Patch default lru_gen_enabled from BIT(LRU_GEN) to all 3 bits
+          # BIT(LRU_GEN)|BIT(LRU_GEN_MM_WALK)|BIT(LRU_GEN_NONLEAF_YOUNG) = 0x0007
+          if grep -q "lru_gen_enabled" "$VMSCAN"; then
+            sed -i 's/lru_gen_enabled = BIT(LRU_GEN);/lru_gen_enabled = BIT(LRU_GEN) | BIT(LRU_GEN_MM_WALK) | BIT(LRU_GEN_NONLEAF_YOUNG);/g' "$VMSCAN"
+            sed -i 's/lru_gen_enabled = 1;/lru_gen_enabled = 7;/g' "$VMSCAN"
+            echo "✅ MGLRU patched to 0x0007"
+          else
+            echo "⚠️  lru_gen_enabled not found in vmscan.c, skip"
+          fi
+
       # -- Base kernel configs (all variants) --
       - name: "⚙️ Add base kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -380,6 +404,8 @@ jobs:
           CONFIG_IP_NF_TARGET_TTL=y
           CONFIG_IP6_NF_TARGET_HL=y
           CONFIG_IP6_NF_MATCH_HL=y
+          CONFIG_LRU_GEN=y
+          CONFIG_LRU_GEN_ENABLED=y
           EOF
           echo "✅ Base configs added"
 
@@ -573,6 +599,18 @@ jobs:
         with:
           files: ${{ env.ZIP_NAME }}
           tag_name: "Wild_KSU"
+          name: "AIO Kernel Pack — ${{ env.BUILD_DATE }}"
+          body: |
+            ### Features:
+            - Wild-KSU v3.0.1 Stable
+            - SUSFS ඞ v2.0.0
+            - Baseband Guard (BBG)
+            - BBRv1 + Westwood TCP Congestion Control
+
+            ### Installation:
+            1. Flash via OrangeFox / TWRP
+            2. Select kernel source (GKI / CLO) and variant (KSU / NoKSU) when prompted
+            3. Reboot
 
       - name: "🎉 Send Telegram — Package success"
         if: success()
@@ -594,8 +632,7 @@ jobs:
           MESSAGE="${MESSAGE}<b>📦 File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
           MESSAGE="${MESSAGE}<b>📊 Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
           MESSAGE="${MESSAGE}<b>🔐 SHA256:</b> <code>${SHORT_SHA}...</code>%0A"
-          MESSAGE="${MESSAGE}<b>🪧 Kernel:</b> <code>${{ env.KERNEL_VERSION }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>🗓️ Build Time:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
+          MESSAGE="${MESSAGE}<b>⏱️ Build Time:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
           MESSAGE="${MESSAGE}<b>🔗 Release:</b> <a href='${RELEASE_URL}'>click-here</a>%0A"
           MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A%0A"
           MESSAGE="${MESSAGE}<b>📌 Variants included:</b>%0A"
@@ -606,8 +643,7 @@ jobs:
           MESSAGE="${MESSAGE}<b>⚡ Features:</b>%0A"
           MESSAGE="${MESSAGE}   • BBRv1 + Westwood TCP%0A"
           MESSAGE="${MESSAGE}   • SUSFS ඞ%0A"
-          MESSAGE="${MESSAGE}   • BBG%0A"
-          MESSAGE="${MESSAGE}   • OverlayFS%0A%0A"
+          MESSAGE="${MESSAGE}   • BBG%0A%0A"
           MESSAGE="${MESSAGE}<b>📣 Author/Maintainer:</b> @superuseryu%0A%0A"
           MESSAGE="${MESSAGE}#kernel #gki #clo #sapphire #sapphiren"
 
