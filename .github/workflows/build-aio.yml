@@ -360,35 +360,60 @@ jobs:
             echo "✅ susfs_set_i_state_on_external_dir not referenced — skip"
           fi
 
-      # -- Force MGLRU enabled = 0x0007 (all 3 bits) --
-      - name: "🧠 Patch MGLRU to enable all features"
+      # -- GKI fixup patches (from topnotchfreaks, applied inline) --
+      - name: "🩹 Apply GKI fixup patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          VMSCAN="mm/vmscan.c"
-          if [ ! -f "$VMSCAN" ]; then
-            echo "⚠️  mm/vmscan.c not found, skip"
-            exit 0
+          # Patch 1: drivers/of/property.c — fix io-channel DT property typo
+          # "io-channels" → "io-channel" to match DT spec
+          OF_PROP="drivers/of/property.c"
+          if [ -f "$OF_PROP" ]; then
+            sed -i 's/DEFINE_SIMPLE_PROP(io_channels, "io-channels",/DEFINE_SIMPLE_PROP(io_channels, "io-channel",/' "$OF_PROP"
+            echo "✅ io-channel DT property fix applied"
+          else
+            echo "⚠️  $OF_PROP not found, skip"
           fi
 
-          # Tree uses static_branch/jump_label via lru_gen_caps[] array
-          # Force enable all 3 caps at init by patching disable → enable
+          # Patch 2: drivers/usb/dwc3 — fix USB reconnect bug
+          # Remove dwc3_core_soft_reset() call from dwc3_gadget_soft_connect()
+          # and make dwc3_core_soft_reset static (remove from header)
+          DWC3_CORE="drivers/usb/dwc3/core.c"
+          DWC3_GADGET="drivers/usb/dwc3/gadget.c"
+          DWC3_HEADER="drivers/usb/dwc3/core.h"
 
-          echo "=== DIAGNOSTIC: lru_gen_caps init ==="
-          grep -n "lru_gen_caps\|static_branch.*lru_gen\|DEFINE_STATIC_KEY\|lru_gen_enabled" "$VMSCAN" | head -30
-          echo "======================================"
+          if [ -f "$DWC3_GADGET" ]; then
+            # Remove the soft reset block from dwc3_gadget_soft_connect
+            sed -i '/dwc3_core_soft_reset(dwc);/{
+              N; /dwc3_event_buffers_setup(dwc);/{
+                d
+              }
+            }' "$DWC3_GADGET"
+            # Also remove standalone dwc3_core_soft_reset(dwc); line if still present
+            sed -i '/^\s*dwc3_core_soft_reset(dwc);\s*$/d' "$DWC3_GADGET"
+            echo "✅ dwc3 gadget soft_connect fix applied"
+          else
+            echo "⚠️  $DWC3_GADGET not found, skip"
+          fi
 
-          # Patch: replace static_branch_disable with enable for MM_WALK and NONLEAF_YOUNG
-          # These are disabled by default, we want them enabled
-          sed -i 's/static_branch_disable_cpuslocked(&lru_gen_caps\[LRU_GEN_MM_WALK\])/static_branch_enable_cpuslocked(\&lru_gen_caps[LRU_GEN_MM_WALK])/g' "$VMSCAN"
-          sed -i 's/static_branch_disable_cpuslocked(&lru_gen_caps\[LRU_GEN_NONLEAF_YOUNG\])/static_branch_enable_cpuslocked(\&lru_gen_caps[LRU_GEN_NONLEAF_YOUNG])/g' "$VMSCAN"
+          if [ -f "$DWC3_CORE" ]; then
+            # Add forward declaration before __dwc3_set_mode if not already there
+            if ! grep -q "static int dwc3_core_soft_reset(struct dwc3 \*dwc);" "$DWC3_CORE"; then
+              sed -i '/^static void __dwc3_set_mode/i static int dwc3_core_soft_reset(struct dwc3 *dwc);' "$DWC3_CORE"
+            fi
+            # Make dwc3_core_soft_reset static
+            sed -i 's/^int dwc3_core_soft_reset(struct dwc3 \*dwc)$/static int dwc3_core_soft_reset(struct dwc3 *dwc)/' "$DWC3_CORE"
+            echo "✅ dwc3 core_soft_reset static fix applied"
+          else
+            echo "⚠️  $DWC3_CORE not found, skip"
+          fi
 
-          # Also patch DEFINE_STATIC_KEY_FALSE → DEFINE_STATIC_KEY_TRUE for MM_WALK/NONLEAF_YOUNG
-          sed -i 's/DEFINE_STATIC_KEY_FALSE(lru_gen_caps\[LRU_GEN_MM_WALK\])/DEFINE_STATIC_KEY_TRUE(lru_gen_caps[LRU_GEN_MM_WALK])/g' "$VMSCAN"
-          sed -i 's/DEFINE_STATIC_KEY_FALSE(lru_gen_caps\[LRU_GEN_NONLEAF_YOUNG\])/DEFINE_STATIC_KEY_TRUE(lru_gen_caps[LRU_GEN_NONLEAF_YOUNG])/g' "$VMSCAN"
-
-          echo "=== AFTER PATCH ==="
-          grep -n "lru_gen_caps\|DEFINE_STATIC_KEY" "$VMSCAN" | head -20
-          echo "✅ MGLRU static_branch patch applied"
+          if [ -f "$DWC3_HEADER" ]; then
+            # Remove extern declaration from header
+            sed -i '/^int dwc3_core_soft_reset(struct dwc3 \*dwc);$/d' "$DWC3_HEADER"
+            echo "✅ dwc3 header declaration removed"
+          else
+            echo "⚠️  $DWC3_HEADER not found, skip"
+          fi
 
       # -- Base kernel configs (all variants) --
       - name: "⚙️ Add base kernel configs"
@@ -610,7 +635,7 @@ jobs:
         with:
           files: ${{ env.ZIP_NAME }}
           tag_name: "Wild_KSU"
-          name: "AIO Kernel Pack — ${{ env.BUILD_DATE }}"
+          name: "AIO Kernel Pack"
           body: |
             ### Features:
             - Wild-KSU v3.0.1 Stable
@@ -646,11 +671,6 @@ jobs:
           MESSAGE="${MESSAGE}<b>⏱️ Build Time:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
           MESSAGE="${MESSAGE}<b>🔗 Release:</b> <a href='${RELEASE_URL}'>click-here</a>%0A"
           MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A%0A"
-          MESSAGE="${MESSAGE}<b>📌 Variants included:</b>%0A"
-          MESSAGE="${MESSAGE}   • GKI + Wild-KSU + SUSFS + BBG%0A"
-          MESSAGE="${MESSAGE}   • CLO + Wild-KSU + SUSFS + BBG%0A"
-          MESSAGE="${MESSAGE}   • GKI Vanilla + BBG%0A"
-          MESSAGE="${MESSAGE}   • CLO Vanilla + BBG%0A%0A"
           MESSAGE="${MESSAGE}<b>⚡ Features:</b>%0A"
           MESSAGE="${MESSAGE}   • BBRv1 + Westwood TCP%0A"
           MESSAGE="${MESSAGE}   • SUSFS ඞ%0A"
@@ -700,14 +720,7 @@ jobs:
           MESSAGE="<b>${STATUS_ICON} ${STATUS_TEXT}!</b>%0A%0A"
           MESSAGE="${MESSAGE}<b>📦 Workflow:</b> Build Kernel AIO%0A"
           MESSAGE="${MESSAGE}<b>🕐 Time:</b> $(TZ='Asia/Jakarta' date +'%H:%M:%S WIB')%0A"
-          MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>%0A"
-          MESSAGE="${MESSAGE}<b>📌 Status:</b> ${JOB_STATUS}%0A"
-
-          if [ "$JOB_STATUS" = "cancelled" ]; then
-            MESSAGE="${MESSAGE}<b>⚠️ Possible causes:</b> Manual cancel, OOM killer, or infrastructure issue.%0A"
-          fi
-
-          MESSAGE="${MESSAGE}<b>⚠️ Check the logs for details.</b>"
+          MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>"
 
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
