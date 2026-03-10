@@ -347,6 +347,10 @@ jobs:
             else
               echo "✅ susfs.h already included in supercalls.c"
             fi
+            # Fix type mismatch: Wild-KSU passes void** but susfs expects struct inode*
+            # Add explicit cast at call sites to suppress -Werror=incompatible-pointer-types
+            sed -i 's/susfs_set_i_state_on_external_dir(arg)/susfs_set_i_state_on_external_dir((struct inode \*)arg)/g' "$SUPERCALLS"
+            echo "✅ Patched susfs_set_i_state_on_external_dir call sites with cast"
           else
             echo "✅ susfs_set_i_state_on_external_dir not referenced — skip"
           fi
