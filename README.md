@@ -24,18 +24,19 @@ All variants include: **BBG** · **BBRv1 + Westwood TCP** · **OverlayFS** · **
 
 ## Build Details
 
-<details>
-<summary>Click to expand</summary>
+**GKI (AOSP)**
+- Source: `android.googlesource.com/kernel/common`
+- Branch: `android13-5.15-lts`
+- Toolchain: Clang r547379
+- LTO: Thin
+- Build Time: ~40 min
 
-| | GKI | CLO |
-|-|-----|-----|
-| Source | `android.googlesource.com/kernel/common` | `git.codelinaro.org/clo/la/kernel/msm-5.15` |
-| Branch | `android13-5.15-lts` | `kernel.lnx.5.15.r1-rel` |
-| Toolchain | Clang r547379 | Clang r547379 |
-| LTO | Thin | Thin |
-| Build Time | ~40 min | ~43 min |
-
-</details>
+**CLO (CodeLinaro)**
+- Source: `git.codelinaro.org/clo/la/kernel/msm-5.15`
+- Branch: `kernel.lnx.5.15.r1-rel`
+- Toolchain: Clang r547379
+- LTO: Thin
+- Build Time: ~43 min
 
 Auto-build every Sunday 00:00 UTC (all 4 variants in parallel).
 
