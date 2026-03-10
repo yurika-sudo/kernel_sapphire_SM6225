@@ -370,29 +370,24 @@ jobs:
             exit 0
           fi
 
-          echo "--- Original lru_gen_enabled lines ---"
-          grep -n "lru_gen_enabled" "$VMSCAN" | head -20
-          echo "--------------------------------------"
+          echo "=== DIAGNOSTIC: finding lru_gen declaration ==="
+          grep -n "static.*lru_gen_enabled\|unsigned.*lru_gen_enabled\|lru_gen_enabled\s*=" "$VMSCAN" | head -20
+          echo "=== DIAGNOSTIC: finding LRU_GEN_CORE/BIT usage ==="
+          grep -n "LRU_GEN_CORE\|BIT(LRU_GEN)\|lru_gen_enabled = " "$VMSCAN" | head -20
+          echo "=== DIAGNOSTIC: check mm/lru_gen.h if exists ==="
+          grep -rn "lru_gen_enabled\s*=" mm/ include/linux/mm_inline.h 2>/dev/null | head -20
+          echo "================================================"
 
-          # Patch 1: BIT(LRU_GEN) pattern (upstream)
-          sed -i 's/lru_gen_enabled = BIT(LRU_GEN);/lru_gen_enabled = BIT(LRU_GEN) | BIT(LRU_GEN_MM_WALK) | BIT(LRU_GEN_NONLEAF_YOUNG);/g' "$VMSCAN"
+          # Patch: catch any static variable declaration with assignment
+          sed -i 's/\(static[^;]*lru_gen_enabled[^;]*\)= [^;]*/\1= 7/g' "$VMSCAN"
 
-          # Patch 2: LRU_GEN_CORE pattern (many trees)
-          sed -i 's/lru_gen_enabled __read_mostly = LRU_GEN_CORE;/lru_gen_enabled __read_mostly = LRU_GEN_CORE | BIT(LRU_GEN_MM_WALK) | BIT(LRU_GEN_NONLEAF_YOUNG);/g' "$VMSCAN"
-          sed -i 's/lru_gen_enabled = LRU_GEN_CORE;/lru_gen_enabled = LRU_GEN_CORE | BIT(LRU_GEN_MM_WALK) | BIT(LRU_GEN_NONLEAF_YOUNG);/g' "$VMSCAN"
+          echo "=== AFTER PATCH ==="
+          grep -n "static.*lru_gen_enabled\|lru_gen_enabled\s*=" "$VMSCAN" | head -20
 
-          # Patch 3: plain integer = 0 or = 1 pattern
-          sed -i 's/lru_gen_enabled __read_mostly = 0;/lru_gen_enabled __read_mostly = 7;/g' "$VMSCAN"
-          sed -i 's/lru_gen_enabled __read_mostly = 1;/lru_gen_enabled __read_mostly = 7;/g' "$VMSCAN"
-          sed -i 's/lru_gen_enabled = 1;/lru_gen_enabled = 7;/g' "$VMSCAN"
-
-          # Patch 4: Remove sysfs write handler masking (clamps write back to 1)
-          # Pattern: enabled &= BIT(LRU_GEN); or enabled = enabled ? BIT(LRU_GEN) : 0;
+          # Remove sysfs write masking
           sed -i 's/enabled &= BIT(LRU_GEN);/enabled \&= 7;/g' "$VMSCAN"
           sed -i 's/enabled = enabled ? BIT(LRU_GEN) : 0;/enabled = enabled ? 7 : 0;/g' "$VMSCAN"
 
-          echo "--- Patched lru_gen_enabled lines ---"
-          grep -n "lru_gen_enabled\|enabled &=" "$VMSCAN" | head -20
           echo "✅ MGLRU patch applied"
 
       # -- Base kernel configs (all variants) --
