@@ -9,12 +9,25 @@ Automated kernel builder for **Redmi Note 12/13 4G (sapphire/sapphiren)** — bu
 
 ## Variants
 
-| Variant | Source | KernelSU | Image |
-|---------|--------|----------|-------|
-| GKI + Wild-KSU | AOSP `android13-5.15-lts` | ✅ Wild-KSU + SUSFS | `Image.gki.ksu` |
-| GKI NoKSU | AOSP `android13-5.15-lts` | ❌ | `Image.gki.noksu` |
-| CLO + Wild-KSU | CodeLinaro `msm-5.15` | ✅ Wild-KSU + SUSFS | `Image.clo.ksu` |
-| CLO NoKSU | CodeLinaro `msm-5.15` | ❌ | `Image.clo.noksu` |
+**GKI + Wild-KSU**
+- Source: AOSP `android13-5.15-lts`
+- KernelSU: ✅ Wild-KSU + SUSFS
+- Image: `Image.gki.ksu`
+
+**GKI NoKSU**
+- Source: AOSP `android13-5.15-lts`
+- KernelSU: ❌
+- Image: `Image.gki.noksu`
+
+**CLO + Wild-KSU**
+- Source: CodeLinaro `msm-5.15`
+- KernelSU: ✅ Wild-KSU + SUSFS
+- Image: `Image.clo.ksu`
+
+**CLO NoKSU**
+- Source: CodeLinaro `msm-5.15`
+- KernelSU: ❌
+- Image: `Image.clo.noksu`
 
 All variants include: **BBG** · **BBRv1 + Westwood TCP** · **OverlayFS** · **KALLSYMS**
 
