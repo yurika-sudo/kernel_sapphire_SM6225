@@ -1,9 +1,10 @@
 # msm-5.15 Kernel Builder · sapphire/sapphiren
 
-[![Build Kernel AIO](https://github.com/superuseryu/android13.5.15-lts_SM6225/actions/workflows/build-aio.yml/badge.svg)](https://github.com/superuseryu/android13.5.15-lts_SM6225/actions/workflows/build-aio.yml)
-[![Latest Release](https://img.shields.io/github/v/release/superuseryu/android13.5.15-lts_SM6225)](https://github.com/superuseryu/android13.5.15-lts_SM6225/releases/latest)
+Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — built specifically for `android13-5.15` devices.
 
-Automated kernel builder for **Redmi Note 12/13 4G (sapphire/sapphiren)** — built specifically for `android13-5.15` devices. Other devices? Who knows, not my problem. 🙂
+> **Why only sapphire/sapphiren?** Don't wanna risk it, don't have any other device. :v
+>
+> If you actually wanna request support for another device, just send a message in my [Telegram channel](https://t.me/home_yu_chat). Just know you accept all the risks and take full responsibility — you gotta be ready for testing. Bootloop/brick ain't my responsibility as the dev.
 
 ---
 
@@ -29,7 +30,7 @@ Automated kernel builder for **Redmi Note 12/13 4G (sapphire/sapphiren)** — bu
 - KernelSU: ❌
 - Image: `Image.clo.noksu`
 
-All variants include: **BBG** · **BBRv1 + Westwood TCP** · **OverlayFS** · **KALLSYMS**
+All variants include: **BBG** · **BBRv1 + Westwood TCP**
 
 > **GKI vs CLO** — GKI follows AOSP LTS upstream. CLO is Qualcomm's own kernel fork with MSM-specific patches, potentially better for Snapdragon devices.
 
@@ -86,7 +87,7 @@ All 4 variants build in parallel, packaged into a single AIO ZIP on completion.
 
 > ⚠️ **Flash via OrangeFox / TWRP only.** Volume key selection does not work in flasher apps.
 
-1. Download the ZIP from [Releases](https://github.com/superuseryu/android13.5.15-lts_SM6225/releases)
+1. Download the ZIP from [Releases](https://github.com/superuseryu/android13.5.15_SM6225/releases)
 2. Boot into recovery
 3. Flash the ZIP — recovery will prompt you to choose:
 
@@ -124,4 +125,4 @@ Built and tested on sapphire/sapphiren only. Flash at your own risk, always back
 
 ---
 
-**Telegram:** [@home_yu_chat](https://t.me/home_yu_chat) · **Issues:** [open here](https://github.com/superuseryu/android13.5.15-lts_SM6225/issues)
+**Telegram:** [@home_yu_chat](https://t.me/home_yu_chat) · **Issues:** [open here](https://github.com/superuseryu/android13.5.15_SM6225/issues)
