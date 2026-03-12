@@ -1,5 +1,4 @@
 # msm-5.15 Kernel Builder
-sapphire/sapphiren
 
 Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — built specifically for `android13-5.15` devices.
 
