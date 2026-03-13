@@ -11,10 +11,6 @@ on:
       is_testing:
         description: "Mark as Testing Build?"
         type: boolean
-        default: true
-      enable_schedule:
-        description: "Allow scheduled (auto) runs?"
-        type: boolean
         default: false
 
 permissions:
@@ -26,7 +22,6 @@ jobs:
   setup:
     name: "⏱️ Setup"
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || inputs.enable_schedule == true
     outputs:
       start_time: ${{ steps.ts.outputs.start_time }}
     steps:
