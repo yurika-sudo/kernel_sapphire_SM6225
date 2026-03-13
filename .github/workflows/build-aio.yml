@@ -11,11 +11,11 @@ on:
       is_testing:
         description: "Mark as Testing Build?"
         type: boolean
-        default: false
+        default: true
       enable_schedule:
         description: "Allow scheduled (auto) runs?"
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: write
@@ -682,7 +682,7 @@ jobs:
           fi
 
           MESSAGE="<b>🎉 Build Success!</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>📦 Type:</b> ${BUILD_TYPE}%0A"
+          MESSAGE="${MESSAGE}<b>✏️ Type:</b> ${BUILD_TYPE}%0A"
           MESSAGE="${MESSAGE}<b>📦 File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
           MESSAGE="${MESSAGE}<b>📊 Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
           MESSAGE="${MESSAGE}<b>🔐 SHA256:</b> <code>${SHORT_SHA}...</code>%0A"
