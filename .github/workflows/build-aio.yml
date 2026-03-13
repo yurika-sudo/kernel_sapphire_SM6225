@@ -469,14 +469,14 @@ jobs:
           EOF
           echo "✅ KSU + SUSFS configs added"
 
-      # -- CLO only: Disable debug configs from bengal_consolidate --
+      # -- CLO only: Disable debug configs --
       - name: "⚙️ CLO: Disable debug configs"
         if: matrix.kernel.repo_name == 'clo'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          CONSOLIDATE="arch/arm64/configs/vendor/bengal_consolidate.config"
-          echo "# CONFIG_CMA_DEBUGFS is not set" >> "$CONSOLIDATE"
-          echo "# CONFIG_PAGE_OWNER is not set" >> "$CONSOLIDATE"
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          echo "# CONFIG_CMA_DEBUGFS is not set" >> "$CONFIG_FILE"
+          echo "# CONFIG_PAGE_OWNER is not set" >> "$CONFIG_FILE"
           echo "✅ CLO debug configs disabled"
 
       - name: "🏷️ Configure kernel name and remove dirty"
