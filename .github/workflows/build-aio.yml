@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: '0 0 * * 0'
   workflow_dispatch:
+    inputs:
+      is_testing:
+        description: "Mark as Testing Build?"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -29,7 +34,13 @@ jobs:
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          MESSAGE="<b>🚀 Kernel Build Started</b>%0A%0A"
+          if [ "${{ inputs.is_testing }}" = "true" ]; then
+            BUILD_TYPE="🧪 Testing Build"
+          else
+            BUILD_TYPE="🧩 Stable Build"
+          fi
+          MESSAGE="<b>🔨 Kernel Build Started</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>📦 Type:</b> ${BUILD_TYPE}%0A"
           MESSAGE="${MESSAGE}<b>📁 Repository:</b> ${{ github.repository }}%0A"
           MESSAGE="${MESSAGE}<b>🔄 Trigger:</b> ${{ github.event_name }}%0A"
           MESSAGE="${MESSAGE}<b>🆔 Run:</b> #${{ github.run_number }}%0A"
@@ -469,16 +480,6 @@ jobs:
           EOF
           echo "✅ KSU + SUSFS configs added"
 
-      # -- CLO only: Disable debug configs from bengal_consolidate --
-      - name: "⚙️ CLO: Disable debug configs"
-        if: matrix.kernel.repo_name == 'clo'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          CONSOLIDATE="arch/arm64/configs/vendor/bengal_consolidate.config"
-          echo "# CONFIG_CMA_DEBUGFS is not set" >> "$CONSOLIDATE"
-          echo "# CONFIG_PAGE_OWNER is not set" >> "$CONSOLIDATE"
-          echo "✅ CLO debug configs disabled"
-
       - name: "🏷️ Configure kernel name and remove dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -669,7 +670,14 @@ jobs:
 
           SHORT_SHA=$(echo "${{ env.ZIP_SHA256 }}" | cut -c1-20)
 
+          if [ "${{ inputs.is_testing }}" = "true" ]; then
+            BUILD_TYPE="🧪 Testing Build"
+          else
+            BUILD_TYPE="🧩 Stable Build"
+          fi
+
           MESSAGE="<b>🎉 Build Success!</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>✏️ Type:</b> ${BUILD_TYPE}%0A"
           MESSAGE="${MESSAGE}<b>📦 File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
           MESSAGE="${MESSAGE}<b>📊 Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
           MESSAGE="${MESSAGE}<b>🔐 SHA256:</b> <code>${SHORT_SHA}...</code>%0A"
