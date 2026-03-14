@@ -241,7 +241,7 @@ jobs:
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
             security/Kconfig
 
-      # -- [IMPROVE #2] Wild-KSU canary + SUSFS — directory-wide copy [IMPROVE #1] --
+      # -- Wild-KSU stable + SUSFS — directory-wide copy [IMPROVE #1] --
       - name: "😋 Setup Wild-KSU with SUSFS"
         if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -250,9 +250,9 @@ jobs:
 
           rm -rf ./KernelSU ./drivers/kernelsu ./Wild_KSU
 
-          echo "Installing Wild-KSU (canary)..."
-          # [IMPROVE #2] canary branch — multiple managers out-of-the-box
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s canary
+          echo "Installing Wild-KSU (stable)..."
+          
+          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
 
           if [ ! -d "Wild_KSU" ]; then
             echo "ERROR: Wild_KSU directory not found!"
@@ -498,6 +498,13 @@ jobs:
           CONFIG_IP6_NF_MATCH_HL=y
           CONFIG_LRU_GEN=y
           CONFIG_LRU_GEN_ENABLED=y
+          # -- GKID performance tuning --
+          CONFIG_HZ_300=y
+          CONFIG_HZ=300
+          CONFIG_ZRAM_WRITEBACK=y
+          CONFIG_ZRAM_MEMORY_TRACKING=y
+          CONFIG_UBSAN=n
+          CONFIG_PAGE_OWNER=n
           EOF
           echo "✅ Base configs added"
 
@@ -727,7 +734,7 @@ jobs:
           name: "AIO Kernel Pack"
           body: |
             ### Features:
-            - Wild-KSU (canary) + SUSFS ඞ v2.0.0
+            - Wild-KSU (stable) + SUSFS ඞ v2.0.0
             - SukiSU Ultra + SUSFS ඞ v2.0.0
             - Baseband Guard (BBG)
             - BBRv1 + Westwood TCP Congestion Control
@@ -777,7 +784,7 @@ jobs:
           MESSAGE="${MESSAGE}<b>🔗 Release:</b> <a href='${RELEASE_URL}'>click-here</a>%0A"
           MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A%0A"
           MESSAGE="${MESSAGE}<b>⚡ Features:</b>%0A"
-          MESSAGE="${MESSAGE}   • Wild-KSU (canary) + SUSFS ඞ%0A"
+          MESSAGE="${MESSAGE}   • Wild-KSU (stable) + SUSFS ඞ%0A"
           MESSAGE="${MESSAGE}   • SukiSU Ultra + SUSFS ඞ%0A"
           MESSAGE="${MESSAGE}   • BBRv1 + Westwood TCP%0A"
           MESSAGE="${MESSAGE}   • BBG%0A"
