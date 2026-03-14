@@ -71,7 +71,7 @@ jobs:
             defconfig: "gki_defconfig"
             output_name: "Image.gki.ksu"
             artifact_name: "gki-ksu-kernel"
-            enable_ksu: true
+            ksu_type: "wild"
             tg_variant: "GKI + Wild-KSU + SUSFS + BBG"
 
           # -- CLO (CodeLinaro msm-5.15) + Wild-KSU + SUSFS + BBG --
@@ -84,8 +84,34 @@ jobs:
             defconfig: "gki_defconfig"
             output_name: "Image.clo.ksu"
             artifact_name: "clo-ksu-kernel"
-            enable_ksu: true
+            ksu_type: "wild"
             tg_variant: "CLO + Wild-KSU + SUSFS + BBG"
+
+          # -- GKI (AOSP android13-5.15-lts) + SukiSU Ultra + SUSFS + BBG --
+          - name: "GKI-SukiSU"
+            dir: "common_gki_suki"
+            repo_name: "common"
+            repo_url: "https://android.googlesource.com/kernel/common"
+            branch: "android13-5.15-lts"
+            config_branch: "android13-5.15"
+            defconfig: "gki_defconfig"
+            output_name: "Image.gki.suki"
+            artifact_name: "gki-suki-kernel"
+            ksu_type: "suki"
+            tg_variant: "GKI + SukiSU Ultra + SUSFS + BBG"
+
+          # -- CLO (CodeLinaro msm-5.15) + SukiSU Ultra + SUSFS + BBG --
+          - name: "CLO-SukiSU"
+            dir: "common_clo_suki"
+            repo_name: "clo"
+            repo_url: "https://git.codelinaro.org/clo/la/kernel/msm-5.15.git"
+            branch: "kernel.lnx.5.15.r59-rel"
+            config_branch: "android13-5.15"
+            defconfig: "gki_defconfig"
+            output_name: "Image.clo.suki"
+            artifact_name: "clo-suki-kernel"
+            ksu_type: "suki"
+            tg_variant: "CLO + SukiSU Ultra + SUSFS + BBG"
 
           # -- GKI Vanilla (AOSP android13-5.15-lts) + BBG only --
           - name: "GKI-NoKSU"
@@ -97,7 +123,7 @@ jobs:
             defconfig: "gki_defconfig"
             output_name: "Image.gki.noksu"
             artifact_name: "gki-noksu-kernel"
-            enable_ksu: false
+            ksu_type: "none"
             tg_variant: "GKI Vanilla + BBG"
 
           # -- CLO Vanilla (CodeLinaro msm-5.15) + BBG only --
@@ -110,7 +136,7 @@ jobs:
             defconfig: "gki_defconfig"
             output_name: "Image.clo.noksu"
             artifact_name: "clo-noksu-kernel"
-            enable_ksu: false
+            ksu_type: "none"
             tg_variant: "CLO Vanilla + BBG"
 
     env:
@@ -215,17 +241,18 @@ jobs:
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
             security/Kconfig
 
-      # -- KSU only: Wild-KSU + SUSFS setup --
+      # -- [IMPROVE #2] Wild-KSU canary + SUSFS — directory-wide copy [IMPROVE #1] --
       - name: "😋 Setup Wild-KSU with SUSFS"
-        if: matrix.kernel.enable_ksu == true
+        if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           set -e
 
           rm -rf ./KernelSU ./drivers/kernelsu ./Wild_KSU
 
-          echo "Installing Wild-KSU..."
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
+          echo "Installing Wild-KSU (canary)..."
+          # [IMPROVE #2] canary branch — multiple managers out-of-the-box
+          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s canary
 
           if [ ! -d "Wild_KSU" ]; then
             echo "ERROR: Wild_KSU directory not found!"
@@ -241,41 +268,24 @@ jobs:
           fi
 
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-
           if [ -f "$SUSFS_PATCH" ]; then
             if patch -p1 --forward < "$SUSFS_PATCH"; then
-              echo "SUSFS kernel patch applied"
+              echo "✅ SUSFS kernel patch applied"
             else
-              echo "Patch had some issues, continuing..."
+              echo "⚠️ Patch had some issues, continuing..."
             fi
           fi
 
+          # [IMPROVE #1] directory-wide copy — picks up any new/renamed files automatically
           mkdir -p fs include/linux
-
-          if [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ]; then
-            cp -f susfs4ksu/kernel_patches/fs/susfs.c fs/susfs.c
-          else
-            echo "ERROR: fs/susfs.c not found!"
-            exit 1
-          fi
-
-          if [ -f "susfs4ksu/kernel_patches/include/linux/susfs.h" ]; then
-            cp -f susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/susfs.h
-          else
-            echo "ERROR: include/linux/susfs.h not found!"
-            exit 1
-          fi
-
-          if [ -f "susfs4ksu/kernel_patches/include/linux/susfs_def.h" ]; then
-            cp -f susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/susfs_def.h
-          fi
+          cp -f susfs4ksu/kernel_patches/fs/* fs/
+          cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
 
           if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
             cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* Wild_KSU/kernel/ || true
           fi
 
           KSU_C_FILE="Wild_KSU/kernel/ksu.c"
-
           if [ ! -f "$KSU_C_FILE" ]; then
             echo "ERROR: $KSU_C_FILE not found!"
             exit 1
@@ -297,9 +307,33 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # -- KSU only: Fix SUSFS symbol mismatches (Wild-KSU newer than SUSFS branch) --
+      # -- [IMPROVE #3] SukiSU Ultra + SUSFS bundled via susfs-main --
+      - name: "🌸 Setup SukiSU Ultra with SUSFS"
+        if: matrix.kernel.ksu_type == 'suki'
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          set -e
+
+          rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Ultra
+
+          echo "Installing SukiSU Ultra (susfs-main)..."
+          # susfs-main = SUSFS already bundled, no manual patching needed
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-main
+
+          if [ ! -d "SukiSU-Ultra" ]; then
+            echo "ERROR: SukiSU-Ultra directory not found!"
+            exit 1
+          fi
+
+          if [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
+            ln -sf ../SukiSU-Ultra drivers/kernelsu
+          fi
+
+          echo "✅ SukiSU Ultra installed with SUSFS bundled"
+
+      # -- Wild-KSU only: Fix SUSFS symbol mismatches --
       - name: "🔧 Fix SUSFS compatibility stubs"
-        if: matrix.kernel.enable_ksu == true
+        if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           set -e
@@ -344,34 +378,29 @@ jobs:
           fi
 
           # -- Fix 2: susfs_set_i_state_on_external_dir (supercalls.c) --
-          # Called with 1 arg: susfs_set_i_state_on_external_dir(arg)
           if grep -q "susfs_set_i_state_on_external_dir" "$SUPERCALLS" 2>/dev/null; then
             add_stub_c "susfs_set_i_state_on_external_dir" \
               "void susfs_set_i_state_on_external_dir(struct inode *inode)" \
               "return;"
             add_stub_h "susfs_set_i_state_on_external_dir" \
               "void susfs_set_i_state_on_external_dir(struct inode *inode);"
-            # Ensure supercalls.c includes susfs.h so it can see the declaration
             if ! grep -q "#include <linux/susfs.h>" "$SUPERCALLS" 2>/dev/null; then
               sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$SUPERCALLS"
               echo "✅ Added susfs.h include to supercalls.c"
             else
               echo "✅ susfs.h already included in supercalls.c"
             fi
-            # Fix type mismatch: Wild-KSU passes void** but susfs expects struct inode*
-            # Add explicit cast at call sites to suppress -Werror=incompatible-pointer-types
             sed -i 's/susfs_set_i_state_on_external_dir(arg)/susfs_set_i_state_on_external_dir((struct inode \*)arg)/g' "$SUPERCALLS"
             echo "✅ Patched susfs_set_i_state_on_external_dir call sites with cast"
           else
             echo "✅ susfs_set_i_state_on_external_dir not referenced — skip"
           fi
 
-      # -- GKI fixup patches (from topnotchfreaks, applied inline) --
+      # -- GKI fixup patches (all variants) --
       - name: "🩹 Apply GKI fixup patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           # Patch 1: drivers/of/property.c — fix io-channel DT property typo
-          # "io-channels" → "io-channel" to match DT spec
           OF_PROP="drivers/of/property.c"
           if [ -f "$OF_PROP" ]; then
             sed -i 's/DEFINE_SIMPLE_PROP(io_channels, "io-channels",/DEFINE_SIMPLE_PROP(io_channels, "io-channel",/' "$OF_PROP"
@@ -381,20 +410,16 @@ jobs:
           fi
 
           # Patch 2: drivers/usb/dwc3 — fix USB reconnect bug
-          # Remove dwc3_core_soft_reset() call from dwc3_gadget_soft_connect()
-          # and make dwc3_core_soft_reset static (remove from header)
           DWC3_CORE="drivers/usb/dwc3/core.c"
           DWC3_GADGET="drivers/usb/dwc3/gadget.c"
           DWC3_HEADER="drivers/usb/dwc3/core.h"
 
           if [ -f "$DWC3_GADGET" ]; then
-            # Remove the soft reset block from dwc3_gadget_soft_connect
             sed -i '/dwc3_core_soft_reset(dwc);/{
               N; /dwc3_event_buffers_setup(dwc);/{
                 d
               }
             }' "$DWC3_GADGET"
-            # Also remove standalone dwc3_core_soft_reset(dwc); line if still present
             sed -i '/^\s*dwc3_core_soft_reset(dwc);\s*$/d' "$DWC3_GADGET"
             echo "✅ dwc3 gadget soft_connect fix applied"
           else
@@ -402,11 +427,9 @@ jobs:
           fi
 
           if [ -f "$DWC3_CORE" ]; then
-            # Add forward declaration before __dwc3_set_mode if not already there
             if ! grep -q "static int dwc3_core_soft_reset(struct dwc3 \*dwc);" "$DWC3_CORE"; then
               sed -i '/^static void __dwc3_set_mode/i static int dwc3_core_soft_reset(struct dwc3 *dwc);' "$DWC3_CORE"
             fi
-            # Make dwc3_core_soft_reset static
             sed -i 's/^int dwc3_core_soft_reset(struct dwc3 \*dwc)$/static int dwc3_core_soft_reset(struct dwc3 *dwc)/' "$DWC3_CORE"
             echo "✅ dwc3 core_soft_reset static fix applied"
           else
@@ -414,18 +437,18 @@ jobs:
           fi
 
           if [ -f "$DWC3_HEADER" ]; then
-            # Remove extern declaration from header
             sed -i '/^int dwc3_core_soft_reset(struct dwc3 \*dwc);$/d' "$DWC3_HEADER"
             echo "✅ dwc3 header declaration removed"
           else
             echo "⚠️  $DWC3_HEADER not found, skip"
           fi
 
-      # -- Base kernel configs (all variants) --
+      # -- [IMPROVE #4] Base kernel configs — all variants --
       - name: "⚙️ Add base kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          echo "⚙️ Adding base configs..."
           cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KALLSYMS=y
           CONFIG_OVERLAY_FS=y
@@ -451,17 +474,21 @@ jobs:
           EOF
           echo "✅ Base configs added"
 
-      # -- KSU only: KSU + SUSFS configs --
-      - name: "⚙️ Add KSU + SUSFS kernel configs"
-        if: matrix.kernel.enable_ksu == true
+      # -- [IMPROVE #4] Wild-KSU configs — conditional, KPROBES only for Wild --
+      - name: "⚙️ Add Wild-KSU + SUSFS kernel configs"
+        if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          echo "⚙️ Adding Wild-KSU + SUSFS configs..."
           cat >> "$CONFIG_FILE" << 'EOF'
+          # -- KSU Base --
           CONFIG_KSU=y
+          CONFIG_KPM=y
           CONFIG_KPROBES=y
           CONFIG_HAVE_KPROBES=y
           CONFIG_KPROBE_EVENTS=y
+          # -- SUSFS --
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_SUS_MAP=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
@@ -478,7 +505,37 @@ jobs:
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
           CONFIG_KSU_SUSFS_SUS_SU=y
           EOF
-          echo "✅ KSU + SUSFS configs added"
+          echo "✅ Wild-KSU + SUSFS configs added"
+
+      # -- [IMPROVE #4] SukiSU Ultra configs — KPM enabled, no KPROBES needed --
+      - name: "⚙️ Add SukiSU Ultra + SUSFS kernel configs"
+        if: matrix.kernel.ksu_type == 'suki'
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          echo "⚙️ Adding SukiSU Ultra + SUSFS configs..."
+          cat >> "$CONFIG_FILE" << 'EOF'
+          # -- KSU Base --
+          CONFIG_KSU=y
+          CONFIG_KPM=y
+          # -- SUSFS (bundled via susfs-main) --
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_SUS_MAP=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=y
+          EOF
+          echo "✅ SukiSU Ultra + SUSFS configs added"
 
       - name: "🏷️ Configure kernel name and remove dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -574,7 +631,7 @@ jobs:
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
           retention-days: 1
 
-  # -- package all 4 kernels into one AIO ZIP --
+  # -- package all 6 kernels into one AIO ZIP --
   package-kernels:
     name: "📦 Package AIO"
     runs-on: ubuntu-latest
@@ -589,7 +646,6 @@ jobs:
 
       - name: "📋 Read kernel version"
         run: |
-          # Use whichever kernel_version.txt is found first
           VERSION_FILE=$(find ./artifacts -name "kernel_version.txt" | head -1)
           if [ -f "$VERSION_FILE" ]; then
             KERNEL_VERSION=$(cat "$VERSION_FILE")
@@ -613,7 +669,7 @@ jobs:
           ls -lh AnyKernel3/Image.* 2>/dev/null || echo "No images found!"
 
           DATE_TAG=$(date +'%Y%m%d')
-          ZIP_NAME="Anykernel3_WildKSU_AIO_${DATE_TAG}.zip"
+          ZIP_NAME="Anykernel3_AIO_${DATE_TAG}.zip"
 
           cd AnyKernel3
           zip -r9 "../$ZIP_NAME" * -x .git/*
@@ -640,18 +696,27 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: ${{ env.ZIP_NAME }}
-          tag_name: "Wild_KSU"
+          tag_name: "AIO_Kernel"
           name: "AIO Kernel Pack"
           body: |
             ### Features:
-            - Wild-KSU v3.0.1 Stable
-            - SUSFS ඞ v2.0.0
+            - Wild-KSU (canary) + SUSFS ඞ v2.0.0
+            - SukiSU Ultra + SUSFS ඞ v2.0.0
             - Baseband Guard (BBG)
             - BBRv1 + Westwood TCP Congestion Control
+            - KPM (Kernel Plugin Module)
+
+            ### Variants included:
+            - `Image.gki.ksu` — GKI + Wild-KSU + SUSFS
+            - `Image.clo.ksu` — CLO + Wild-KSU + SUSFS
+            - `Image.gki.suki` — GKI + SukiSU Ultra + SUSFS
+            - `Image.clo.suki` — CLO + SukiSU Ultra + SUSFS
+            - `Image.gki.noksu` — GKI Vanilla (no root)
+            - `Image.clo.noksu` — CLO Vanilla (no root)
 
             ### Installation:
             1. Flash via OrangeFox / TWRP
-            2. Select kernel source (GKI / CLO) and variant (KSU / NoKSU) when prompted
+            2. Select kernel source (GKI / CLO) and variant when prompted
             3. Reboot
 
       - name: "🎉 Send Telegram — Package success"
@@ -659,7 +724,7 @@ jobs:
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/Wild_KSU"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/AIO_Kernel"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
           BUILD_END=$(date +%s)
@@ -685,9 +750,11 @@ jobs:
           MESSAGE="${MESSAGE}<b>🔗 Release:</b> <a href='${RELEASE_URL}'>click-here</a>%0A"
           MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A%0A"
           MESSAGE="${MESSAGE}<b>⚡ Features:</b>%0A"
+          MESSAGE="${MESSAGE}   • Wild-KSU (canary) + SUSFS ඞ%0A"
+          MESSAGE="${MESSAGE}   • SukiSU Ultra + SUSFS ඞ%0A"
           MESSAGE="${MESSAGE}   • BBRv1 + Westwood TCP%0A"
-          MESSAGE="${MESSAGE}   • SUSFS ඞ%0A"
-          MESSAGE="${MESSAGE}   • BBG%0A%0A"
+          MESSAGE="${MESSAGE}   • BBG%0A"
+          MESSAGE="${MESSAGE}   • KPM%0A%0A"
           MESSAGE="${MESSAGE}<b>📣 Author/Maintainer:</b> @superuseryu%0A%0A"
           MESSAGE="${MESSAGE}#kernel #gki #clo #sapphire #sapphiren"
 
