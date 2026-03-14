@@ -498,13 +498,8 @@ jobs:
           CONFIG_IP6_NF_MATCH_HL=y
           CONFIG_LRU_GEN=y
           CONFIG_LRU_GEN_ENABLED=y
-          # -- GKID performance tuning --
-          CONFIG_HZ_300=y
-          CONFIG_HZ=300
           CONFIG_ZRAM_WRITEBACK=y
           CONFIG_ZRAM_MEMORY_TRACKING=y
-          CONFIG_UBSAN=n
-          CONFIG_PAGE_OWNER=n
           EOF
           echo "✅ Base configs added"
 
