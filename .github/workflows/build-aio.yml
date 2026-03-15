@@ -500,6 +500,11 @@ jobs:
           CONFIG_LRU_GEN_ENABLED=y
           CONFIG_ZRAM_WRITEBACK=y
           CONFIG_ZRAM_MEMORY_TRACKING=y
+          CONFIG_NET_SCH_CAKE=y
+          CONFIG_TCP_CONG_VEGAS=y
+          CONFIG_TCP_CONG_YEAH=y
+          CONFIG_BTRFS_FS=y
+          CONFIG_NTFS3_FS=y
           EOF
           echo "✅ Base configs added"
 
