@@ -468,16 +468,37 @@ jobs:
 
 
 
-      # -- Suppress vendor module debugging (chickendrop89 approach) --
+      # -- Suppress vendor module debugging (chickendrop89) --
       - name: "🔇 Suppress vendor module debugging"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          echo 'CndpdGggb3BlbignaW5pdC9LY29uZmlnJykgYXMgZjoKICAgIGsgPSBmLnJlYWQoKQppZiAnU1VQUFJFU1NfVkVORE9SX01PRFVMRV9ERUJVR0dJTkcnIG5vdCBpbiBrOgogICAgZW50cnkgPSAnXG5jb25maWcgU1VQUFJFU1NfVkVORE9SX01PRFVMRV9ERUJVR0dJTkdcblx0Ym9vbCAiU3VwcHJlc3MgdmVuZG9yIG1vZHVsZSBkZWJ1Z2dpbmciXG5cdGhlbHBcblx0ICBTdXBwcmVzcyB2ZW5kb3IgR0tJIG1vZHVsZSBkZWJ1ZyBzcGFtIGluIGtlcm5lbCBsb2dzLlxuXHQgIFNwZWNpZmljIHRvIFhpYW9taS9RdWFsY29tbSBkZXZpY2VzLiBJZiB1bnN1cmUsIHNheSBOLlxuJwogICAgayA9IGsucmVwbGFjZSgnZW5kaWYgIyBNT0RVTEVTJywgZW50cnkgKyAnZW5kaWYgIyBNT0RVTEVTJykKICAgIG9wZW4oJ2luaXQvS2NvbmZpZycsICd3Jykud3JpdGUoaykKICAgIHByaW50KCdLY29uZmlnOiBwYXRjaGVkJykKZWxzZToKICAgIHByaW50KCdLY29uZmlnOiBza2lwJykKCndpdGggb3Blbigna2VybmVsL3ByaW50ay9wcmludGsuYycpIGFzIGY6CiAgICBjID0gZi5yZWFkKCkKaWYgJ3Nob3VsZF9maWx0ZXJfdmVuZG9yX21lc3NhZ2UnIG5vdCBpbiBjOgogICAgZnVuYyA9ICgKICAgICAgICAnXG5fX21heWJlX3VudXNlZCBzdGF0aWMgYm9vbCBzaG91bGRfZmlsdGVyX3ZlbmRvcl9tZXNzYWdlKGNvbnN0IGNoYXIgKnRleHQpXG4nCiAgICAgICAgJ3tcbicKICAgICAgICAnXHRjb25zdCBjaGFyICpjb25zdCAqbTtcbicKICAgICAgICAnXHRzdGF0aWMgY29uc3QgY2hhciAqY29uc3QgZm1bXSA9IHtcbicKICAgICAgICAnXHRcdCJbYnEyNSIsICJbc201NiIsICJub3BtaSIsICJbc2M4NSIsXG4nCiAgICAgICAgJ1x0XHQic3QySW4iLCAiW0F3aW4iLFxuJwogICAgICAgICdcdFx0Iih2aXJxOiIsICIoaXBpOiIsICIoY3B1OiIsXG4nCiAgICAgICAgJ1x0XHQicXBucF8iLFxuJwogICAgICAgICdcdFx0TlVMTFxuJwogICAgICAgICdcdH07XG4nCiAgICAgICAgJ1x0Zm9yIChtID0gZm07IGxpa2VseSgqbSk7IG0rKylcbicKICAgICAgICAnXHRcdGlmIChzdHJzdHIodGV4dCwgKm0pKSByZXR1cm4gdHJ1ZTtcbicKICAgICAgICAnXHRyZXR1cm4gZmFsc2U7XG4nCiAgICAgICAgJ31cblxuJwogICAgKQogICAgaG9vayA9ICgKICAgICAgICAnXHR2YV9lbmQoYXJnczIpO1xuXG4nCiAgICAgICAgJyNpZiBJU19FTkFCTEVEKENPTkZJR19TVVBQUkVTU19WRU5ET1JfTU9EVUxFX0RFQlVHR0lORylcbicKICAgICAgICAnXHRpZiAoc2hvdWxkX2ZpbHRlcl92ZW5kb3JfbWVzc2FnZShwcmVmaXhfYnVmKSkge1xuJwogICAgICAgICdcdFx0cmV0ID0gMDtcbicKICAgICAgICAnXHRcdGdvdG8gb3V0O1xuJwogICAgICAgICdcdH1cbicKICAgICAgICAnI2VuZGlmXG5cbicKICAgICkKICAgIGMgPSBjLnJlcGxhY2UoJ1xuX19wcmludGYoNCwgMClcbmludCB2cHJpbnRrX3N0b3JlJywgZnVuYyArICdfX3ByaW50Zig0LCAwKVxuaW50IHZwcmludGtfc3RvcmUnKQogICAgYyA9IGMucmVwbGFjZSgnXHR2YV9lbmQoYXJnczIpO1xuXG5cdGlmIChyZXNlcnZlX3NpemUgPiBMT0dfTElORV9NQVgpJywgaG9vayArICdcdGlmIChyZXNlcnZlX3NpemUgPiBMT0dfTElORV9NQVgpJykKICAgIG9wZW4oJ2tlcm5lbC9wcmludGsvcHJpbnRrLmMnLCAndycpLndyaXRlKGMpCiAgICBwcmludCgncHJpbnRrLmM6IHBhdGNoZWQnKQplbHNlOgogICAgcHJpbnQoJ3ByaW50ay5jOiBza2lwJykK' | base64 -d > /tmp/pvd.py
-          python3 /tmp/pvd.py
+          PATCHES="$GITHUB_WORKSPACE/kernel-patches"
+
+          apply_patch() {
+            local name="$1"
+            local file="$2"
+            if [ -f "$file" ]; then
+              if patch -p1 --fuzz=3 < "$file"; then
+                echo "  $name applied"
+              else
+                echo "  $name had issues, continuing..."
+              fi
+            else
+              echo "  $name not found, skip"
+            fi
+          }
+
+          apply_patch "vendor debug suppression"  "$PATCHES/06af5ac.patch"
+          apply_patch "filter vibrator debug"     "$PATCHES/3cc1c53.patch"
+          apply_patch "fix missing comma"         "$PATCHES/e6036fd.patch"
+          apply_patch "filter IRQ debug"          "$PATCHES/57c4672.patch"
+
+          # Enable config
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          grep -q 'CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING' "$CONFIG_FILE" || \
-            echo 'CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING=y' >> "$CONFIG_FILE"
+          grep -q "CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING" "$CONFIG_FILE" || \
+            echo "CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING=y" >> "$CONFIG_FILE"
           echo "vendor debug suppression done"
+
 
       # -- [IMPROVE #4] Base kernel configs — all variants --
       - name: "⚙️ Add base kernel configs"
