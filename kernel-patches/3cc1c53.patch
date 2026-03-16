@@ -1,0 +1,24 @@
+From 3cc1c53a2471d42936383a654d2fd0451dc556a9 Mon Sep 17 00:00:00 2001
+From: chickendrop89 <chickendrop89@gmail.com>
+Date: Sat, 21 Jun 2025 02:08:02 +0200
+Subject: [PATCH] kernel: printk: filter vibrator debugging
+
+* Not necessary. Spams the kernel logs
+
+Signed-off-by: chickendrop89 <chickendrop89@gmail.com>
+---
+ kernel/printk/printk.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/kernel/printk/printk.c b/kernel/printk/printk.c
+index 10fa60793643..78a0fe68227f 100644
+--- a/kernel/printk/printk.c
++++ b/kernel/printk/printk.c
+@@ -2159,6 +2159,7 @@ __maybe_unused static bool should_filter_vendor_message(const char *text)
+         #endif
+             "st21n", /* st21nfc  */
+             "[Awin", /* [Awinic] */
++			"qpnp_"  /* qpnp_vib_brightness_set */
+             NULL
+     };
+ 
