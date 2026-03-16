@@ -231,7 +231,6 @@ jobs:
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki || true
 
       - name: "🛡️ Setup Baseband-guard (BBG)"
-        if: matrix.kernel.ksu_type != 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
@@ -313,7 +312,7 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # -- [IMPROVE #3] SukiSU Ultra + SUSFS (topnotch/ShirkNeko approach) --
+      # -- SukiSU Ultra + SUSFS --
       - name: "🌸 Setup SukiSU Ultra with SUSFS"
         if: matrix.kernel.ksu_type == 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -322,17 +321,16 @@ jobs:
 
           rm -rf ./KernelSU ./drivers/kernelsu
 
-          echo "Installing SukiSU Ultra (ShirkNeko builtin)..."
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
+          echo "Installing SukiSU Ultra (main)..."
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
 
           if [ ! -d "KernelSU" ]; then
             echo "ERROR: KernelSU directory not found!"
             exit 1
           fi
 
-          echo "Cloning SUSFS4KSU (pinned commit 8bc57ca)..."
-          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          cd susfs4ksu && git checkout 8bc57ca083e40fa6d5c62934632be02d4a09040a && cd ..
+          echo "Cloning SUSFS4KSU..."
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
 
           if [ ! -d "susfs4ksu" ]; then
             echo "ERROR: SUSFS4KSU clone failed!"
@@ -345,7 +343,7 @@ jobs:
             patch -p1 --forward --fuzz=3 < "$SUSFS_PATCH" || echo "⚠️ SUSFS patch had issues, continuing..."
           fi
 
-          # Fix task_mmu.c — ShirkNeko fake_patch for android13-5.15
+          # Fix task_mmu.c — fake_patch for android13-5.15
           # SUSFS patch bisa ninggalin 'goto show_pad;' invalid → kernel panic → bootloop
           if ! grep -qF $'\tif (!vma_pages(vma))' fs/proc/task_mmu.c; then
             if grep -q 'goto[[:space:]]\+show_pad;' fs/proc/task_mmu.c; then
@@ -363,7 +361,11 @@ jobs:
           cp -f susfs4ksu/kernel_patches/fs/* fs/
           cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
 
-          # SukiSU: SUSFS already bundled, no KernelSU patch needed
+          # Copy KernelSU SUSFS patch (needed for main branch)
+          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
+            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/ || true
+            echo "✅ KernelSU SUSFS patch copied"
+          fi
 
           if [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
             ln -sf ../KernelSU drivers/kernelsu
@@ -437,8 +439,9 @@ jobs:
             echo "✅ susfs_set_i_state_on_external_dir not referenced — skip"
           fi
 
-      # -- GKI fixup patches (all variants) --
+      # -- GKI fixup patches (non-suki only) --
       - name: "🩹 Apply GKI fixup patches"
+        if: matrix.kernel.ksu_type != 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           # Patch 1: drivers/of/property.c — io-channel fix SKIPPED
@@ -484,6 +487,7 @@ jobs:
 
       # -- Suppress vendor module debugging (chickendrop89) --
       - name: "🔇 Suppress vendor module debugging"
+        if: matrix.kernel.ksu_type != 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           cat > /tmp/vendor_debug.py << 'PYEOF'
@@ -641,7 +645,6 @@ jobs:
           # -- KSU Base --
           CONFIG_KSU=y
           CONFIG_KPM=y
-          CONFIG_KSU_SUSFS_SUS_SU=n
           # -- SUSFS --
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_SUS_MAP=y
@@ -657,6 +660,7 @@ jobs:
           CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=y
           EOF
           echo "✅ SukiSU Ultra + SUSFS configs added"
 
