@@ -469,23 +469,70 @@ jobs:
       - name: "🔇 Suppress vendor module debugging"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          PATCHES="$GITHUB_WORKSPACE/kernel-patches"
+          cat > /tmp/vendor_debug.py << 'PYEOF'
+          import sys
 
-          apply_patch() {
-            local name="$1"
-            local file="$2"
-            if [ -f "$file" ]; then
-              if patch -p1 --fuzz=5 --ignore-whitespace < "$file"; then
-                echo "  $name applied"
-              else
-                echo "  $name had issues, continuing..."
-              fi
-            else
-              echo "  $name not found, skip"
-            fi
-          }
+          # Patch init/Kconfig
+          with open("init/Kconfig") as f:
+              k = f.read()
+          if "SUPPRESS_VENDOR_MODULE_DEBUGGING" not in k:
+              entry = (
+                  "\nconfig SUPPRESS_VENDOR_MODULE_DEBUGGING\n"
+                  "\tbool \"Suppress vendor module debugging\"\n"
+                  "\thelp\n"
+                  "\t  Suppress vendor GKI module debug spam. Xiaomi-specific. If unsure, say N.\n"
+              )
+              k = k.replace("endif # MODULES", entry + "endif # MODULES")
+              open("init/Kconfig", "w").write(k)
+              print("Kconfig: patched")
+          else:
+              print("Kconfig: skip")
 
-          apply_patch "vendor debug suppression" "$PATCHES/vendor_debug_suppress.patch"
+          # Patch kernel/printk/printk.c
+          with open("kernel/printk/printk.c") as f:
+              c = f.read()
+          if "should_filter_vendor_message" not in c:
+              func = (
+                  "\n__maybe_unused static bool should_filter_vendor_message(const char *text)\n"
+                  "{\n"
+                  "\tconst char *const *module;\n"
+                  "\tstatic const char *const fm[] = {\n"
+                  "\t\t\"[bq25\", \"[sm56\", \"nopmi\", \"[sc85\",\n"
+                  "\t\t\"st21n\", \"[Awin\", \"qpnp_\",\n"
+                  "\t\t\"(virq\", \"(ipi:\", \"(cpu:\",\n"
+                  "\t\tNULL\n"
+                  "\t};\n"
+                  "\tfor (module = fm; likely(*module); module++) {\n"
+                  "\t\tif (strstr(text, *module))\n"
+                  "\t\t\treturn true;\n"
+                  "\t}\n"
+                  "\treturn false;\n"
+                  "}\n\n"
+              )
+              hook = (
+                  "\tva_end(args2);\n\n"
+                  "#if IS_ENABLED(CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING)\n"
+                  "\tif (should_filter_vendor_message(prefix_buf)) {\n"
+                  "\t\tret = 0;\n"
+                  "\t\tgoto out;\n"
+                  "\t}\n"
+                  "#endif\n\n"
+              )
+              c = c.replace(
+                  "\n__printf(4, 0)\nint vprintk_store",
+                  func + "__printf(4, 0)\nint vprintk_store"
+              )
+              c = c.replace(
+                  "\tva_end(args2);\n\n\tif (reserve_size > LOG_LINE_MAX)",
+                  hook + "\tif (reserve_size > LOG_LINE_MAX)"
+              )
+              open("kernel/printk/printk.c", "w").write(c)
+              print("printk.c: patched")
+          else:
+              print("printk.c: skip")
+          PYEOF
+
+          python3 /tmp/vendor_debug.py
 
           # Enable config
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
