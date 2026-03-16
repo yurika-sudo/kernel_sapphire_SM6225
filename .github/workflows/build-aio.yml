@@ -503,6 +503,9 @@ jobs:
           CONFIG_NET_SCH_CAKE=y
           CONFIG_TCP_CONG_VEGAS=y
           CONFIG_TCP_CONG_YEAH=y
+          CONFIG_TCP_CONG_ILLINOIS=y
+          CONFIG_SCHED_AUTOGROUP=y
+          CONFIG_SCHEDSTATS=n
           CONFIG_BTRFS_FS=y
           CONFIG_NTFS3_FS=y
           EOF
