@@ -231,6 +231,7 @@ jobs:
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki || true
 
       - name: "🛡️ Setup Baseband-guard (BBG)"
+        if: matrix.kernel.ksu_type != 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
@@ -724,6 +725,21 @@ jobs:
           echo "✅ Clean kernel version: $VERSION_CLEAN"
           echo "KERNEL_VERSION=$VERSION_CLEAN" >> $GITHUB_ENV
           echo "$VERSION_CLEAN" > kernel_version.txt
+
+      - name: "🔧 Apply KPM patch to Image (SukiSU only)"
+        if: matrix.kernel.ksu_type == 'suki'
+        working-directory: ${{ env.WORK_DIR }}/out/dist
+        run: |
+          echo "Patching Image with KPM patch..."
+          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch_linux
+          chmod +x patch_linux
+          ./patch_linux
+          if [ -f "oImage" ]; then
+            mv -f oImage Image
+            echo "✅ KPM patch applied"
+          else
+            echo "⚠️ KPM patch failed or not needed, using original Image"
+          fi
 
       - name: "📁 Copy kernel image"
         working-directory: ${{ env.WORK_DIR }}/out/dist
