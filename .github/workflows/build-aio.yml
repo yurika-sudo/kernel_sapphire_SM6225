@@ -505,7 +505,6 @@ jobs:
           CONFIG_TCP_CONG_YEAH=y
           CONFIG_TCP_CONG_ILLINOIS=y
           CONFIG_SCHED_AUTOGROUP=y
-          CONFIG_SCHEDSTATS=n
           CONFIG_BTRFS_FS=y
           CONFIG_NTFS3_FS=y
           EOF
@@ -573,6 +572,7 @@ jobs:
           CONFIG_KSU_SUSFS_SUS_SU=y
           EOF
           echo "✅ SukiSU Ultra + SUSFS configs added"
+
 
       - name: "🏷️ Configure kernel name and remove dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
