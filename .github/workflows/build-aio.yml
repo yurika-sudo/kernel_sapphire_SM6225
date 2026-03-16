@@ -149,6 +149,11 @@ jobs:
 
     steps:
 
+      - name: "📦 Checkout repository"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: "🛠️ Setup workspace"
         run: |
           mkdir -p ${{ env.KERNEL_LOC_DIR }}
@@ -307,7 +312,7 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # -- [IMPROVE #3] SukiSU Ultra + SUSFS manual setup --
+      # -- [IMPROVE #3] SukiSU Ultra + SUSFS (ShirkNeko approach: builtin + manual SUSFS) --
       - name: "🌸 Setup SukiSU Ultra with SUSFS"
         if: matrix.kernel.ksu_type == 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -316,9 +321,8 @@ jobs:
 
           rm -rf ./KernelSU ./drivers/kernelsu
 
-          echo "Installing SukiSU Ultra (main)..."
-          # setup.sh clones into 'KernelSU' directory
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
+          echo "Installing SukiSU Ultra (builtin)..."
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
 
           if [ ! -d "KernelSU" ]; then
             echo "ERROR: KernelSU directory not found!"
@@ -333,23 +337,16 @@ jobs:
             exit 1
           fi
 
+          # Apply SUSFS kernel patch
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
           if [ -f "$SUSFS_PATCH" ]; then
-            if patch -p1 --forward < "$SUSFS_PATCH"; then
-              echo "✅ SUSFS kernel patch applied"
-            else
-              echo "⚠️ Patch had some issues, continuing..."
-            fi
+            patch -p1 --forward --fuzz=3 < "$SUSFS_PATCH" || echo "⚠️ SUSFS patch had issues, continuing..."
           fi
 
-          # [IMPROVE #1] directory-wide copy
+          # Copy SUSFS files
           mkdir -p fs include/linux
           cp -f susfs4ksu/kernel_patches/fs/* fs/
           cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
-
-          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
-            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/ || true
-          fi
 
           if [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
             ln -sf ../KernelSU drivers/kernelsu
@@ -427,14 +424,9 @@ jobs:
       - name: "🩹 Apply GKI fixup patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          # Patch 1: drivers/of/property.c — fix io-channel DT property typo
-          OF_PROP="drivers/of/property.c"
-          if [ -f "$OF_PROP" ]; then
-            sed -i 's/DEFINE_SIMPLE_PROP(io_channels, "io-channels",/DEFINE_SIMPLE_PROP(io_channels, "io-channel",/' "$OF_PROP"
-            echo "✅ io-channel DT property fix applied"
-          else
-            echo "⚠️  $OF_PROP not found, skip"
-          fi
+          # Patch 1: drivers/of/property.c — io-channel fix SKIPPED
+          # chickendrop89 confirmed this breaks dwc3-msm-core + fuel gauge on sapphire/sapphiren
+          # Ref: github.com/chickendrop89/device_xiaomi_gemstones-kernel/commit/2b14b93
 
           # Patch 2: drivers/usb/dwc3 — fix USB reconnect bug
           DWC3_CORE="drivers/usb/dwc3/core.c"
@@ -470,6 +462,85 @@ jobs:
             echo "⚠️  $DWC3_HEADER not found, skip"
           fi
 
+
+
+
+      # -- Suppress vendor module debugging (chickendrop89) --
+      - name: "🔇 Suppress vendor module debugging"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          cat > /tmp/vendor_debug.py << 'PYEOF'
+          import sys
+
+          # Patch init/Kconfig
+          with open("init/Kconfig") as f:
+              k = f.read()
+          if "SUPPRESS_VENDOR_MODULE_DEBUGGING" not in k:
+              entry = (
+                  "\nconfig SUPPRESS_VENDOR_MODULE_DEBUGGING\n"
+                  "\tbool \"Suppress vendor module debugging\"\n"
+                  "\thelp\n"
+                  "\t  Suppress vendor GKI module debug spam. Xiaomi-specific. If unsure, say N.\n"
+              )
+              k = k.replace("endif # MODULES", entry + "endif # MODULES")
+              open("init/Kconfig", "w").write(k)
+              print("Kconfig: patched")
+          else:
+              print("Kconfig: skip")
+
+          # Patch kernel/printk/printk.c
+          with open("kernel/printk/printk.c") as f:
+              c = f.read()
+          if "should_filter_vendor_message" not in c:
+              func = (
+                  "\n__maybe_unused static bool should_filter_vendor_message(const char *text)\n"
+                  "{\n"
+                  "\tconst char *const *module;\n"
+                  "\tstatic const char *const fm[] = {\n"
+                  "\t\t\"[bq25\", \"[sm56\", \"nopmi\", \"[sc85\",\n"
+                  "\t\t\"st21n\", \"[Awin\", \"qpnp_\",\n"
+                  "\t\t\"(virq\", \"(ipi:\", \"(cpu:\",\n"
+                  "\t\tNULL\n"
+                  "\t};\n"
+                  "\tfor (module = fm; likely(*module); module++) {\n"
+                  "\t\tif (strstr(text, *module))\n"
+                  "\t\t\treturn true;\n"
+                  "\t}\n"
+                  "\treturn false;\n"
+                  "}\n\n"
+              )
+              hook = (
+                  "\tva_end(args2);\n\n"
+                  "#if IS_ENABLED(CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING)\n"
+                  "\tif (should_filter_vendor_message(prefix_buf)) {\n"
+                  "\t\tret = 0;\n"
+                  "\t\tgoto out;\n"
+                  "\t}\n"
+                  "#endif\n\n"
+              )
+              c = c.replace(
+                  "\n__printf(4, 0)\nint vprintk_store",
+                  func + "__printf(4, 0)\nint vprintk_store"
+              )
+              c = c.replace(
+                  "\tva_end(args2);\n\n\tif (reserve_size > LOG_LINE_MAX)",
+                  hook + "\tif (reserve_size > LOG_LINE_MAX)"
+              )
+              open("kernel/printk/printk.c", "w").write(c)
+              print("printk.c: patched")
+          else:
+              print("printk.c: skip")
+          PYEOF
+
+          python3 /tmp/vendor_debug.py
+
+          # Enable config
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          grep -q "CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING" "$CONFIG_FILE" || \
+            echo "CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING=y" >> "$CONFIG_FILE"
+          echo "vendor debug suppression done"
+
+
       # -- [IMPROVE #4] Base kernel configs — all variants --
       - name: "⚙️ Add base kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -503,6 +574,7 @@ jobs:
           CONFIG_NET_SCH_CAKE=y
           CONFIG_TCP_CONG_VEGAS=y
           CONFIG_TCP_CONG_YEAH=y
+          CONFIG_TCP_CONG_ILLINOIS=y
           CONFIG_BTRFS_FS=y
           CONFIG_NTFS3_FS=y
           EOF
@@ -567,9 +639,10 @@ jobs:
           CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=y
+          CONFIG_KSU_SUSFS_SUS_SU=n
           EOF
           echo "✅ SukiSU Ultra + SUSFS configs added"
+
 
       - name: "🏷️ Configure kernel name and remove dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -703,7 +776,11 @@ jobs:
           ls -lh AnyKernel3/Image.* 2>/dev/null || echo "No images found!"
 
           DATE_TAG=$(date +'%Y%m%d')
-          ZIP_NAME="Anykernel3_AIO_${DATE_TAG}.zip"
+          if [ "${{ inputs.is_testing }}" = "true" ]; then
+            ZIP_NAME="Anykernel3_AIO_Testing_${DATE_TAG}.zip"
+          else
+            ZIP_NAME="Anykernel3_AIO_${DATE_TAG}.zip"
+          fi
 
           cd AnyKernel3
           zip -r9 "../$ZIP_NAME" * -x .git/*
