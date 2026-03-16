@@ -706,7 +706,11 @@ jobs:
           ls -lh AnyKernel3/Image.* 2>/dev/null || echo "No images found!"
 
           DATE_TAG=$(date +'%Y%m%d')
-          ZIP_NAME="Anykernel3_AIO_${DATE_TAG}.zip"
+          if [ "${{ inputs.is_testing }}" = "true" ]; then
+            ZIP_NAME="Anykernel3_AIO_Testing_${DATE_TAG}.zip"
+          else
+            ZIP_NAME="Anykernel3_AIO_${DATE_TAG}.zip"
+          fi
 
           cd AnyKernel3
           zip -r9 "../$ZIP_NAME" * -x .git/*
