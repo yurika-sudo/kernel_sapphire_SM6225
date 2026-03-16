@@ -312,7 +312,7 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # -- [IMPROVE #3] SukiSU Ultra + SUSFS manual setup --
+      # -- [IMPROVE #3] SukiSU Ultra + SUSFS bundled via susfs-main --
       - name: "🌸 Setup SukiSU Ultra with SUSFS"
         if: matrix.kernel.ksu_type == 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -321,47 +321,20 @@ jobs:
 
           rm -rf ./KernelSU ./drivers/kernelsu
 
-          echo "Installing SukiSU Ultra (main)..."
-          # setup.sh clones into 'KernelSU' directory
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
+          echo "Installing SukiSU Ultra (susfs-main)..."
+          # susfs-main = SUSFS bundled, no manual patching needed
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-main
 
           if [ ! -d "KernelSU" ]; then
             echo "ERROR: KernelSU directory not found!"
             exit 1
           fi
 
-          echo "Cloning SUSFS4KSU..."
-          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-
-          if [ ! -d "susfs4ksu" ]; then
-            echo "ERROR: SUSFS4KSU clone failed!"
-            exit 1
-          fi
-
-          SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-          if [ -f "$SUSFS_PATCH" ]; then
-            if patch -p1 --forward < "$SUSFS_PATCH"; then
-              echo "✅ SUSFS kernel patch applied"
-            else
-              echo "⚠️ Patch had some issues, continuing..."
-            fi
-          fi
-
-          # [IMPROVE #1] directory-wide copy
-          mkdir -p fs include/linux
-          cp -f susfs4ksu/kernel_patches/fs/* fs/
-          cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
-
-          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
-            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/ || true
-          fi
-
           if [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
             ln -sf ../KernelSU drivers/kernelsu
           fi
 
-          rm -rf susfs4ksu
-          echo "✅ SukiSU Ultra installed with SUSFS"
+          echo "✅ SukiSU Ultra installed with SUSFS bundled"
 
       # -- Wild-KSU only: Fix SUSFS symbol mismatches --
       - name: "🔧 Fix SUSFS compatibility stubs"
@@ -536,7 +509,6 @@ jobs:
           CONFIG_TCP_CONG_VEGAS=y
           CONFIG_TCP_CONG_YEAH=y
           CONFIG_TCP_CONG_ILLINOIS=y
-          CONFIG_SCHED_AUTOGROUP=y
           CONFIG_BTRFS_FS=y
           CONFIG_NTFS3_FS=y
           EOF
