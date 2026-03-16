@@ -323,7 +323,7 @@ jobs:
           rm -rf ./KernelSU ./drivers/kernelsu
 
           echo "Installing SukiSU Ultra (ShirkNeko builtin)..."
-          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
 
           if [ ! -d "KernelSU" ]; then
             echo "ERROR: KernelSU directory not found!"
