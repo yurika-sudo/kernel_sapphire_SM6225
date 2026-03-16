@@ -312,7 +312,7 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # -- [IMPROVE #3] SukiSU Ultra + SUSFS (ShirkNeko approach: builtin + manual SUSFS) --
+      # -- [IMPROVE #3] SukiSU Ultra + SUSFS (ShirkNeko approach) --
       - name: "🌸 Setup SukiSU Ultra with SUSFS"
         if: matrix.kernel.ksu_type == 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -321,8 +321,8 @@ jobs:
 
           rm -rf ./KernelSU ./drivers/kernelsu
 
-          echo "Installing SukiSU Ultra (builtin)..."
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
+          echo "Installing SukiSU Ultra (ShirkNeko builtin)..."
+          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
 
           if [ ! -d "KernelSU" ]; then
             echo "ERROR: KernelSU directory not found!"
@@ -623,15 +623,17 @@ jobs:
           cat >> "$CONFIG_FILE" << 'EOF'
           # -- KSU Base --
           CONFIG_KSU=y
+          # CONFIG_KSU_MANUAL_HOOK is not set
           CONFIG_KPM=y
-          # -- SUSFS (bundled via susfs-main) --
+          # -- SUSFS --
           CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_SUSFS_SUS_MAP=y
+          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
           CONFIG_KSU_SUSFS_SUS_MOUNT=y
           CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
           CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
           CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
           CONFIG_KSU_SUSFS_TRY_UMOUNT=y
           CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
           CONFIG_KSU_SUSFS_SPOOF_UNAME=y
@@ -639,7 +641,7 @@ jobs:
           CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=n
+          CONFIG_KSU_SUSFS_SUS_SU=y
           EOF
           echo "✅ SukiSU Ultra + SUSFS configs added"
 
