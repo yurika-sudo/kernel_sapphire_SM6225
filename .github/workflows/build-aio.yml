@@ -427,14 +427,9 @@ jobs:
       - name: "🩹 Apply GKI fixup patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          # Patch 1: drivers/of/property.c — fix io-channel DT property typo
-          OF_PROP="drivers/of/property.c"
-          if [ -f "$OF_PROP" ]; then
-            sed -i 's/DEFINE_SIMPLE_PROP(io_channels, "io-channels",/DEFINE_SIMPLE_PROP(io_channels, "io-channel",/' "$OF_PROP"
-            echo "✅ io-channel DT property fix applied"
-          else
-            echo "⚠️  $OF_PROP not found, skip"
-          fi
+          # Patch 1: drivers/of/property.c — io-channel fix SKIPPED
+          # chickendrop89 confirmed this breaks dwc3-msm-core + fuel gauge on sapphire/sapphiren
+          # Ref: github.com/chickendrop89/device_xiaomi_gemstones-kernel/commit/2b14b93
 
           # Patch 2: drivers/usb/dwc3 — fix USB reconnect bug
           DWC3_CORE="drivers/usb/dwc3/core.c"
@@ -469,6 +464,20 @@ jobs:
           else
             echo "⚠️  $DWC3_HEADER not found, skip"
           fi
+
+
+
+
+      # -- Suppress vendor module debugging (chickendrop89 approach) --
+      - name: "🔇 Suppress vendor module debugging"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          echo 'CndpdGggb3BlbignaW5pdC9LY29uZmlnJykgYXMgZjoKICAgIGsgPSBmLnJlYWQoKQppZiAnU1VQUFJFU1NfVkVORE9SX01PRFVMRV9ERUJVR0dJTkcnIG5vdCBpbiBrOgogICAgZW50cnkgPSAnXG5jb25maWcgU1VQUFJFU1NfVkVORE9SX01PRFVMRV9ERUJVR0dJTkdcblx0Ym9vbCAiU3VwcHJlc3MgdmVuZG9yIG1vZHVsZSBkZWJ1Z2dpbmciXG5cdGhlbHBcblx0ICBTdXBwcmVzcyB2ZW5kb3IgR0tJIG1vZHVsZSBkZWJ1ZyBzcGFtIGluIGtlcm5lbCBsb2dzLlxuXHQgIFNwZWNpZmljIHRvIFhpYW9taS9RdWFsY29tbSBkZXZpY2VzLiBJZiB1bnN1cmUsIHNheSBOLlxuJwogICAgayA9IGsucmVwbGFjZSgnZW5kaWYgIyBNT0RVTEVTJywgZW50cnkgKyAnZW5kaWYgIyBNT0RVTEVTJykKICAgIG9wZW4oJ2luaXQvS2NvbmZpZycsICd3Jykud3JpdGUoaykKICAgIHByaW50KCdLY29uZmlnOiBwYXRjaGVkJykKZWxzZToKICAgIHByaW50KCdLY29uZmlnOiBza2lwJykKCndpdGggb3Blbigna2VybmVsL3ByaW50ay9wcmludGsuYycpIGFzIGY6CiAgICBjID0gZi5yZWFkKCkKaWYgJ3Nob3VsZF9maWx0ZXJfdmVuZG9yX21lc3NhZ2UnIG5vdCBpbiBjOgogICAgZnVuYyA9ICgKICAgICAgICAnXG5fX21heWJlX3VudXNlZCBzdGF0aWMgYm9vbCBzaG91bGRfZmlsdGVyX3ZlbmRvcl9tZXNzYWdlKGNvbnN0IGNoYXIgKnRleHQpXG4nCiAgICAgICAgJ3tcbicKICAgICAgICAnXHRjb25zdCBjaGFyICpjb25zdCAqbTtcbicKICAgICAgICAnXHRzdGF0aWMgY29uc3QgY2hhciAqY29uc3QgZm1bXSA9IHtcbicKICAgICAgICAnXHRcdCJbYnEyNSIsICJbc201NiIsICJub3BtaSIsICJbc2M4NSIsXG4nCiAgICAgICAgJ1x0XHQic3QySW4iLCAiW0F3aW4iLFxuJwogICAgICAgICdcdFx0Iih2aXJxOiIsICIoaXBpOiIsICIoY3B1OiIsXG4nCiAgICAgICAgJ1x0XHQicXBucF8iLFxuJwogICAgICAgICdcdFx0TlVMTFxuJwogICAgICAgICdcdH07XG4nCiAgICAgICAgJ1x0Zm9yIChtID0gZm07IGxpa2VseSgqbSk7IG0rKylcbicKICAgICAgICAnXHRcdGlmIChzdHJzdHIodGV4dCwgKm0pKSByZXR1cm4gdHJ1ZTtcbicKICAgICAgICAnXHRyZXR1cm4gZmFsc2U7XG4nCiAgICAgICAgJ31cblxuJwogICAgKQogICAgaG9vayA9ICgKICAgICAgICAnXHR2YV9lbmQoYXJnczIpO1xuXG4nCiAgICAgICAgJyNpZiBJU19FTkFCTEVEKENPTkZJR19TVVBQUkVTU19WRU5ET1JfTU9EVUxFX0RFQlVHR0lORylcbicKICAgICAgICAnXHRpZiAoc2hvdWxkX2ZpbHRlcl92ZW5kb3JfbWVzc2FnZShwcmVmaXhfYnVmKSkge1xuJwogICAgICAgICdcdFx0cmV0ID0gMDtcbicKICAgICAgICAnXHRcdGdvdG8gb3V0O1xuJwogICAgICAgICdcdH1cbicKICAgICAgICAnI2VuZGlmXG5cbicKICAgICkKICAgIGMgPSBjLnJlcGxhY2UoJ1xuX19wcmludGYoNCwgMClcbmludCB2cHJpbnRrX3N0b3JlJywgZnVuYyArICdfX3ByaW50Zig0LCAwKVxuaW50IHZwcmludGtfc3RvcmUnKQogICAgYyA9IGMucmVwbGFjZSgnXHR2YV9lbmQoYXJnczIpO1xuXG5cdGlmIChyZXNlcnZlX3NpemUgPiBMT0dfTElORV9NQVgpJywgaG9vayArICdcdGlmIChyZXNlcnZlX3NpemUgPiBMT0dfTElORV9NQVgpJykKICAgIG9wZW4oJ2tlcm5lbC9wcmludGsvcHJpbnRrLmMnLCAndycpLndyaXRlKGMpCiAgICBwcmludCgncHJpbnRrLmM6IHBhdGNoZWQnKQplbHNlOgogICAgcHJpbnQoJ3ByaW50ay5jOiBza2lwJykK' | base64 -d > /tmp/pvd.py
+          python3 /tmp/pvd.py
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          grep -q 'CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING' "$CONFIG_FILE" || \
+            echo 'CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING=y' >> "$CONFIG_FILE"
+          echo "vendor debug suppression done"
 
       # -- [IMPROVE #4] Base kernel configs — all variants --
       - name: "⚙️ Add base kernel configs"
