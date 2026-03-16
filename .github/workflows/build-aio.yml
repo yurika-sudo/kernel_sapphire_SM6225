@@ -493,10 +493,7 @@ jobs:
             fi
           }
 
-          apply_patch "vendor debug suppression"  "$PATCHES/06af5ac.patch"
-          apply_patch "filter vibrator debug"     "$PATCHES/3cc1c53.patch"
-          apply_patch "fix missing comma"         "$PATCHES/e6036fd.patch"
-          apply_patch "filter IRQ debug"          "$PATCHES/57c4672.patch"
+          apply_patch "vendor debug suppression" "$PATCHES/vendor_debug_suppress.patch"
 
           # Enable config
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
