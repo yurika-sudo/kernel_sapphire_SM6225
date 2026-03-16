@@ -345,6 +345,19 @@ jobs:
             patch -p1 --forward --fuzz=3 < "$SUSFS_PATCH" || echo "⚠️ SUSFS patch had issues, continuing..."
           fi
 
+          # Fix task_mmu.c — ShirkNeko fake_patch for android13-5.15
+          # SUSFS patch bisa ninggalin 'goto show_pad;' invalid → kernel panic → bootloop
+          if ! grep -qF $'\tif (!vma_pages(vma))' fs/proc/task_mmu.c; then
+            if grep -q 'goto[[:space:]]\+show_pad;' fs/proc/task_mmu.c; then
+              sed -i 's/goto show_pad;/return 0;/' fs/proc/task_mmu.c
+              echo "✅ task_mmu.c: goto show_pad → return 0 (fake_patch applied)"
+            else
+              echo "ℹ️ task_mmu.c: goto show_pad not found, skip"
+            fi
+          else
+            echo "ℹ️ task_mmu.c: vma_pages check already present, skip"
+          fi
+
           # Copy SUSFS files
           mkdir -p fs include/linux
           cp -f susfs4ksu/kernel_patches/fs/* fs/
