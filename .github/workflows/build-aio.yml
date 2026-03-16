@@ -87,32 +87,6 @@ jobs:
             ksu_type: "wild"
             tg_variant: "CLO + Wild-KSU + SUSFS + BBG"
 
-          # -- GKI (AOSP android13-5.15-lts) + SukiSU Ultra + SUSFS + BBG --
-          - name: "GKI-SukiSU"
-            dir: "common_gki_suki"
-            repo_name: "common"
-            repo_url: "https://android.googlesource.com/kernel/common"
-            branch: "android13-5.15-lts"
-            config_branch: "android13-5.15"
-            defconfig: "gki_defconfig"
-            output_name: "Image.gki.suki"
-            artifact_name: "gki-suki-kernel"
-            ksu_type: "suki"
-            tg_variant: "GKI + SukiSU Ultra + SUSFS + BBG"
-
-          # -- CLO (CodeLinaro msm-5.15) + SukiSU Ultra + SUSFS + BBG --
-          - name: "CLO-SukiSU"
-            dir: "common_clo_suki"
-            repo_name: "clo"
-            repo_url: "https://git.codelinaro.org/clo/la/kernel/msm-5.15.git"
-            branch: "kernel.lnx.5.15.r59-rel"
-            config_branch: "android13-5.15"
-            defconfig: "gki_defconfig"
-            output_name: "Image.clo.suki"
-            artifact_name: "clo-suki-kernel"
-            ksu_type: "suki"
-            tg_variant: "CLO + SukiSU Ultra + SUSFS + BBG"
-
           # -- GKI Vanilla (AOSP android13-5.15-lts) + BBG only --
           - name: "GKI-NoKSU"
             dir: "common_gki_noksu"
@@ -312,68 +286,6 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # -- SukiSU Ultra + SUSFS --
-      - name: "🌸 Setup SukiSU Ultra with SUSFS"
-        if: matrix.kernel.ksu_type == 'suki'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          set -e
-
-          rm -rf ./KernelSU ./drivers/kernelsu
-
-          echo "Installing SukiSU Ultra (main)..."
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
-
-          if [ ! -d "KernelSU" ]; then
-            echo "ERROR: KernelSU directory not found!"
-            exit 1
-          fi
-
-          echo "Cloning SUSFS4KSU..."
-          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-
-          if [ ! -d "susfs4ksu" ]; then
-            echo "ERROR: SUSFS4KSU clone failed!"
-            exit 1
-          fi
-
-          # Apply SUSFS kernel patch
-          SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-          if [ -f "$SUSFS_PATCH" ]; then
-            patch -p1 --forward --fuzz=3 < "$SUSFS_PATCH" || echo "⚠️ SUSFS patch had issues, continuing..."
-          fi
-
-          # Fix task_mmu.c — fake_patch for android13-5.15
-          # SUSFS patch bisa ninggalin 'goto show_pad;' invalid → kernel panic → bootloop
-          if ! grep -qF $'\tif (!vma_pages(vma))' fs/proc/task_mmu.c; then
-            if grep -q 'goto[[:space:]]\+show_pad;' fs/proc/task_mmu.c; then
-              sed -i 's/goto show_pad;/return 0;/' fs/proc/task_mmu.c
-              echo "✅ task_mmu.c: goto show_pad → return 0 (fake_patch applied)"
-            else
-              echo "ℹ️ task_mmu.c: goto show_pad not found, skip"
-            fi
-          else
-            echo "ℹ️ task_mmu.c: vma_pages check already present, skip"
-          fi
-
-          # Copy SUSFS files
-          mkdir -p fs include/linux
-          cp -f susfs4ksu/kernel_patches/fs/* fs/
-          cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
-
-          # Copy KernelSU SUSFS patch (needed for main branch)
-          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
-            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/ || true
-            echo "✅ KernelSU SUSFS patch copied"
-          fi
-
-          if [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
-            ln -sf ../KernelSU drivers/kernelsu
-          fi
-
-          rm -rf susfs4ksu
-          echo "✅ SukiSU Ultra installed with SUSFS"
-
       # -- Wild-KSU only: Fix SUSFS symbol mismatches --
       - name: "🔧 Fix SUSFS compatibility stubs"
         if: matrix.kernel.ksu_type == 'wild'
@@ -439,9 +351,8 @@ jobs:
             echo "✅ susfs_set_i_state_on_external_dir not referenced — skip"
           fi
 
-      # -- GKI fixup patches (non-suki only) --
+      # -- GKI fixup patches (all variants) --
       - name: "🩹 Apply GKI fixup patches"
-        if: matrix.kernel.ksu_type != 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           # Patch 1: drivers/of/property.c — io-channel fix SKIPPED
@@ -487,7 +398,6 @@ jobs:
 
       # -- Suppress vendor module debugging (chickendrop89) --
       - name: "🔇 Suppress vendor module debugging"
-        if: matrix.kernel.ksu_type != 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           cat > /tmp/vendor_debug.py << 'PYEOF'
@@ -611,7 +521,6 @@ jobs:
           cat >> "$CONFIG_FILE" << 'EOF'
           # -- KSU Base --
           CONFIG_KSU=y
-          CONFIG_KPM=y
           CONFIG_KPROBES=y
           CONFIG_HAVE_KPROBES=y
           CONFIG_KPROBE_EVENTS=y
@@ -633,37 +542,6 @@ jobs:
           CONFIG_KSU_SUSFS_SUS_SU=y
           EOF
           echo "✅ Wild-KSU + SUSFS configs added"
-
-      # -- [IMPROVE #4] SukiSU Ultra configs — KPM enabled, no KPROBES needed --
-      - name: "⚙️ Add SukiSU Ultra + SUSFS kernel configs"
-        if: matrix.kernel.ksu_type == 'suki'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          echo "⚙️ Adding SukiSU Ultra + SUSFS configs..."
-          cat >> "$CONFIG_FILE" << 'EOF'
-          # -- KSU Base --
-          CONFIG_KSU=y
-          CONFIG_KPM=y
-          # -- SUSFS --
-          CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_SUSFS_SUS_MAP=y
-          CONFIG_KSU_SUSFS_SUS_PATH=y
-          CONFIG_KSU_SUSFS_SUS_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_KSTAT=y
-          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-          CONFIG_KSU_SUSFS_ENABLE_LOG=y
-          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=y
-          EOF
-          echo "✅ SukiSU Ultra + SUSFS configs added"
-
 
       - name: "🏷️ Configure kernel name and remove dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -743,21 +621,6 @@ jobs:
           echo "KERNEL_VERSION=$VERSION_CLEAN" >> $GITHUB_ENV
           echo "$VERSION_CLEAN" > kernel_version.txt
 
-      - name: "🔧 Apply KPM patch to Image (SukiSU only)"
-        if: matrix.kernel.ksu_type == 'suki'
-        working-directory: ${{ env.WORK_DIR }}/out/dist
-        run: |
-          echo "Patching Image with KPM patch..."
-          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch_linux
-          chmod +x patch_linux
-          ./patch_linux
-          if [ -f "oImage" ]; then
-            mv -f oImage Image
-            echo "✅ KPM patch applied"
-          else
-            echo "⚠️ KPM patch failed or not needed, using original Image"
-          fi
-
       - name: "📁 Copy kernel image"
         working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
@@ -774,7 +637,7 @@ jobs:
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
           retention-days: 1
 
-  # -- package all 6 kernels into one AIO ZIP --
+  # -- package all 4 kernels into one AIO ZIP --
   package-kernels:
     name: "📦 Package AIO"
     runs-on: ubuntu-latest
@@ -848,16 +711,12 @@ jobs:
           body: |
             ### Features:
             - Wild-KSU (stable) + SUSFS ඞ v2.0.0
-            - SukiSU Ultra + SUSFS ඞ v2.0.0
             - Baseband Guard (BBG)
-            - BBRv1 + Westwood TCP Congestion Control
-            - KPM (Kernel Plugin Module)
+            - TCP: BBRv1, Westwood (default), Vegas, Yeah, Illinois
 
             ### Variants included:
             - `Image.gki.ksu` — GKI + Wild-KSU + SUSFS
             - `Image.clo.ksu` — CLO + Wild-KSU + SUSFS
-            - `Image.gki.suki` — GKI + SukiSU Ultra + SUSFS
-            - `Image.clo.suki` — CLO + SukiSU Ultra + SUSFS
             - `Image.gki.noksu` — GKI Vanilla (no root)
             - `Image.clo.noksu` — CLO Vanilla (no root)
 
@@ -898,10 +757,9 @@ jobs:
           MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A%0A"
           MESSAGE="${MESSAGE}<b>⚡ Features:</b>%0A"
           MESSAGE="${MESSAGE}   • Wild-KSU (stable) + SUSFS ඞ%0A"
-          MESSAGE="${MESSAGE}   • SukiSU Ultra + SUSFS ඞ%0A"
-          MESSAGE="${MESSAGE}   • BBRv1 + Westwood TCP%0A"
-          MESSAGE="${MESSAGE}   • BBG%0A"
-          MESSAGE="${MESSAGE}   • KPM%0A%0A"
+          MESSAGE="${MESSAGE}   • BBG (Baseband Guard)%0A"
+          MESSAGE="${MESSAGE}   • Vanilla / No-KSU variants%0A"
+          MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood, Vegas, Yeah, Illinois%0A%0A"
           MESSAGE="${MESSAGE}<b>📣 Author/Maintainer:</b> @superuseryu%0A%0A"
           MESSAGE="${MESSAGE}#kernel #gki #clo #sapphire #sapphiren"
 
