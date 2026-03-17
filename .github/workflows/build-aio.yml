@@ -480,6 +480,8 @@ jobs:
           echo "⚙️ Adding base configs..."
           cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KALLSYMS=y
+          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=n
+          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=y
           CONFIG_OVERLAY_FS=y
           CONFIG_OVERLAY_FS_REDIRECT_DIR=y
           CONFIG_OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW=y
@@ -498,10 +500,28 @@ jobs:
           CONFIG_IP_NF_TARGET_TTL=y
           CONFIG_IP6_NF_TARGET_HL=y
           CONFIG_IP6_NF_MATCH_HL=y
-          CONFIG_LRU_GEN=y
-          CONFIG_LRU_GEN_ENABLED=y
+          CONFIG_IP_SET=y
+          CONFIG_IP_SET_MAX=65534
+          CONFIG_IP_SET_BITMAP_IP=y
+          CONFIG_IP_SET_BITMAP_IPMAC=y
+          CONFIG_IP_SET_BITMAP_PORT=y
+          CONFIG_IP_SET_HASH_IP=y
+          CONFIG_IP_SET_HASH_IPMARK=y
+          CONFIG_IP_SET_HASH_IPPORT=y
+          CONFIG_IP_SET_HASH_IPPORTIP=y
+          CONFIG_IP_SET_HASH_IPPORTNET=y
+          CONFIG_IP_SET_HASH_IPMAC=y
+          CONFIG_IP_SET_HASH_MAC=y
+          CONFIG_IP_SET_HASH_NETPORTNET=y
+          CONFIG_IP_SET_HASH_NET=y
+          CONFIG_IP_SET_HASH_NETNET=y
+          CONFIG_IP_SET_HASH_NETPORT=y
+          CONFIG_IP_SET_HASH_NETIFACE=y
+          CONFIG_IP_SET_LIST_SET=y
           CONFIG_ZRAM_WRITEBACK=y
           CONFIG_ZRAM_MEMORY_TRACKING=y
+          CONFIG_LRU_GEN=y
+          CONFIG_LRU_GEN_ENABLED=y
           CONFIG_NET_SCH_CAKE=y
           CONFIG_TCP_CONG_VEGAS=y
           CONFIG_TCP_CONG_YEAH=y
@@ -590,7 +610,15 @@ jobs:
         run: |
           set -e
           echo "🚀 Starting kernel build with $(nproc) cores..."
-          export LTO=thin
+
+          if [ "${{ inputs.is_testing }}" = "true" ]; then
+            export LTO=thin
+            echo "🧪 Testing build: LTO=thin (faster)"
+          else
+            export LTO=full
+            echo "🧩 Stable build: LTO=full (optimized)"
+          fi
+
           export SKIP_ABI_CHECKS=1
           export SKIP_KMI_CHECK=1
 
@@ -712,7 +740,8 @@ jobs:
             ### Features:
             - Wild-KSU (stable) + SUSFS ඞ v2.0.0
             - Baseband Guard (BBG)
-            - TCP: BBRv1, Westwood (default), Vegas, Yeah, Illinois
+            - O3 Compiler Optimization + Full LTO
+            - TCP: BBRv1, Westwood (default), CAKE, Vegas, Yeah, Illinois
 
             ### Variants included:
             - `Image.gki.ksu` — GKI + Wild-KSU + SUSFS
@@ -742,9 +771,9 @@ jobs:
           SHORT_SHA=$(echo "${{ env.ZIP_SHA256 }}" | cut -c1-20)
 
           if [ "${{ inputs.is_testing }}" = "true" ]; then
-            BUILD_TYPE="🧪 Testing Build"
+            BUILD_TYPE="🧪 Testing Build (LTO=thin)"
           else
-            BUILD_TYPE="🧩 Stable Build"
+            BUILD_TYPE="🧩 Stable Build (LTO=full)"
           fi
 
           MESSAGE="<b>🎉 Build Success!</b>%0A%0A"
@@ -759,7 +788,8 @@ jobs:
           MESSAGE="${MESSAGE}   • Wild-KSU (stable) + SUSFS ඞ%0A"
           MESSAGE="${MESSAGE}   • BBG (Baseband Guard)%0A"
           MESSAGE="${MESSAGE}   • Vanilla / No-KSU variants%0A"
-          MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood, Vegas, Yeah, Illinois%0A%0A"
+          MESSAGE="${MESSAGE}   • O3 Optimization%0A"
+          MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood, CAKE, Vegas, Yeah, Illinois%0A%0A"
           MESSAGE="${MESSAGE}<b>📣 Author/Maintainer:</b> @superuseryu%0A%0A"
           MESSAGE="${MESSAGE}#kernel #gki #clo #sapphire #sapphiren"
 
