@@ -525,7 +525,7 @@ jobs:
           CONFIG_NET_SCH_CAKE=y
           CONFIG_TCP_CONG_VEGAS=y
           CONFIG_TCP_CONG_YEAH=y
-          CONFIG_TCP_CONG_ILLINOIS=y
+          CONFIG_TCP_CONG_VENO=y
           CONFIG_BTRFS_FS=y
           CONFIG_NTFS3_FS=y
           EOF
@@ -741,7 +741,7 @@ jobs:
             - Wild-KSU (stable) + SUSFS ඞ v2.0.0
             - Baseband Guard (BBG)
             - O3 Compiler Optimization + Full LTO
-            - TCP: BBRv1, Westwood (default), CAKE, Vegas, Yeah, Illinois
+            - TCP: BBRv1, Westwood (default), Vegas, Yeah, Veno
 
             ### Variants included:
             - `Image.gki.ksu` — GKI + Wild-KSU + SUSFS
@@ -789,7 +789,7 @@ jobs:
           MESSAGE="${MESSAGE}   • BBG (Baseband Guard)%0A"
           MESSAGE="${MESSAGE}   • Vanilla / No-KSU variants%0A"
           MESSAGE="${MESSAGE}   • O3 Optimization%0A"
-          MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood, CAKE, Vegas, Yeah, Illinois%0A%0A"
+          MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood (default), Vegas, Yeah, Veno%0A%0A"
           MESSAGE="${MESSAGE}<b>📣 Author/Maintainer:</b> @superuseryu%0A%0A"
           MESSAGE="${MESSAGE}#kernel #gki #clo #sapphire #sapphiren"
 
