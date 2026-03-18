@@ -1,4 +1,4 @@
-name: "Build Kernel AIO"
+name: "Build Kernel"
 
 env:
   OUT_DIR: "out"
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       is_testing:
-        description: "Mark as Testing Build?"
+        description: "Testing Build?"
         type: boolean
         default: false
 
@@ -71,8 +71,8 @@ jobs:
             defconfig: "gki_defconfig"
             output_name: "Image.gki.ksu"
             artifact_name: "gki-ksu-kernel"
+            zip_prefix: "GKI_KSU"
             ksu_type: "wild"
-            tg_variant: "GKI + Wild-KSU + SUSFS + BBG"
 
           # CLO + Wild-KSU
           - name: "CLO-KSU"
@@ -84,8 +84,8 @@ jobs:
             defconfig: "gki_defconfig"
             output_name: "Image.clo.ksu"
             artifact_name: "clo-ksu-kernel"
+            zip_prefix: "CLO_KSU"
             ksu_type: "wild"
-            tg_variant: "CLO + Wild-KSU + SUSFS + BBG"
 
           # GKI vanilla
           - name: "GKI-NoKSU"
@@ -97,8 +97,8 @@ jobs:
             defconfig: "gki_defconfig"
             output_name: "Image.gki.noksu"
             artifact_name: "gki-noksu-kernel"
+            zip_prefix: "GKI_NoKSU"
             ksu_type: "none"
-            tg_variant: "GKI Vanilla + BBG"
 
           # CLO vanilla
           - name: "CLO-NoKSU"
@@ -110,8 +110,8 @@ jobs:
             defconfig: "gki_defconfig"
             output_name: "Image.clo.noksu"
             artifact_name: "clo-noksu-kernel"
+            zip_prefix: "CLO_NoKSU"
             ksu_type: "none"
-            tg_variant: "CLO Vanilla + BBG"
 
     env:
       KERNEL_LOC_DIR: ${{ matrix.kernel.dir }}
@@ -138,8 +138,6 @@ jobs:
 
       - name: "🧹 Free disk space"
         run: |
-          echo "📦 Disk before cleanup:"
-          df -h /
           sudo apt-get remove -y \
             '^dotnet-.*' '^llvm-.*' '^php.*' '^mongodb.*' \
             azure-cli google-cloud-cli google-chrome-stable \
@@ -157,7 +155,6 @@ jobs:
             /usr/local/.ghcup \
             /usr/lib/jvm \
             "$AGENT_TOOLSDIRECTORY" 2>/dev/null || true
-          echo "✅ Disk after cleanup:"
           df -h /
 
       - name: "📐 Setup SWAP 8GB"
@@ -229,8 +226,6 @@ jobs:
 
           rm -rf ./KernelSU ./drivers/kernelsu ./Wild_KSU
 
-          echo "Installing Wild-KSU (stable)..."
-          
           curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s canary
 
           if [ ! -d "Wild_KSU" ]; then
@@ -238,24 +233,13 @@ jobs:
             exit 1
           fi
 
-          echo "Cloning SUSFS4KSU..."
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-
-          if [ ! -d "susfs4ksu" ]; then
-            echo "ERROR: SUSFS4KSU clone failed!"
-            exit 1
-          fi
 
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
           if [ -f "$SUSFS_PATCH" ]; then
-            if patch -p1 --forward < "$SUSFS_PATCH"; then
-              echo "✅ SUSFS kernel patch applied"
-            else
-              echo "⚠️ Patch had some issues, continuing..."
-            fi
+            patch -p1 --forward < "$SUSFS_PATCH" || echo "⚠️ patch had issues, continuing..."
           fi
 
-          # [IMPROVE #1] directory-wide copy — picks up any new/renamed files automatically
           mkdir -p fs include/linux
           cp -f susfs4ksu/kernel_patches/fs/* fs/
           cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
@@ -265,24 +249,16 @@ jobs:
           fi
 
           KSU_C_FILE="Wild_KSU/kernel/ksu.c"
-          if [ ! -f "$KSU_C_FILE" ]; then
-            echo "ERROR: $KSU_C_FILE not found!"
-            exit 1
-          fi
-
           if ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
-            if ! grep -q "#include <linux/susfs.h>" "$KSU_C_FILE"; then
+            grep -q "#include <linux/susfs.h>" "$KSU_C_FILE" || \
               sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE"
-            fi
-            if ! grep -q "susfs_init()" "$KSU_C_FILE"; then
+            grep -q "susfs_init()" "$KSU_C_FILE" || \
               sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE" || \
               sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$KSU_C_FILE"
-            fi
           fi
 
-          if [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
+          [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
             ln -sf ../Wild_KSU drivers/kernelsu
-          fi
 
           rm -rf susfs4ksu
 
@@ -298,103 +274,56 @@ jobs:
           SUPERCALLS="drivers/kernelsu/supercalls.c"
 
           add_stub_c() {
-            local func="$1"
-            local signature="$2"
-            local body="$3"
+            local func="$1" signature="$2" body="$3"
             if ! grep -q "$func" "$SUSFS_C" 2>/dev/null; then
-              echo "⚠️  $func missing from susfs.c — adding stub..."
-              printf "\n/* Compatibility stub: $func not in this SUSFS version */\n" >> "$SUSFS_C"
-              printf "%s\n" "$signature" >> "$SUSFS_C"
-              printf "{\n\t$body\n}\n" >> "$SUSFS_C"
-              echo "✅ $func stub added to susfs.c"
-            else
-              echo "✅ $func already defined — skip"
+              printf "\n/* stub: %s */\n%s\n{\n\t%s\n}\n" "$func" "$signature" "$body" >> "$SUSFS_C"
             fi
           }
 
           add_stub_h() {
-            local func="$1"
-            local decl="$2"
-            if ! grep -q "$func" "$SUSFS_H" 2>/dev/null; then
-              sed -i "/^#endif/i $decl" "$SUSFS_H"
-              echo "✅ $func declaration added to susfs.h"
-            fi
+            local func="$1" decl="$2"
+            grep -q "$func" "$SUSFS_H" 2>/dev/null || sed -i "/^#endif/i $decl" "$SUSFS_H"
           }
 
           # susfs_reorder_mnt_id
           if grep -q "susfs_reorder_mnt_id" "$SETUID_HOOK" 2>/dev/null; then
             add_stub_c "susfs_reorder_mnt_id" \
-              "void susfs_reorder_mnt_id(struct task_struct *task)" \
-              "return;"
+              "void susfs_reorder_mnt_id(struct task_struct *task)" "return;"
             add_stub_h "susfs_reorder_mnt_id" \
               "void susfs_reorder_mnt_id(struct task_struct *task);"
-          else
-            echo "✅ susfs_reorder_mnt_id not referenced — skip"
           fi
 
           # susfs_set_i_state_on_external_dir
           if grep -q "susfs_set_i_state_on_external_dir" "$SUPERCALLS" 2>/dev/null; then
             add_stub_c "susfs_set_i_state_on_external_dir" \
-              "void susfs_set_i_state_on_external_dir(struct inode *inode)" \
-              "return;"
+              "void susfs_set_i_state_on_external_dir(struct inode *inode)" "return;"
             add_stub_h "susfs_set_i_state_on_external_dir" \
               "void susfs_set_i_state_on_external_dir(struct inode *inode);"
-            if ! grep -q "#include <linux/susfs.h>" "$SUPERCALLS" 2>/dev/null; then
+            grep -q "#include <linux/susfs.h>" "$SUPERCALLS" 2>/dev/null || \
               sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$SUPERCALLS"
-              echo "✅ Added susfs.h include to supercalls.c"
-            else
-              echo "✅ susfs.h already included in supercalls.c"
-            fi
             sed -i 's/susfs_set_i_state_on_external_dir(arg)/susfs_set_i_state_on_external_dir((struct inode \*)arg)/g' "$SUPERCALLS"
-            echo "✅ Patched susfs_set_i_state_on_external_dir call sites with cast"
-          else
-            echo "✅ susfs_set_i_state_on_external_dir not referenced — skip"
           fi
 
       # gki fixup patches
       - name: "🩹 Apply GKI fixup patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          # Patch 1: drivers/of/property.c — io-channel fix SKIPPED
-          # chickendrop89 confirmed this breaks dwc3-msm-core + fuel gauge on sapphire/sapphiren
-          # Ref: github.com/chickendrop89/device_xiaomi_gemstones-kernel/commit/2b14b93
-
-          # Patch 2: drivers/usb/dwc3 — fix USB reconnect bug
+          # io-channel fix skipped — breaks dwc3-msm-core + fuel gauge (sapphire/sapphiren)
           DWC3_CORE="drivers/usb/dwc3/core.c"
           DWC3_GADGET="drivers/usb/dwc3/gadget.c"
           DWC3_HEADER="drivers/usb/dwc3/core.h"
 
           if [ -f "$DWC3_GADGET" ]; then
-            sed -i '/dwc3_core_soft_reset(dwc);/{
-              N; /dwc3_event_buffers_setup(dwc);/{
-                d
-              }
-            }' "$DWC3_GADGET"
+            sed -i '/dwc3_core_soft_reset(dwc);/{N; /dwc3_event_buffers_setup(dwc);/{d}}' "$DWC3_GADGET"
             sed -i '/^\s*dwc3_core_soft_reset(dwc);\s*$/d' "$DWC3_GADGET"
-            echo "✅ dwc3 gadget soft_connect fix applied"
-          else
-            echo "⚠️  $DWC3_GADGET not found, skip"
           fi
-
           if [ -f "$DWC3_CORE" ]; then
-            if ! grep -q "static int dwc3_core_soft_reset(struct dwc3 \*dwc);" "$DWC3_CORE"; then
+            grep -q "static int dwc3_core_soft_reset" "$DWC3_CORE" || \
               sed -i '/^static void __dwc3_set_mode/i static int dwc3_core_soft_reset(struct dwc3 *dwc);' "$DWC3_CORE"
-            fi
             sed -i 's/^int dwc3_core_soft_reset(struct dwc3 \*dwc)$/static int dwc3_core_soft_reset(struct dwc3 *dwc)/' "$DWC3_CORE"
-            echo "✅ dwc3 core_soft_reset static fix applied"
-          else
-            echo "⚠️  $DWC3_CORE not found, skip"
           fi
-
-          if [ -f "$DWC3_HEADER" ]; then
+          [ -f "$DWC3_HEADER" ] && \
             sed -i '/^int dwc3_core_soft_reset(struct dwc3 \*dwc);$/d' "$DWC3_HEADER"
-            echo "✅ dwc3 header declaration removed"
-          else
-            echo "⚠️  $DWC3_HEADER not found, skip"
-          fi
-
-
-
 
       # suppress vendor module debug spam
       - name: "🔇 Suppress vendor module debugging"
@@ -403,7 +332,6 @@ jobs:
           cat > /tmp/vendor_debug.py << 'PYEOF'
           import sys
 
-          # Patch init/Kconfig
           with open("init/Kconfig") as f:
               k = f.read()
           if "SUPPRESS_VENDOR_MODULE_DEBUGGING" not in k:
@@ -419,7 +347,6 @@ jobs:
           else:
               print("Kconfig: skip")
 
-          # Patch kernel/printk/printk.c
           with open("kernel/printk/printk.c") as f:
               c = f.read()
           if "should_filter_vendor_message" not in c:
@@ -449,10 +376,7 @@ jobs:
                   "\t}\n"
                   "#endif\n\n"
               )
-              c = c.replace(
-                  "\n__printf(4, 0)\nint vprintk_store",
-                  func + "__printf(4, 0)\nint vprintk_store"
-              )
+              c = c.replace("\n__printf(4, 0)\nint vprintk_store", func + "__printf(4, 0)\nint vprintk_store")
               c = c.replace(
                   "\tva_end(args2);\n\n\tif (reserve_size > LOG_LINE_MAX)",
                   hook + "\tif (reserve_size > LOG_LINE_MAX)"
@@ -464,20 +388,15 @@ jobs:
           PYEOF
 
           python3 /tmp/vendor_debug.py
-
-          # Enable config
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           grep -q "CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING" "$CONFIG_FILE" || \
             echo "CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING=y" >> "$CONFIG_FILE"
-          echo "vendor debug suppression done"
-
 
       # base configs
       - name: "⚙️ Add base kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          echo "⚙️ Adding base configs..."
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KALLSYMS=y
           CONFIG_OVERLAY_FS_REDIRECT_DIR=y
@@ -525,7 +444,6 @@ jobs:
           CONFIG_BTRFS_FS=y
           CONFIG_NTFS3_FS=y
           EOF
-          echo "✅ Base configs added"
 
       # wild-ksu + susfs configs
       - name: "⚙️ Add Wild-KSU + SUSFS kernel configs"
@@ -533,7 +451,6 @@ jobs:
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          echo "⚙️ Adding Wild-KSU + SUSFS configs..."
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
           # ksu
           CONFIG_KSU=y
@@ -554,27 +471,19 @@ jobs:
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
           CONFIG_KSU_SUSFS_SUS_SU=y
           EOF
-          echo "✅ Wild-KSU + SUSFS configs added"
 
       - name: "🏷️ Configure kernel name and remove dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          export TZ="Asia/Jakarta"
           CURRENT_TIME=$(date -u +"%a %b %d %H:%M:%S UTC %Y")
           RANDOM_HASH=$(openssl rand -hex 6)
-          KERNEL_SUFFIX="-ab${RANDOM_HASH}"
-
-          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res${KERNEL_SUFFIX}\"|" ./scripts/setlocalversion
-
+          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${RANDOM_HASH}\"|" ./scripts/setlocalversion
           perl -pi -e "s{UTS_VERSION=\"\\\$\(echo \\\$UTS_VERSION \\\$CONFIG_FLAGS \\\$TIMESTAMP \\| cut -b -\\\$UTS_LEN\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $CURRENT_TIME\"}" \
             ./scripts/mkcompile_h
-
           sed -i 's/-dirty//' ./scripts/setlocalversion
-
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "Wild: Clean Dirty Flag" || true
+          git add . && git commit -m "clean dirty flag" || true
 
       - name: "🔩 Fix ABI and build configs"
         working-directory: ${{ env.WORK_DIR }}
@@ -584,7 +493,7 @@ jobs:
           fi
           cat > build/abi/compare_to_symbol_list << 'EOF'
           #!/bin/bash
-          echo "ABI checking disabled for custom kernel build"
+          echo "ABI checking disabled"
           exit 0
           EOF
           chmod +x build/abi/compare_to_symbol_list
@@ -621,7 +530,6 @@ jobs:
 
           if ! KCFLAGS="$KCFLAGS" BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
             build/build.sh -j$(nproc); then
-            echo "BUILD_FAILED=1" >> $GITHUB_ENV
             exit 1
           fi
 
@@ -634,35 +542,51 @@ jobs:
         working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
           VERSION_FULL=$(strings Image | grep "Linux version 5" | head -1)
-          echo "Full version string: $VERSION_FULL"
-          if echo "$VERSION_FULL" | grep -q "dirty"; then
-            echo "❌ ERROR: Kernel contains -dirty!"
-            exit 1
-          fi
+          echo "$VERSION_FULL"
+          echo "$VERSION_FULL" | grep -q "dirty" && { echo "❌ dirty!"; exit 1; } || true
           VERSION_CLEAN=$(echo "$VERSION_FULL" | sed 's/Linux version //' | sed 's/ (.*//')
-          echo "✅ Clean kernel version: $VERSION_CLEAN"
+          echo "✅ $VERSION_CLEAN"
           echo "KERNEL_VERSION=$VERSION_CLEAN" >> $GITHUB_ENV
           echo "$VERSION_CLEAN" > kernel_version.txt
 
-      - name: "📁 Copy kernel image"
-        working-directory: ${{ env.WORK_DIR }}/out/dist
+      - name: "📦 Create variant ZIP"
+        working-directory: ${{ env.WORK_DIR }}
         run: |
-          cp Image "${{ matrix.kernel.output_name }}"
-          echo "📦 Kernel image:"
-          ls -lh "${{ matrix.kernel.output_name }}"
+          set -e
+          DATE_TAG=$(date +'%Y%m%d')
+          ZIP_NAME="AnyKernel3_${{ matrix.kernel.zip_prefix }}_${DATE_TAG}.zip"
 
-      - name: "📤 Upload kernel artifact"
+          git clone --depth=1 https://github.com/superuseryu/AnyKernel3 ak3_tmp
+
+          # put as "Image" so anykernel.sh flashes it directly
+          cp out/dist/Image ak3_tmp/Image
+
+          cd ak3_tmp
+          zip -r9 "../$ZIP_NAME" * -x .git/*
+          cd ..
+
+          ZIP_SIZE_MB=$(echo "scale=2; $(stat -c%s "$ZIP_NAME") / 1024 / 1024" | bc)
+          ZIP_SHA256=$(sha256sum "$ZIP_NAME" | cut -d' ' -f1)
+
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+          echo "ZIP_SIZE_MB=$ZIP_SIZE_MB" >> $GITHUB_ENV
+          echo "ZIP_SHA256=$ZIP_SHA256" >> $GITHUB_ENV
+          echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
+
+          echo "✅ $ZIP_NAME ($ZIP_SIZE_MB MB)"
+
+      - name: "📤 Upload variant artifact"
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.kernel.artifact_name }}
           path: |
-            ${{ env.WORK_DIR }}/out/dist/${{ matrix.kernel.output_name }}
+            ${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
           retention-days: 1
 
-  # package kernels
+  # package + release
   package-kernels:
-    name: "📦 Package AIO"
+    name: "📦 Package & Release"
     runs-on: ubuntu-latest
     needs: [setup, build-kernels]
     if: success()
@@ -673,97 +597,91 @@ jobs:
         with:
           path: ./artifacts/
 
-      - name: "📋 Read kernel version"
+      - name: "🔖 Get versions"
         run: |
+          # kernel version
           VERSION_FILE=$(find ./artifacts -name "kernel_version.txt" | head -1)
-          if [ -f "$VERSION_FILE" ]; then
-            KERNEL_VERSION=$(cat "$VERSION_FILE")
-            echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
-            echo "📋 Kernel version: $KERNEL_VERSION"
-          else
-            echo "KERNEL_VERSION=5.15.x" >> $GITHUB_ENV
-          fi
+          KERNEL_VERSION=$([ -f "$VERSION_FILE" ] && cat "$VERSION_FILE" || echo "5.15.x")
+          echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
 
-      - name: "📦 Create AIO ZIP package"
-        run: |
-          set -e
-          echo "📦 Creating AnyKernel3 AIO package..."
+          # SUSFS version from latest gitlab tag
+          SUSFS_VERSION=$(git ls-remote --tags https://gitlab.com/simonpunk/susfs4ksu.git \
+            | grep -o 'refs/tags/v[0-9.]*$' | sed 's|refs/tags/||' | sort -V | tail -1)
+          SUSFS_VERSION="${SUSFS_VERSION:-v2.0.0}"
+          echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
+          echo "SUSFS_VERSION_PLAIN=${SUSFS_VERSION#v}" >> $GITHUB_ENV
 
-          git clone --depth=1 https://github.com/superuseryu/AnyKernel3
+          # Wild KSU version from latest release
+          WILD_VERSION=$(curl -sf https://api.github.com/repos/WildKernels/Wild_KSU/releases/latest \
+            | jq -r '.tag_name' || echo "v3.1.1")
+          echo "WILD_VERSION=$WILD_VERSION" >> $GITHUB_ENV
 
-          # Copy all kernel images from all artifacts
-          find ./artifacts -name "Image.*" -exec cp {} AnyKernel3/ \;
-
-          echo "📋 Images included:"
-          ls -lh AnyKernel3/Image.* 2>/dev/null || echo "No images found!"
-
+          # release tag
           DATE_TAG=$(date +'%Y%m%d')
+          echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
           if [ "${{ inputs.is_testing }}" = "true" ]; then
-            ZIP_NAME="Anykernel3_AIO_Testing_${DATE_TAG}.zip"
+            echo "RELEASE_TAG=${SUSFS_VERSION}-testing" >> $GITHUB_ENV
+            echo "RELEASE_NAME=Wild KSU Kernel ${SUSFS_VERSION} — Testing" >> $GITHUB_ENV
+            echo "IS_PRERELEASE=true" >> $GITHUB_ENV
           else
-            ZIP_NAME="Anykernel3_AIO_${DATE_TAG}.zip"
+            echo "RELEASE_TAG=${SUSFS_VERSION}" >> $GITHUB_ENV
+            echo "RELEASE_NAME=Wild KSU Kernel ${SUSFS_VERSION}" >> $GITHUB_ENV
+            echo "IS_PRERELEASE=false" >> $GITHUB_ENV
           fi
 
-          cd AnyKernel3
-          zip -r9 "../$ZIP_NAME" * -x .git/*
-          cd ..
+          echo "Kernel: $KERNEL_VERSION | SUSFS: $SUSFS_VERSION | Wild-KSU: $WILD_VERSION"
 
-          ZIP_SIZE=$(stat -c%s "$ZIP_NAME")
-          ZIP_SIZE_MB=$(echo "scale=2; $ZIP_SIZE / 1024 / 1024" | bc)
-          ZIP_SHA256=$(sha256sum "$ZIP_NAME" | cut -d' ' -f1)
+      - name: "🗂️ Collect ZIP files"
+        run: |
+          mkdir -p ./zips
+          find ./artifacts -name "AnyKernel3_*.zip" -exec cp {} ./zips/ \;
+          echo "📋 ZIPs:"
+          ls -lh ./zips/
 
-          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
-          echo "ZIP_SIZE_MB=$ZIP_SIZE_MB" >> $GITHUB_ENV
-          echo "ZIP_SHA256=$ZIP_SHA256" >> $GITHUB_ENV
-          echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
+          # build zip list for env
+          ZIP_LIST=$(ls ./zips/*.zip | tr '\n' ' ')
+          echo "ZIP_LIST=$ZIP_LIST" >> $GITHUB_ENV
 
-          echo "✅ Package: $ZIP_NAME ($ZIP_SIZE_MB MB)"
-          echo "🔐 SHA256: $ZIP_SHA256"
-
-          unzip -t "$ZIP_NAME"
-          ls -la "$ZIP_NAME"
+      - name: "📝 Generate release body"
+        run: |
+          BODY=""
+          if [ "${{ inputs.is_testing }}" = "true" ]; then
+            BODY="> ⚠️ **Testing build** — use at your own risk."$'\n\n'
+          fi
+          BODY="${BODY}**Wild-KSU:** [${{ env.WILD_VERSION }}](https://github.com/WildKernels/Wild_KSU/releases/tag/${{ env.WILD_VERSION }}) · **SUSFS:** [${{ env.SUSFS_VERSION }}](https://gitlab.com/simonpunk/susfs4ksu/-/releases/${{ env.SUSFS_VERSION }})"$'\n\n'
+          BODY="${BODY}**Features:** Wild-KSU ${{ env.WILD_VERSION }} (canary) · SUSFS ඞ ${{ env.SUSFS_VERSION_PLAIN }} · BBG · O3+LTO · some TCP algos (BBRv1, Westwood default)"$'\n\n'
+          BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"$'\n\n'
+          BODY="${BODY}| Variant | Source | Root |"$'\n'
+          BODY="${BODY}|---------|--------|------|"$'\n'
+          BODY="${BODY}| \`AnyKernel3_GKI_KSU_${{ env.DATE_TAG }}.zip\` | GKI | Wild-KSU + SUSFS |"$'\n'
+          BODY="${BODY}| \`AnyKernel3_CLO_KSU_${{ env.DATE_TAG }}.zip\` | CLO | Wild-KSU + SUSFS |"$'\n'
+          BODY="${BODY}| \`AnyKernel3_GKI_NoKSU_${{ env.DATE_TAG }}.zip\` | GKI | Vanilla |"$'\n'
+          BODY="${BODY}| \`AnyKernel3_CLO_NoKSU_${{ env.DATE_TAG }}.zip\` | CLO | Vanilla |"
+          echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
+          echo "$BODY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
       - name: "⬆️ Create GitHub Release"
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: ${{ env.ZIP_NAME }}
-          tag_name: "AIO_Kernel"
-          name: "AIO Kernel Pack"
-          body: |
-            ### Features:
-            - Wild-KSU (canary) + SUSFS ඞ v2.0.0
-            - Baseband Guard (BBG)
-            - O3 + LTO Optimization (KCFLAGS)
-            - TCP: BBRv1, Westwood (default), Vegas, Yeah, Veno
+          files: ./zips/*.zip
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          prerelease: ${{ env.IS_PRERELEASE }}
+          body: ${{ env.RELEASE_BODY }}
 
-            ### Variants included:
-            - `Image.gki.ksu` — GKI + Wild-KSU + SUSFS
-            - `Image.clo.ksu` — CLO + Wild-KSU + SUSFS
-            - `Image.gki.noksu` — GKI Vanilla (no root)
-            - `Image.clo.noksu` — CLO Vanilla (no root)
-
-            ### Installation:
-            1. Flash via OrangeFox / TWRP
-            2. Select kernel source (GKI / CLO) and variant when prompted
-            3. Reboot
-
-      - name: "🎉 Send Telegram — Package success"
+      - name: "🎉 Send Telegram — Build success"
         if: success()
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/AIO_Kernel"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
           BUILD_END=$(date +%s)
-          BUILD_START="${{ needs.setup.outputs.start_time }}"
-          DURATION=$((BUILD_END - BUILD_START))
-          DURATION_MIN=$((DURATION / 60))
-          DURATION_SEC=$((DURATION % 60))
-
-          SHORT_SHA=$(echo "${{ env.ZIP_SHA256 }}" | cut -c1-20)
+          DURATION=$(( BUILD_END - ${{ needs.setup.outputs.start_time }} ))
 
           if [ "${{ inputs.is_testing }}" = "true" ]; then
             BUILD_TYPE="🧪 Testing Build (LTO=thin)"
@@ -773,20 +691,22 @@ jobs:
 
           MESSAGE="<b>🎉 Build Success!</b>%0A%0A"
           MESSAGE="${MESSAGE}<b>✏️ Type:</b> ${BUILD_TYPE}%0A"
-          MESSAGE="${MESSAGE}<b>📦 File:</b> <code>${{ env.ZIP_NAME }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>📊 Size:</b> ${{ env.ZIP_SIZE_MB }} MB%0A"
-          MESSAGE="${MESSAGE}<b>🔐 SHA256:</b> <code>${SHORT_SHA}...</code>%0A"
-          MESSAGE="${MESSAGE}<b>⏱️ Build Time:</b> ${DURATION_MIN}m ${DURATION_SEC}s%0A"
-          MESSAGE="${MESSAGE}<b>🔗 Release:</b> <a href='${RELEASE_URL}'>click-here</a>%0A"
+          MESSAGE="${MESSAGE}<b>🏷️ Tag:</b> <code>${{ env.RELEASE_TAG }}</code>%0A"
+          MESSAGE="${MESSAGE}<b>⏱️ Build Time:</b> $((DURATION / 60))m $((DURATION % 60))s%0A"
+          MESSAGE="${MESSAGE}<b>🔗 Release:</b> <a href='${RELEASE_URL}'>Download</a>%0A"
           MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A%0A"
           MESSAGE="${MESSAGE}<b>⚡ Features:</b>%0A"
-          MESSAGE="${MESSAGE}   • Wild-KSU (canary) + SUSFS ඞ%0A"
+          MESSAGE="${MESSAGE}   • Wild-KSU ${{ env.WILD_VERSION }} (canary) + SUSFS ඞ ${{ env.SUSFS_VERSION_PLAIN }}%0A"
           MESSAGE="${MESSAGE}   • BBG (Baseband Guard)%0A"
-          MESSAGE="${MESSAGE}   • Vanilla / No-KSU variants%0A"
           MESSAGE="${MESSAGE}   • O3 + LTO Optimization%0A"
-          MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood (default), Vegas, Yeah, Veno%0A%0A"
-          MESSAGE="${MESSAGE}<b>📣 Author/Maintainer:</b> @superuseryu%0A%0A"
-          MESSAGE="${MESSAGE}#kernel #gki #clo #sapphire #sapphiren"
+          MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood, Vegas, Yeah, Veno%0A%0A"
+          MESSAGE="${MESSAGE}<b>📦 Variants:</b>%0A"
+          MESSAGE="${MESSAGE}   • GKI + Wild-KSU%0A"
+          MESSAGE="${MESSAGE}   • CLO + Wild-KSU%0A"
+          MESSAGE="${MESSAGE}   • GKI Vanilla%0A"
+          MESSAGE="${MESSAGE}   • CLO Vanilla%0A%0A"
+          MESSAGE="${MESSAGE}<b>📣 Maintainer:</b> @superuseryu%0A%0A"
+          MESSAGE="${MESSAGE}#kernel #wildksu #gki #clo #sapphire #sapphiren"
 
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -794,17 +714,19 @@ jobs:
             -d parse_mode="HTML" \
             -d disable_web_page_preview=true
 
-          if (( $(echo "${{ env.ZIP_SIZE_MB }} < 50" | bc -l) )); then
-            echo "📤 Sending ZIP to Telegram..."
+          # send each zip as document
+          for ZIP in ./zips/*.zip; do
+            [ -f "$ZIP" ] || continue
+            SIZE_MB=$(echo "scale=2; $(stat -c%s "$ZIP") / 1024 / 1024" | bc)
             curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendDocument" \
               -F chat_id="$CHAT_ID" \
-              -F document=@"${{ env.ZIP_NAME }}" \
-              -F caption="📦 ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)"
-          fi
+              -F document=@"$ZIP" \
+              -F caption="📦 $(basename $ZIP) (${SIZE_MB} MB)" || true
+          done
 
   # notify on failure
   notify-failure:
-    name: "notify failure"
+    name: "❌ Notify Failure"
     runs-on: ubuntu-latest
     needs: [build-kernels]
     if: always() && needs.build-kernels.result != 'success'
@@ -816,19 +738,12 @@ jobs:
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           JOB_STATUS="${{ needs.build-kernels.result }}"
 
-          if [ "$JOB_STATUS" = "cancelled" ]; then
-            STATUS_ICON="⚠️"
-            STATUS_TEXT="Workflow Cancelled"
-          elif [ "$JOB_STATUS" = "failure" ]; then
-            STATUS_ICON="❌"
-            STATUS_TEXT="Build Failed"
-          else
-            STATUS_ICON="❓"
-            STATUS_TEXT="Unknown Status ($JOB_STATUS)"
-          fi
+          [ "$JOB_STATUS" = "cancelled" ] && ICON="⚠️" && TEXT="Workflow Cancelled" || \
+          [ "$JOB_STATUS" = "failure" ] && ICON="❌" && TEXT="Build Failed" || \
+          ICON="❓" && TEXT="Unknown ($JOB_STATUS)"
 
-          MESSAGE="<b>${STATUS_ICON} ${STATUS_TEXT}!</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>📦 Workflow:</b> Build Kernel AIO%0A"
+          MESSAGE="<b>${ICON} ${TEXT}!</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>📦 Workflow:</b> Build Kernel%0A"
           MESSAGE="${MESSAGE}<b>🕐 Time:</b> $(TZ='Asia/Jakarta' date +'%H:%M:%S WIB')%0A"
           MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>"
 
