@@ -18,7 +18,7 @@ permissions:
 
 jobs:
 
-  # -- setup job: record global start time --
+  # record global start time
   setup:
     name: "⏱️ Setup"
     runs-on: ubuntu-latest
@@ -52,7 +52,7 @@ jobs:
             -d parse_mode="HTML" \
             -d disable_web_page_preview=true || true
 
-  # -- matrix build job --
+  # matrix build
   build-kernels:
     name: "🔨 Build ${{ matrix.kernel.name }}"
     runs-on: ubuntu-latest
@@ -61,7 +61,7 @@ jobs:
       fail-fast: false
       matrix:
         kernel:
-          # -- GKI (AOSP android13-5.15-lts) + Wild-KSU + SUSFS + BBG --
+          # GKI + Wild-KSU
           - name: "GKI-KSU"
             dir: "common_gki"
             repo_name: "common"
@@ -74,7 +74,7 @@ jobs:
             ksu_type: "wild"
             tg_variant: "GKI + Wild-KSU + SUSFS + BBG"
 
-          # -- CLO (CodeLinaro msm-5.15) + Wild-KSU + SUSFS + BBG --
+          # CLO + Wild-KSU
           - name: "CLO-KSU"
             dir: "common_clo"
             repo_name: "clo"
@@ -87,7 +87,7 @@ jobs:
             ksu_type: "wild"
             tg_variant: "CLO + Wild-KSU + SUSFS + BBG"
 
-          # -- GKI Vanilla (AOSP android13-5.15-lts) + BBG only --
+          # GKI vanilla
           - name: "GKI-NoKSU"
             dir: "common_gki_noksu"
             repo_name: "common"
@@ -100,7 +100,7 @@ jobs:
             ksu_type: "none"
             tg_variant: "GKI Vanilla + BBG"
 
-          # -- CLO Vanilla (CodeLinaro msm-5.15) + BBG only --
+          # CLO vanilla
           - name: "CLO-NoKSU"
             dir: "common_clo_noksu"
             repo_name: "clo"
@@ -220,7 +220,7 @@ jobs:
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
             security/Kconfig
 
-      # -- Wild-KSU stable + SUSFS — directory-wide copy [IMPROVE #1] --
+      # wild-ksu + susfs setup
       - name: "😋 Setup Wild-KSU with SUSFS"
         if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -286,7 +286,7 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # -- Wild-KSU only: Fix SUSFS symbol mismatches --
+      # fix susfs symbol mismatches
       - name: "🔧 Fix SUSFS compatibility stubs"
         if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -321,7 +321,7 @@ jobs:
             fi
           }
 
-          # -- Fix 1: susfs_reorder_mnt_id (setuid_hook.c) --
+          # susfs_reorder_mnt_id
           if grep -q "susfs_reorder_mnt_id" "$SETUID_HOOK" 2>/dev/null; then
             add_stub_c "susfs_reorder_mnt_id" \
               "void susfs_reorder_mnt_id(struct task_struct *task)" \
@@ -332,7 +332,7 @@ jobs:
             echo "✅ susfs_reorder_mnt_id not referenced — skip"
           fi
 
-          # -- Fix 2: susfs_set_i_state_on_external_dir (supercalls.c) --
+          # susfs_set_i_state_on_external_dir
           if grep -q "susfs_set_i_state_on_external_dir" "$SUPERCALLS" 2>/dev/null; then
             add_stub_c "susfs_set_i_state_on_external_dir" \
               "void susfs_set_i_state_on_external_dir(struct inode *inode)" \
@@ -351,7 +351,7 @@ jobs:
             echo "✅ susfs_set_i_state_on_external_dir not referenced — skip"
           fi
 
-      # -- GKI fixup patches (all variants) --
+      # gki fixup patches
       - name: "🩹 Apply GKI fixup patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -396,7 +396,7 @@ jobs:
 
 
 
-      # -- Suppress vendor module debugging (chickendrop89) --
+      # suppress vendor module debug spam
       - name: "🔇 Suppress vendor module debugging"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -472,16 +472,14 @@ jobs:
           echo "vendor debug suppression done"
 
 
-      # -- [IMPROVE #4] Base kernel configs — all variants --
+      # base configs
       - name: "⚙️ Add base kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           echo "⚙️ Adding base configs..."
-          cat >> "$CONFIG_FILE" << 'EOF'
+          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KALLSYMS=y
-          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=n
-          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=y
           CONFIG_OVERLAY_FS_REDIRECT_DIR=y
           CONFIG_OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW=y
           CONFIG_OVERLAY_FS_INDEX=y
@@ -529,17 +527,17 @@ jobs:
           EOF
           echo "✅ Base configs added"
 
-      # -- [IMPROVE #4] Wild-KSU configs — conditional, KPROBES only for Wild --
+      # wild-ksu + susfs configs
       - name: "⚙️ Add Wild-KSU + SUSFS kernel configs"
         if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           echo "⚙️ Adding Wild-KSU + SUSFS configs..."
-          cat >> "$CONFIG_FILE" << 'EOF'
-          # -- KSU Base --
+          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
+          # ksu
           CONFIG_KSU=y
-          # -- SUSFS --
+          # susfs
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_SUS_MAP=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
@@ -614,12 +612,14 @@ jobs:
             echo "🧩 Stable build: LTO=full (optimized)"
           fi
 
+          export KCFLAGS="-O3 -pipe -fno-strict-aliasing -Wno-error"
+          echo "KCFLAGS: $KCFLAGS"
           export SKIP_ABI_CHECKS=1
           export SKIP_KMI_CHECK=1
 
           START_BUILD=$(date +%s)
 
-          if ! BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
+          if ! KCFLAGS="$KCFLAGS" BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
             build/build.sh -j$(nproc); then
             echo "BUILD_FAILED=1" >> $GITHUB_ENV
             exit 1
@@ -660,7 +660,7 @@ jobs:
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
           retention-days: 1
 
-  # -- package all 4 kernels into one AIO ZIP --
+  # package kernels
   package-kernels:
     name: "📦 Package AIO"
     runs-on: ubuntu-latest
@@ -733,9 +733,9 @@ jobs:
           name: "AIO Kernel Pack"
           body: |
             ### Features:
-            - Wild-KSU (stable) + SUSFS ඞ v2.0.0
+            - Wild-KSU (canary) + SUSFS ඞ v2.0.0
             - Baseband Guard (BBG)
-            - O3 Compiler Optimization + Full LTO
+            - O3 + LTO Optimization (KCFLAGS)
             - TCP: BBRv1, Westwood (default), Vegas, Yeah, Veno
 
             ### Variants included:
@@ -780,10 +780,10 @@ jobs:
           MESSAGE="${MESSAGE}<b>🔗 Release:</b> <a href='${RELEASE_URL}'>click-here</a>%0A"
           MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A%0A"
           MESSAGE="${MESSAGE}<b>⚡ Features:</b>%0A"
-          MESSAGE="${MESSAGE}   • Wild-KSU (stable) + SUSFS ඞ%0A"
+          MESSAGE="${MESSAGE}   • Wild-KSU (canary) + SUSFS ඞ%0A"
           MESSAGE="${MESSAGE}   • BBG (Baseband Guard)%0A"
           MESSAGE="${MESSAGE}   • Vanilla / No-KSU variants%0A"
-          MESSAGE="${MESSAGE}   • O3 Optimization%0A"
+          MESSAGE="${MESSAGE}   • O3 + LTO Optimization%0A"
           MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood (default), Vegas, Yeah, Veno%0A%0A"
           MESSAGE="${MESSAGE}<b>📣 Author/Maintainer:</b> @superuseryu%0A%0A"
           MESSAGE="${MESSAGE}#kernel #gki #clo #sapphire #sapphiren"
@@ -802,9 +802,9 @@ jobs:
               -F caption="📦 ${{ env.ZIP_NAME }} (${{ env.ZIP_SIZE_MB }} MB)"
           fi
 
-  # -- notify if build-kernels matrix fails --
+  # notify on failure
   notify-failure:
-    name: "❌ Notify Failure"
+    name: "notify failure"
     runs-on: ubuntu-latest
     needs: [build-kernels]
     if: always() && needs.build-kernels.result != 'success'
