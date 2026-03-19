@@ -604,12 +604,11 @@ jobs:
           KERNEL_VERSION=$([ -f "$VERSION_FILE" ] && cat "$VERSION_FILE" || echo "5.15.x")
           echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
 
-          # SUSFS version from latest gitlab tag
-          SUSFS_VERSION=$(git ls-remote --tags https://gitlab.com/simonpunk/susfs4ksu.git \
-            | grep -o 'refs/tags/v[0-9.]*$' | sed 's|refs/tags/||' | sort -V | tail -1)
-          SUSFS_VERSION="${SUSFS_VERSION:-v2.0.0}"
+          # SUSFS module version from sidex15/susfs4ksu-module latest tag
+          SUSFS_VERSION=$(curl -sf https://api.github.com/repos/sidex15/susfs4ksu-module/tags \
+            | jq -r '.[0].name' || echo "v1.5.2+_R26")
           echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
-          echo "SUSFS_VERSION_PLAIN=${SUSFS_VERSION#v}" >> $GITHUB_ENV
+          echo "SUSFS_MODULE_URL=https://github.com/sidex15/susfs4ksu-module/releases/latest" >> $GITHUB_ENV
 
           # Wild KSU version from latest release
           WILD_VERSION=$(curl -sf https://api.github.com/repos/WildKernels/Wild_KSU/releases/latest \
@@ -648,8 +647,8 @@ jobs:
           if [ "${{ inputs.is_testing }}" = "true" ]; then
             BODY="> ⚠️ **Testing build** — use at your own risk."$'\n\n'
           fi
-          BODY="${BODY}**Wild-KSU:** [${{ env.WILD_VERSION }}](https://github.com/WildKernels/Wild_KSU/releases/tag/${{ env.WILD_VERSION }}) · **SUSFS:** [${{ env.SUSFS_VERSION }}](https://gitlab.com/simonpunk/susfs4ksu/-/releases/${{ env.SUSFS_VERSION }})"$'\n\n'
-          BODY="${BODY}**Features:** Wild-KSU ${{ env.WILD_VERSION }} (canary) · SUSFS ඞ ${{ env.SUSFS_VERSION_PLAIN }} · BBG · O3+LTO · some TCP algos (BBRv1, Westwood default)"$'\n\n'
+          BODY="${BODY}**Wild-KSU:** [${{ env.WILD_VERSION }}](https://github.com/WildKernels/Wild_KSU/releases/tag/${{ env.WILD_VERSION }}) · **SUSFS:** [${{ env.SUSFS_VERSION }}](${{ env.SUSFS_MODULE_URL }})"$'\n\n'
+          BODY="${BODY}**Features:** Wild-KSU ${{ env.WILD_VERSION }} (canary) · SUSFS ඞ ${{ env.SUSFS_VERSION }} · BBG · O3+LTO · some TCP algos (BBRv1, Westwood default)"$'\n\n'
           BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"$'\n\n'
           BODY="${BODY}| Variant | Source | Root |"$'\n'
           BODY="${BODY}|---------|--------|------|"$'\n'
@@ -696,7 +695,7 @@ jobs:
           MESSAGE="${MESSAGE}<b>🔗 Release:</b> <a href='${RELEASE_URL}'>Download</a>%0A"
           MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A%0A"
           MESSAGE="${MESSAGE}<b>⚡ Features:</b>%0A"
-          MESSAGE="${MESSAGE}   • Wild-KSU ${{ env.WILD_VERSION }} (canary) + SUSFS ඞ ${{ env.SUSFS_VERSION_PLAIN }}%0A"
+          MESSAGE="${MESSAGE}   • Wild-KSU ${{ env.WILD_VERSION }} (canary) + SUSFS ඞ ${{ env.SUSFS_VERSION }}%0A"
           MESSAGE="${MESSAGE}   • BBG (Baseband Guard)%0A"
           MESSAGE="${MESSAGE}   • O3 + LTO Optimization%0A"
           MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood, Vegas, Yeah, Veno%0A%0A"
