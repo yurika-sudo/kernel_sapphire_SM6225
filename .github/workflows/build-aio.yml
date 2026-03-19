@@ -233,6 +233,14 @@ jobs:
             exit 1
           fi
 
+          # extract wild-ksu version
+          cd Wild_KSU
+          KSU_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
+          echo "WILD_KSU_TAG=$KSU_TAG" >> $GITHUB_ENV
+          echo "$KSU_TAG" > ${{ env.WORK_DIR }}/wild_ksu_tag.txt
+          echo "-- Wild KSU tag: $KSU_TAG"
+          cd ..
+
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
 
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
@@ -582,6 +590,7 @@ jobs:
           path: |
             ${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
+            ${{ env.WORK_DIR }}/wild_ksu_tag.txt
           retention-days: 1
 
   # package + release
@@ -610,8 +619,10 @@ jobs:
           echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
           echo "SUSFS_MODULE_URL=https://github.com/sidex15/susfs4ksu-module/releases/latest" >> $GITHUB_ENV
 
-          # Wild KSU version from latest release
-          WILD_VERSION=$(curl -sf https://api.github.com/repos/WildKernels/Wild_KSU/releases/latest \
+          # Wild KSU version — read from build artifact (set during build step)
+          # fallback to GitHub API if not available
+          WILD_VERSION=$(find ./artifacts -name "wild_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || \
+            curl -sf https://api.github.com/repos/WildKernels/Wild_KSU/releases/latest \
             | jq -r '.tag_name' || echo "v3.1.1")
           echo "WILD_VERSION=$WILD_VERSION" >> $GITHUB_ENV
 
@@ -676,7 +687,8 @@ jobs:
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}"
+          ENCODED_TAG=$(echo "${{ env.RELEASE_TAG }}" | sed 's/+/%2B/g')
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${ENCODED_TAG}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
           BUILD_END=$(date +%s)
