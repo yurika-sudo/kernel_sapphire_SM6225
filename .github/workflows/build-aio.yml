@@ -157,10 +157,10 @@ jobs:
             "$AGENT_TOOLSDIRECTORY" 2>/dev/null || true
           df -h /
 
-      - name: "📐 Setup SWAP 8GB"
+      - name: "📐 Setup SWAP 12GB"
         uses: pierotofy/set-swap-space@master
         with:
-          swap-size-gb: 8
+          swap-size-gb: 12
 
       - name: "📐 Tune Swap"
         run: |
@@ -216,6 +216,17 @@ jobs:
           grep -q "baseband-guard/Kconfig" security/Kconfig || \
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
             security/Kconfig
+
+      - name: "🩹 Fix BBG get_link (bbg_fix_get_link)"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/experimental/bbg/bbg_fix_get_link.patch" \
+            -o /tmp/bbg_fix_get_link.patch
+          if patch -p1 --forward < /tmp/bbg_fix_get_link.patch; then
+            echo "✅ bbg_fix_get_link applied"
+          else
+            echo "⚠️ bbg_fix_get_link had issues (may already be applied), continuing..."
+          fi
 
       # wild-ksu + susfs setup
       - name: "😋 Setup Wild-KSU with SUSFS"
@@ -312,6 +323,33 @@ jobs:
             sed -i 's/susfs_set_i_state_on_external_dir(arg)/susfs_set_i_state_on_external_dir((struct inode \*)arg)/g' "$SUPERCALLS"
           fi
 
+      - name: "🩹 Apply SUSFS dentry null checks"
+        if: matrix.kernel.ksu_type == 'wild'
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/experimental/susfs/susfs_dentry_checks.patch" \
+            -o /tmp/susfs_dentry_checks.patch
+          if patch -p1 --forward < /tmp/susfs_dentry_checks.patch; then
+            echo "✅ susfs_dentry_checks applied"
+          else
+            echo "⚠️ susfs_dentry_checks had issues (may already be applied), continuing..."
+          fi
+
+      - name: "🩹 Apply wild SUSFS v2.0.0 a13-5.15 fixes"
+        if: matrix.kernel.ksu_type == 'wild'
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          BASE_URL="https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/wild/susfs_fix_patches/v2.0.0/a13-5.15"
+          for patch_name in fdinfo.c.patch namespace.c.patch open.c.patch; do
+            echo "--- Applying $patch_name ---"
+            curl -LSs "${BASE_URL}/${patch_name}" -o "/tmp/${patch_name}"
+            if patch -p1 --forward < "/tmp/${patch_name}"; then
+              echo "✅ $patch_name applied"
+            else
+              echo "⚠️ $patch_name had issues (may already be applied), continuing..."
+            fi
+          done
+
       # gki fixup patches
       - name: "🩹 Apply GKI fixup patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -332,6 +370,43 @@ jobs:
           fi
           [ -f "$DWC3_HEADER" ] && \
             sed -i '/^int dwc3_core_soft_reset(struct dwc3 \*dwc);$/d' "$DWC3_HEADER"
+
+      - name: "⚡ Apply common optimization patches"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          BASE_URL="https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/common"
+
+          declare -A PATCHES=(
+            ["unicode_bypass_fix_6.1-.patch"]="fs/unicode/utf8-norm.c — fix UTF-8 zero-width decompose crash"
+            ["silence_irq_cpu_logspam.patch"]="kernel/irq/cpuhotplug.c — silence IRQ affinity logspam"
+            ["silence_system_logspam.patch"]="kernel/printk/printk.c — silence healthd/logd/dashd spam"
+            ["reduce_cache_pressure.patch"]="fs/dcache.c — vfs_cache_pressure 100→50"
+            ["mem_opt_prefetch.patch"]="arch/arm64/lib/copy_template.S — prefetch optimization"
+          )
+
+          for patch_name in \
+            "unicode_bypass_fix_6.1-.patch" \
+            "silence_irq_cpu_logspam.patch" \
+            "silence_system_logspam.patch" \
+            "reduce_cache_pressure.patch" \
+            "mem_opt_prefetch.patch" \
+            "minimise_wakeup_time.patch" \
+            "reduce_freeze_timeout.patch" \
+            "int_sqrt.patch" \
+            "increase_sk_mem_packets.patch" \
+            "file_struct_8bytes_align.patch" \
+            "clear_page_16bytes_align.patch" \
+            "avoid_extra_s2idle_wake_attempts.patch" \
+            "adjust_cpu_scan_order.patch" \
+            "increase_ext4_default_commit_age.patch"; do
+            echo "--- Applying $patch_name ---"
+            curl -LSs "${BASE_URL}/${patch_name}" -o "/tmp/${patch_name}"
+            if patch -p1 --forward < "/tmp/${patch_name}"; then
+              echo "✅ $patch_name applied"
+            else
+              echo "⚠️ $patch_name had issues (may already be applied), continuing..."
+            fi
+          done
 
       # suppress vendor module debug spam
       - name: "🔇 Suppress vendor module debugging"
@@ -536,7 +611,7 @@ jobs:
 
           START_BUILD=$(date +%s)
 
-          if ! KCFLAGS="$KCFLAGS" BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
+          if ! KCFLAGS="$KCFLAGS" LLVM_PARALLEL_LINK_JOBS=1 BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
             build/build.sh -j$(nproc); then
             exit 1
           fi
