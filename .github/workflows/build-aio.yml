@@ -157,10 +157,10 @@ jobs:
             "$AGENT_TOOLSDIRECTORY" 2>/dev/null || true
           df -h /
 
-      - name: "📐 Setup SWAP 8GB"
+      - name: "📐 Setup SWAP 12GB"
         uses: pierotofy/set-swap-space@master
         with:
-          swap-size-gb: 8
+          swap-size-gb: 12
 
       - name: "📐 Tune Swap"
         run: |
@@ -611,7 +611,7 @@ jobs:
 
           START_BUILD=$(date +%s)
 
-          if ! KCFLAGS="$KCFLAGS" BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
+          if ! KCFLAGS="$KCFLAGS" LLVM_PARALLEL_LINK_JOBS=1 BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
             build/build.sh -j$(nproc); then
             exit 1
           fi
