@@ -451,7 +451,6 @@ jobs:
           CONFIG_TCP_CONG_VENO=y
           CONFIG_BTRFS_FS=y
           CONFIG_NTFS3_FS=y
-          CONFIG_CMA_DEBUGFS=n
           EOF
 
       # wild-ksu + susfs configs
