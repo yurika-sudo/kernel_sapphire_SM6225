@@ -840,7 +840,7 @@ jobs:
           ICON="❓" && TEXT="Unknown ($JOB_STATUS)"
 
           MESSAGE="<b>${ICON} ${TEXT}!</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>📱 Device:</b> Redmi Note 12/13 4G (sapphire/n)%0A"
+          MESSAGE="${MESSAGE}<b>📱 Device:</b> Redmi Note 13 4G (sapphire/n)%0A"
           MESSAGE="${MESSAGE}<b>📦 Workflow:</b> Build Kernel - Sapphire/n%0A"
           MESSAGE="${MESSAGE}<b>🕐 Time:</b> $(TZ='Asia/Jakarta' date +'%H:%M:%S WIB')%0A"
           MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>"
