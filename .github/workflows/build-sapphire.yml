@@ -355,7 +355,16 @@ jobs:
       - name: "🩹 Apply GKI fixup patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          # io-channel fix skipped — breaks dwc3-msm-core + fuel gauge (sapphire/sapphiren)
+          # fix CLO r26 qcom_fmgr_interface.h missing includes
+          FMGR="usr/include/linux/qcom_fmgr_interface.h"
+          if [ -f "$FMGR" ]; then
+            if ! grep -q "linux/types.h" "$FMGR"; then
+              sed -i '1s/^/#include <linux\/types.h>\n#include <linux\/i2c.h>\n/' "$FMGR"
+              echo "✅ qcom_fmgr_interface.h patched"
+            else
+              echo "✅ qcom_fmgr_interface.h already patched"
+            fi
+          fi
           DWC3_CORE="drivers/usb/dwc3/core.c"
           DWC3_GADGET="drivers/usb/dwc3/gadget.c"
           DWC3_HEADER="drivers/usb/dwc3/core.h"
