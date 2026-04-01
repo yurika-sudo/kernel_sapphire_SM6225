@@ -530,7 +530,7 @@ jobs:
           CONFIG_NTFS3_FS=y
           # add some testing conf
           # CONFIG_SLUB_DEBUG_ON is not set
-          # CONFIG_SLUB_STATS
+          # CONFIG_SLUB_STATS is not set
           # CONFIG_DEBUG_LIST is not set
           # CONFIG_DEBUG_MEMORY_INIT is not set
           # add another testing config
