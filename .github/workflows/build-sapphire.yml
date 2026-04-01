@@ -533,6 +533,10 @@ jobs:
           # CONFIG_SLUB_STATS
           # CONFIG_DEBUG_LIST is not set
           # CONFIG_DEBUG_MEMORY_INIT is not set
+          # add another testing config
+          # CONFIG_RCU_TRACE is not set
+          # CONFIG_PRINTK_CALLER is not set
+          # CONFIG_DEBUG_FS is not set
           EOF
 
       # wild-ksu + susfs configs
