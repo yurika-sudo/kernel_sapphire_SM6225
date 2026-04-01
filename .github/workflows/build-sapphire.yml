@@ -529,7 +529,7 @@ jobs:
           CONFIG_TCP_CONG_VENO=y
           # add some testing conf
           # CONFIG_SLUB_DEBUG_ON is not set
-          # CONFIG_SLUB_STATS
+          # CONFIG_SLUB_STATS is not set
           # CONFIG_DEBUG_LIST is not set
           # CONFIG_DEBUG_MEMORY_INIT is not set
           # CONFIG_RCU_TRACE is not set
