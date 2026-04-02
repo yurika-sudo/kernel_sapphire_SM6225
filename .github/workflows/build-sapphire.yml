@@ -80,7 +80,7 @@ jobs:
             dir: "common_clo"
             repo_name: "clo"
             repo_url: "https://git.codelinaro.org/clo/la/kernel/msm-5.15.git"
-            branch: "kernel.lnx.5.15.r59-rel"
+            branch: "kernel.lnx.5.15.r18-rel"
             config_branch: "android13-5.15"
             defconfig: "gki_defconfig"
             output_name: "Image.clo.ksu"
@@ -106,7 +106,7 @@ jobs:
             dir: "common_clo_noksu"
             repo_name: "clo"
             repo_url: "https://git.codelinaro.org/clo/la/kernel/msm-5.15.git"
-            branch: "kernel.lnx.5.15.r59-rel"
+            branch: "kernel.lnx.5.15.r18-rel"
             config_branch: "android13-5.15"
             defconfig: "gki_defconfig"
             output_name: "Image.clo.noksu"
@@ -535,6 +535,8 @@ jobs:
           # CONFIG_RCU_TRACE is not set
           # CONFIG_PRINTK_CALLER is not set
           # CONFIG_DEBUG_FS is not set
+          # CONFIG_PAGE_OWNER=y is not set
+          # CONFIG_CMA_DEBUGFS is not set
           EOF
 
       # wild-ksu + susfs configs
