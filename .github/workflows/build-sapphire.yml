@@ -535,8 +535,7 @@ jobs:
           # CONFIG_PRINTK_CALLER is not set
           # CONFIG_DEBUG_FS is not set
           # add some testing conf
-          # CONFIG_PAGE_OWNER is not set
-          # CONFIG_CMA_DEBUGFS is not set
+          # CONFIG_F2FS_IOSTAT is not set
           EOF
 
       # wild-ksu + susfs configs
@@ -555,7 +554,7 @@ jobs:
           CONFIG_KSU_SUSFS_SUS_MOUNT=y
           CONFIG_KSU_SUSFS_SUS_KSTAT=y
           CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-          CONFIG_KSU_SUSFS_ENABLE_LOG is not set
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
           CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
