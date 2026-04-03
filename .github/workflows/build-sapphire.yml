@@ -680,6 +680,14 @@ jobs:
 
           export KCFLAGS="-O3 -pipe -fno-strict-aliasing -Wno-error"
           echo "KCFLAGS: $KCFLAGS"
+
+          # ZyC Clang is pure LLVM without sysroot — needs system GCC for host tools
+          # (fixdep, conf, etc.) which require crtbeginS.o/crtendS.o
+          if [ "${{ inputs.is_testing }}" = "true" ]; then
+            export HOSTCC=gcc
+            export HOSTCXX=g++
+            echo "Host compiler: gcc (required for ZyC — no bundled sysroot)"
+          fi
           export SKIP_ABI_CHECKS=1
           export SKIP_KMI_CHECK=1
 
