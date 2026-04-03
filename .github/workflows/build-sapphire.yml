@@ -560,7 +560,7 @@ jobs:
           CONFIG_QCOM_DCVS=m
           CONFIG_MSM_PERFORMANCE=m
           CONFIG_INTERCONNECT_QCOM_BENGAL=m
-          CONFIG_QCOM_BWMON=y
+          CONFIG_QCOM_BWMON=m
           EOF
 
       # wild-ksu + susfs configs
