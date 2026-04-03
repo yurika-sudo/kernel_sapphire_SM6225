@@ -23,7 +23,7 @@ Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — b
 - Root: ❌ Vanilla
 
 **CLO NoKSU**
-- Source: CodeLinaro `msm-5.15` (`kernel.lnx.5.15.r59-rel`)
+- Source: CodeLinaro `msm-5.15` (`kernel.lnx.5.15.r18-rel`)
 - Root: ❌ Vanilla
 
 All variants include: **BBG** · **BBRv1 + Westwood TCP** · **IP_SET** · **O3 + LTO**
@@ -37,7 +37,7 @@ All variants include: **BBG** · **BBRv1 + Westwood TCP** · **IP_SET** · **O3 
 | | GKI | CLO |
 |--|-----|-----|
 | Source | `android.googlesource.com/kernel/common` | `git.codelinaro.org/clo/la/kernel/msm-5.15` |
-| Branch | `android13-5.15-lts` | `kernel.lnx.5.15.r59-rel` |
+| Branch | `android13-5.15-lts` | `kernel.lnx.5.15.r18-rel` |
 | Toolchain | Clang r547379 | Clang r547379 |
 | LTO | thin (testing) / full (stable) | thin (testing) / full (stable) |
 
