@@ -581,8 +581,6 @@ jobs:
           # CONFIG_F2FS_IOSTAT is not set
           # add some testing conf
           CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
-          CONFIG_UCLAMP_BUCKETS_COUNT=5
-          CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y
           EOF
 
       - name: "⚙️ Add CLO bengal/khaje specific configs"
@@ -827,7 +825,7 @@ jobs:
           if [ "${{ inputs.is_testing }}" = "true" ]; then
             CLANG_LABEL="ZyC Clang 15.0.7"
           else
-            CLANG_LABEL="Topnotch r547379 (+PGO+BOLT)"
+            CLANG_LABEL="Topnotch r547379"
           fi
           BODY="${BODY}**Features:** Wild-KSU ${{ env.WILD_VERSION }} (canary) · SUSFS ඞ ${{ env.SUSFS_VERSION }} · BBG · O3+LTO · ${CLANG_LABEL} · TCP algos (BBRv1, Westwood default)"$'\n\n'
           BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"
@@ -879,7 +877,7 @@ jobs:
           if [ "${{ inputs.is_testing }}" = "true" ]; then
             MESSAGE="${MESSAGE}   • Clang: ZyC 15.0.7%0A"
           else
-            MESSAGE="${MESSAGE}   • Clang: Topnotch r547379 (+PGO+BOLT)%0A"
+            MESSAGE="${MESSAGE}   • Clang: Topnotch r547379%0A"
           fi
           MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood, Vegas, Yeah, Veno%0A%0A"
           MESSAGE="${MESSAGE}<b>📦 Variants:</b>%0A"
