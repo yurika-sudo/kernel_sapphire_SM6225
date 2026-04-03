@@ -534,8 +534,11 @@ jobs:
           # CONFIG_RCU_TRACE is not set
           # CONFIG_PRINTK_CALLER is not set
           # CONFIG_DEBUG_FS is not set
-          # add some testing conf
           # CONFIG_F2FS_IOSTAT is not set
+          # add some testing conf
+          CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
+          CONFIG_UCLAMP_BUCKETS_COUNT=5
+          CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y
           EOF
 
       - name: "⚙️ Add CLO bengal/khaje specific configs"
@@ -560,7 +563,7 @@ jobs:
           CONFIG_QCOM_DCVS=m
           CONFIG_MSM_PERFORMANCE=m
           CONFIG_INTERCONNECT_QCOM_BENGAL=m
-          CONFIG_QCOM_BWMON=m
+          CONFIG_QCOM_BWMON=y
           EOF
 
       # wild-ksu + susfs configs
@@ -586,14 +589,12 @@ jobs:
           CONFIG_KSU_SUSFS_SUS_SU=y
           EOF
 
-      - name: "🏷️ Configure kernel name and remove dirty"
+      - name: "🏷️ Remove dirty flag"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          CURRENT_TIME=$(date -u +"%a %b %d %H:%M:%S UTC %Y")
-          RANDOM_HASH=$(openssl rand -hex 6)
-          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${RANDOM_HASH}\"|" ./scripts/setlocalversion
-          perl -pi -e "s{UTS_VERSION=\"\\\$\(echo \\\$UTS_VERSION \\\$CONFIG_FLAGS \\\$TIMESTAMP \\| cut -b -\\\$UTS_LEN\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $CURRENT_TIME\"}" \
-            ./scripts/mkcompile_h
+          REPO_SHA="${{ github.sha }}"
+          SHORT_SHA="${REPO_SHA:0:9}"
+          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${SHORT_SHA}\"|" ./scripts/setlocalversion
           sed -i 's/-dirty//' ./scripts/setlocalversion
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -795,6 +796,7 @@ jobs:
           name: ${{ env.RELEASE_NAME }}
           prerelease: ${{ env.IS_PRERELEASE }}
           body: ${{ env.RELEASE_BODY }}
+          target_commitish: ${{ github.sha }}
 
       - name: "🎉 Send Telegram — Build success"
         if: success()
