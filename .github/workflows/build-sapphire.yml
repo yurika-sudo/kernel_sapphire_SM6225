@@ -536,8 +536,6 @@ jobs:
           # CONFIG_DEBUG_FS is not set
           # CONFIG_F2FS_IOSTAT is not set
           # add some testing conf
-          CONFIG_UCLAMP_BUCKETS_COUNT=5
-          CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y
           EOF
 
       - name: "⚙️ Add CLO bengal/khaje specific configs"
