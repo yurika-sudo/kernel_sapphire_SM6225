@@ -183,12 +183,30 @@ jobs:
           rm -rf .repo
           rm -rf common
 
-          aria2c -x 16 -s 16 -o prebuilts/clang/host/linux-x86/clang-r547379.tar.gz \
-            "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
-          mkdir -p prebuilts/clang/host/linux-x86/clang-r547379
-          tar -xzf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz \
-            -C prebuilts/clang/host/linux-x86/clang-r547379
-          rm -rf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz
+          # Select clang based on build type:
+          # - Testing: ZyC 15.0.7 (community-optimized, smaller, battle-tested for 5.15)
+          # - Stable:  Topnotch r547379 (AOSP, +PGO +BOLT +LTO baked in)
+          if [ "${{ inputs.is_testing }}" = "true" ]; then
+            echo "🧪 Testing build — using ZyC Clang 15.0.7"
+            CLANG_DIR="prebuilts/clang/host/linux-x86/clang-zyc"
+            mkdir -p "$CLANG_DIR"
+            aria2c -x 16 -s 16 -o zyc-clang.tar.gz \
+              "https://github.com/ZyCromerZ/Clang/releases/download/15.0.7-20260208-release/Clang-15.0.7-20260208.tar.gz"
+            tar -xzf zyc-clang.tar.gz -C "$CLANG_DIR"
+            rm -f zyc-clang.tar.gz
+            CLANG_VERSION_TAG="zyc"
+          else
+            echo "🧩 Stable build — using Topnotch Clang r547379 (+PGO +BOLT)"
+            CLANG_DIR="prebuilts/clang/host/linux-x86/clang-r547379"
+            mkdir -p "$CLANG_DIR"
+            aria2c -x 16 -s 16 -o topnotch-clang.tar.gz \
+              "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
+            tar -xzf topnotch-clang.tar.gz -C "$CLANG_DIR"
+            rm -f topnotch-clang.tar.gz
+            CLANG_VERSION_TAG="r547379"
+          fi
+
+          echo "CLANG_VERSION_TAG=$CLANG_VERSION_TAG" >> $GITHUB_ENV
 
           rm -rf prebuilts/clang/host/linux-x86/clang-3289846
           rm -rf prebuilts/clang/host/linux-x86/clang-r450784e
@@ -196,7 +214,7 @@ jobs:
 
           sed -i \
             -e 's/^BRANCH=.*/BRANCH=${{ matrix.kernel.config_branch }}/' \
-            -e 's/^CLANG_VERSION=.*/CLANG_VERSION=r547379/' \
+            -e "s/^CLANG_VERSION=.*/CLANG_VERSION=${CLANG_VERSION_TAG}/" \
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.constants
 
           sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' \
@@ -372,6 +390,32 @@ jobs:
           [ -f "$DWC3_HEADER" ] && \
             sed -i '/^int dwc3_core_soft_reset(struct dwc3 \*dwc);$/d' "$DWC3_HEADER"
 
+      - name: "⚡ Apply Khaje arch + MLGO optimization patches"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          ARCH_MK="arch/arm64/Makefile"
+          MAIN_MK="Makefile"
+
+          # --- Khaje CPU optimization (ref: chickendrop89/device_xiaomi_gemstones-kernel) ---
+          # -march=armv8.2-a+crc+sha2+aes — SM6225-AD supported extensions
+          # --- Khaje CPU optimization ---
+          if [ -f "$ARCH_MK" ] && ! grep -q "KHAJE_FLAGS" "$ARCH_MK"; then
+            INJECT='ifeq ($(CONFIG_ARCH_KHAJE),y)\n\tKHAJE_FLAGS := -march=armv8.2-a+crc+sha2+aes\n\tKHAJE_FLAGS += $(call cc-option,-mtune=kryo)\n\tKBUILD_AFLAGS += $(KHAJE_FLAGS)\n\tKBUILD_CFLAGS += $(KHAJE_FLAGS)'
+            OLD='ifeq ($(CONFIG_ARCH_KHAJE),y)'
+            sed -i "s|${OLD}|${INJECT}|" "$ARCH_MK"
+            echo "OK arch/arm64/Makefile Khaje patched"
+          else
+            echo "OK Khaje flags already present"
+          fi
+
+          # --- MLGO + hot-cold-split ---
+          if [ -f "$MAIN_MK" ] && ! grep -q "regalloc-enable-advisor" "$MAIN_MK"; then
+            sed -i 's|-mllvm -polly-scheduling-chunksize=1|-mllvm -polly-scheduling-chunksize=1 -mllvm -regalloc-enable-advisor=release -mllvm -hot-cold-split=true|' "$MAIN_MK"
+            echo "OK Makefile MLGO patched"
+          else
+            echo "OK MLGO flags already present"
+          fi
+
       - name: "⚡ Apply common optimization patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -537,6 +581,8 @@ jobs:
           # CONFIG_F2FS_IOSTAT is not set
           # add some testing conf
           CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
+          CONFIG_UCLAMP_BUCKETS_COUNT=5
+          CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y
           EOF
 
       - name: "⚙️ Add CLO bengal/khaje specific configs"
@@ -778,7 +824,12 @@ jobs:
           fi
           BODY="${BODY}**Wild-KSU:** [${{ env.WILD_VERSION }}](https://github.com/WildKernels/Wild_KSU/releases/tag/${{ env.WILD_VERSION }})"$'\n'
           BODY="${BODY}**SUSFS:** [${{ env.SUSFS_VERSION }}](${{ env.SUSFS_MODULE_URL }})"$'\n\n'
-          BODY="${BODY}**Features:** Wild-KSU ${{ env.WILD_VERSION }} (canary) · SUSFS ඞ ${{ env.SUSFS_VERSION }} · BBG · O3+LTO · some TCP algos (BBRv1, Westwood default)"$'\n\n'
+          if [ "${{ inputs.is_testing }}" = "true" ]; then
+            CLANG_LABEL="ZyC Clang 15.0.7"
+          else
+            CLANG_LABEL="Topnotch r547379 (+PGO+BOLT)"
+          fi
+          BODY="${BODY}**Features:** Wild-KSU ${{ env.WILD_VERSION }} (canary) · SUSFS ඞ ${{ env.SUSFS_VERSION }} · BBG · O3+LTO · ${CLANG_LABEL} · TCP algos (BBRv1, Westwood default)"$'\n\n'
           BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"
           echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
           echo "$BODY" >> $GITHUB_ENV
@@ -825,6 +876,11 @@ jobs:
           MESSAGE="${MESSAGE}   • SUSFS ඞ ${{ env.SUSFS_VERSION }}%0A"
           MESSAGE="${MESSAGE}   • BBG (Baseband Guard)%0A"
           MESSAGE="${MESSAGE}   • O3 + LTO Optimization%0A"
+          if [ "${{ inputs.is_testing }}" = "true" ]; then
+            MESSAGE="${MESSAGE}   • Clang: ZyC 15.0.7%0A"
+          else
+            MESSAGE="${MESSAGE}   • Clang: Topnotch r547379 (+PGO+BOLT)%0A"
+          fi
           MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood, Vegas, Yeah, Veno%0A%0A"
           MESSAGE="${MESSAGE}<b>📦 Variants:</b>%0A"
           MESSAGE="${MESSAGE}   • GKI + Wild-KSU%0A"
