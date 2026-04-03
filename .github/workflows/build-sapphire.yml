@@ -536,6 +536,7 @@ jobs:
           # CONFIG_DEBUG_FS is not set
           # CONFIG_F2FS_IOSTAT is not set
           # add some testing conf
+          CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
           EOF
 
       - name: "⚙️ Add CLO bengal/khaje specific configs"
@@ -586,7 +587,7 @@ jobs:
           CONFIG_KSU_SUSFS_SUS_SU=y
           EOF
 
-      - name: "🏷️ Remove dirty flag"
+      - name: "🏷️ Configure kernel name and remove dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           REPO_SHA="${{ github.sha }}"
@@ -793,7 +794,6 @@ jobs:
           name: ${{ env.RELEASE_NAME }}
           prerelease: ${{ env.IS_PRERELEASE }}
           body: ${{ env.RELEASE_BODY }}
-          target_commitish: ${{ github.sha }}
 
       - name: "🎉 Send Telegram — Build success"
         if: success()
