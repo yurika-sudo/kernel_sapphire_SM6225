@@ -15,7 +15,7 @@ Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — b
 - Root: Wild-KSU (canary) + SUSFS
 
 **CLO + Wild-KSU**
-- Source: CodeLinaro `msm-5.15` (`kernel.lnx.5.15.r59-rel`)
+- Source: CodeLinaro `msm-5.15` (`kernel.lnx.5.15.r18-rel`)
 - Root: Wild-KSU (canary) + SUSFS
 
 **GKI NoKSU**
