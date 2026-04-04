@@ -183,30 +183,12 @@ jobs:
           rm -rf .repo
           rm -rf common
 
-          # Select clang based on build type:
-          # - Testing: ZyC 15.0.7 (community-optimized, smaller, battle-tested for 5.15)
-          # - Stable:  Topnotch r547379 (AOSP, +PGO +BOLT +LTO baked in)
-          if [ "${{ inputs.is_testing }}" = "true" ]; then
-            echo "🧪 Testing build — using ZyC Clang 15.0.7"
-            CLANG_DIR="prebuilts/clang/host/linux-x86/clang-zyc"
-            mkdir -p "$CLANG_DIR"
-            aria2c -x 16 -s 16 -o zyc-clang.tar.gz \
-              "https://github.com/ZyCromerZ/Clang/releases/download/15.0.7-20260208-release/Clang-15.0.7-20260208.tar.gz"
-            tar -xzf zyc-clang.tar.gz -C "$CLANG_DIR"
-            rm -f zyc-clang.tar.gz
-            CLANG_VERSION_TAG="zyc"
-          else
-            echo "🧩 Stable build — using Topnotch Clang r547379"
-            CLANG_DIR="prebuilts/clang/host/linux-x86/clang-r547379"
-            mkdir -p "$CLANG_DIR"
-            aria2c -x 16 -s 16 -o topnotch-clang.tar.gz \
-              "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
-            tar -xzf topnotch-clang.tar.gz -C "$CLANG_DIR"
-            rm -f topnotch-clang.tar.gz
-            CLANG_VERSION_TAG="r547379"
-          fi
-
-          echo "CLANG_VERSION_TAG=$CLANG_VERSION_TAG" >> $GITHUB_ENV
+          aria2c -x 16 -s 16 -o prebuilts/clang/host/linux-x86/clang-r547379.tar.gz \
+            "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
+          mkdir -p prebuilts/clang/host/linux-x86/clang-r547379
+          tar -xzf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz \
+            -C prebuilts/clang/host/linux-x86/clang-r547379
+          rm -rf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz
 
           rm -rf prebuilts/clang/host/linux-x86/clang-3289846
           rm -rf prebuilts/clang/host/linux-x86/clang-r450784e
@@ -214,7 +196,7 @@ jobs:
 
           sed -i \
             -e 's/^BRANCH=.*/BRANCH=${{ matrix.kernel.config_branch }}/' \
-            -e "s/^CLANG_VERSION=.*/CLANG_VERSION=${CLANG_VERSION_TAG}/" \
+            -e 's/^CLANG_VERSION=.*/CLANG_VERSION=r547379/' \
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.constants
 
           sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' \
@@ -398,7 +380,6 @@ jobs:
 
           # --- Khaje CPU optimization (ref: chickendrop89/device_xiaomi_gemstones-kernel) ---
           # -march=armv8.2-a+crc+sha2+aes — SM6225-AD supported extensions
-          # --- Khaje CPU optimization ---
           if [ -f "$ARCH_MK" ] && ! grep -q "KHAJE_FLAGS" "$ARCH_MK"; then
             INJECT='ifeq ($(CONFIG_ARCH_KHAJE),y)\n\tKHAJE_FLAGS := -march=armv8.2-a+crc+sha2+aes\n\tKHAJE_FLAGS += $(call cc-option,-mtune=kryo)\n\tKBUILD_AFLAGS += $(KHAJE_FLAGS)\n\tKBUILD_CFLAGS += $(KHAJE_FLAGS)'
             OLD='ifeq ($(CONFIG_ARCH_KHAJE),y)'
@@ -525,7 +506,7 @@ jobs:
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CONFIG_FILE"
+          sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off cgroup_enable=pressure /' "$CONFIG_FILE"
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KALLSYMS=y
           CONFIG_OVERLAY_FS=y
@@ -579,8 +560,8 @@ jobs:
           # CONFIG_PRINTK_CALLER is not set
           # CONFIG_DEBUG_FS is not set
           # CONFIG_F2FS_IOSTAT is not set
-          # add some testing conf
           CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
+          # add some testing conf
           EOF
 
       - name: "⚙️ Add CLO bengal/khaje specific configs"
@@ -634,9 +615,11 @@ jobs:
       - name: "🏷️ Configure kernel name and remove dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          REPO_SHA="${{ github.sha }}"
-          SHORT_SHA="${REPO_SHA:0:9}"
-          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${SHORT_SHA}\"|" ./scripts/setlocalversion
+          CURRENT_TIME=$(date -u +"%a %b %d %H:%M:%S UTC %Y")
+          RANDOM_HASH=$(openssl rand -hex 6)
+          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${RANDOM_HASH}\"|" ./scripts/setlocalversion
+          perl -pi -e "s{UTS_VERSION=\"\\\$\(echo \\\$UTS_VERSION \\\$CONFIG_FLAGS \\\$TIMESTAMP \\| cut -b -\\\$UTS_LEN\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $CURRENT_TIME\"}" \
+            ./scripts/mkcompile_h
           sed -i 's/-dirty//' ./scripts/setlocalversion
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -680,35 +663,12 @@ jobs:
 
           export KCFLAGS="-O3 -pipe -fno-strict-aliasing -Wno-error"
           echo "KCFLAGS: $KCFLAGS"
-
-          # ZyC Clang is pure LLVM without sysroot — needs system GCC for host tools
-          # (fixdep, conf, etc.) which require crtbeginS.o/crtendS.o
-          export HOSTCC=gcc
-          export HOSTCXX=g++
-          export HOSTLD=ld
-          echo "Host compiler: gcc + ld (required for ZyC — no bundled sysroot)"
-
-          echo "=== COMPILER DEBUG ==="
-          echo "HOSTCC=$HOSTCC"
-          echo "HOSTCXX=$HOSTCXX"
-          echo "HOSTLD=$HOSTLD"
-          which gcc || echo "⚠️ gcc not found"
-          which ld || echo "⚠️ ld not found"
-          gcc --version | head -1 || true
-          ld --version | head -1 || true
-          ls /usr/lib/gcc/x86_64-linux-gnu/*/crtbeginS.o 2>/dev/null \
-            && echo "✅ crtbeginS.o found" \
-            || echo "⚠️ crtbeginS.o not found!"
-          echo "====================="
-
           export SKIP_ABI_CHECKS=1
           export SKIP_KMI_CHECK=1
 
           START_BUILD=$(date +%s)
 
-          if ! KCFLAGS="$KCFLAGS" LLVM_PARALLEL_LINK_JOBS=1 \
-            HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld \
-            BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
+          if ! KCFLAGS="$KCFLAGS" LLVM_PARALLEL_LINK_JOBS=1 BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
             build/build.sh -j$(nproc); then
             exit 1
           fi
@@ -845,12 +805,7 @@ jobs:
           fi
           BODY="${BODY}**Wild-KSU:** [${{ env.WILD_VERSION }}](https://github.com/WildKernels/Wild_KSU/releases/tag/${{ env.WILD_VERSION }})"$'\n'
           BODY="${BODY}**SUSFS:** [${{ env.SUSFS_VERSION }}](${{ env.SUSFS_MODULE_URL }})"$'\n\n'
-          if [ "${{ inputs.is_testing }}" = "true" ]; then
-            CLANG_LABEL="ZyC Clang 15.0.7"
-          else
-            CLANG_LABEL="Topnotch r547379"
-          fi
-          BODY="${BODY}**Features:** Wild-KSU ${{ env.WILD_VERSION }} (canary) · SUSFS ඞ ${{ env.SUSFS_VERSION }} · BBG · O3+LTO · ${CLANG_LABEL} · TCP algos (BBRv1, Westwood default)"$'\n\n'
+          BODY="${BODY}**Features:** Wild-KSU ${{ env.WILD_VERSION }} (canary) · SUSFS ඞ ${{ env.SUSFS_VERSION }} · BBG · O3+LTO · some TCP algos (BBRv1, Westwood default)"$'\n\n'
           BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"
           echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
           echo "$BODY" >> $GITHUB_ENV
@@ -897,11 +852,6 @@ jobs:
           MESSAGE="${MESSAGE}   • SUSFS ඞ ${{ env.SUSFS_VERSION }}%0A"
           MESSAGE="${MESSAGE}   • BBG (Baseband Guard)%0A"
           MESSAGE="${MESSAGE}   • O3 + LTO Optimization%0A"
-          if [ "${{ inputs.is_testing }}" = "true" ]; then
-            MESSAGE="${MESSAGE}   • Clang: ZyC 15.0.7%0A"
-          else
-            MESSAGE="${MESSAGE}   • Clang: Topnotch r547379%0A"
-          fi
           MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood, Vegas, Yeah, Veno%0A%0A"
           MESSAGE="${MESSAGE}<b>📦 Variants:</b>%0A"
           MESSAGE="${MESSAGE}   • GKI + Wild-KSU%0A"
