@@ -372,6 +372,31 @@ jobs:
           [ -f "$DWC3_HEADER" ] && \
             sed -i '/^int dwc3_core_soft_reset(struct dwc3 \*dwc);$/d' "$DWC3_HEADER"
 
+      - name: "⚡ Apply Khaje arch + MLGO optimization patches"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          ARCH_MK="arch/arm64/Makefile"
+          MAIN_MK="Makefile"
+
+          # --- Khaje CPU optimization (ref: chickendrop89/device_xiaomi_gemstones-kernel) ---
+          # -march=armv8.2-a+crc+sha2+aes — SM6225-AD supported extensions
+          if [ -f "$ARCH_MK" ] && ! grep -q "KHAJE_FLAGS" "$ARCH_MK"; then
+            INJECT='ifeq ($(CONFIG_ARCH_KHAJE),y)\n\tKHAJE_FLAGS := -march=armv8.2-a+crc+sha2+aes\n\tKHAJE_FLAGS += $(call cc-option,-mtune=kryo)\n\tKBUILD_AFLAGS += $(KHAJE_FLAGS)\n\tKBUILD_CFLAGS += $(KHAJE_FLAGS)'
+            OLD='ifeq ($(CONFIG_ARCH_KHAJE),y)'
+            sed -i "s|${OLD}|${INJECT}|" "$ARCH_MK"
+            echo "OK arch/arm64/Makefile Khaje patched"
+          else
+            echo "OK Khaje flags already present"
+          fi
+
+          # --- MLGO + hot-cold-split ---
+          if [ -f "$MAIN_MK" ] && ! grep -q "regalloc-enable-advisor" "$MAIN_MK"; then
+            sed -i 's|-mllvm -polly-scheduling-chunksize=1|-mllvm -polly-scheduling-chunksize=1 -mllvm -regalloc-enable-advisor=release -mllvm -hot-cold-split=true|' "$MAIN_MK"
+            echo "OK Makefile MLGO patched"
+          else
+            echo "OK MLGO flags already present"
+          fi
+
       - name: "⚡ Apply common optimization patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -481,6 +506,8 @@ jobs:
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          # remove cgroup_disable=pressure from source cmdline (CLO/GKI hardcodes this)
+          sed -i 's/ cgroup_disable=pressure//' "$CONFIG_FILE"
           sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CONFIG_FILE"
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KALLSYMS=y
@@ -590,9 +617,11 @@ jobs:
       - name: "🏷️ Configure kernel name and remove dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          REPO_SHA="${{ github.sha }}"
-          SHORT_SHA="${REPO_SHA:0:9}"
-          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${SHORT_SHA}\"|" ./scripts/setlocalversion
+          CURRENT_TIME=$(date -u +"%a %b %d %H:%M:%S UTC %Y")
+          RANDOM_HASH=$(openssl rand -hex 6)
+          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${RANDOM_HASH}\"|" ./scripts/setlocalversion
+          perl -pi -e "s{UTS_VERSION=\"\\\$\(echo \\\$UTS_VERSION \\\$CONFIG_FLAGS \\\$TIMESTAMP \\| cut -b -\\\$UTS_LEN\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $CURRENT_TIME\"}" \
+            ./scripts/mkcompile_h
           sed -i 's/-dirty//' ./scripts/setlocalversion
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
