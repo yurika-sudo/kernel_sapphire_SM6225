@@ -706,7 +706,9 @@ jobs:
 
           START_BUILD=$(date +%s)
 
-          if ! KCFLAGS="$KCFLAGS" LLVM_PARALLEL_LINK_JOBS=1 BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
+          if ! KCFLAGS="$KCFLAGS" LLVM_PARALLEL_LINK_JOBS=1 \
+            HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld \
+            BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
             build/build.sh -j$(nproc); then
             exit 1
           fi
