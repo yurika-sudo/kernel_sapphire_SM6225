@@ -506,7 +506,9 @@ jobs:
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off cgroup_enable=pressure /' "$CONFIG_FILE"
+          # remove cgroup_disable=pressure from source cmdline (CLO/GKI hardcodes this)
+          sed -i 's/ cgroup_disable=pressure//' "$CONFIG_FILE"
+          sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CONFIG_FILE"
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KALLSYMS=y
           CONFIG_OVERLAY_FS=y
@@ -559,9 +561,9 @@ jobs:
           # CONFIG_RCU_TRACE is not set
           # CONFIG_PRINTK_CALLER is not set
           # CONFIG_DEBUG_FS is not set
+          # add some testing conf
           # CONFIG_F2FS_IOSTAT is not set
           CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
-          # add some testing conf
           EOF
 
       - name: "⚙️ Add CLO bengal/khaje specific configs"
