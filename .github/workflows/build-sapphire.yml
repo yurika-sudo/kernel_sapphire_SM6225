@@ -685,7 +685,21 @@ jobs:
           # (fixdep, conf, etc.) which require crtbeginS.o/crtendS.o
           export HOSTCC=gcc
           export HOSTCXX=g++
-          echo "Host compiler: gcc (required for ZyC — no bundled sysroot)"
+          export HOSTLD=ld
+          echo "Host compiler: gcc + ld (required for ZyC — no bundled sysroot)"
+
+          echo "=== COMPILER DEBUG ==="
+          echo "HOSTCC=$HOSTCC"
+          echo "HOSTCXX=$HOSTCXX"
+          echo "HOSTLD=$HOSTLD"
+          which gcc || echo "⚠️ gcc not found"
+          which ld || echo "⚠️ ld not found"
+          gcc --version | head -1 || true
+          ld --version | head -1 || true
+          ls /usr/lib/gcc/x86_64-linux-gnu/*/crtbeginS.o 2>/dev/null \
+            && echo "✅ crtbeginS.o found" \
+            || echo "⚠️ crtbeginS.o not found!"
+          echo "====================="
 
           export SKIP_ABI_CHECKS=1
           export SKIP_KMI_CHECK=1
