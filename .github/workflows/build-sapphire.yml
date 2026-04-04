@@ -196,7 +196,7 @@ jobs:
             rm -f zyc-clang.tar.gz
             CLANG_VERSION_TAG="zyc"
           else
-            echo "🧩 Stable build — using Topnotch Clang r547379 (+PGO +BOLT)"
+            echo "🧩 Stable build — using Topnotch Clang r547379"
             CLANG_DIR="prebuilts/clang/host/linux-x86/clang-r547379"
             mkdir -p "$CLANG_DIR"
             aria2c -x 16 -s 16 -o topnotch-clang.tar.gz \
@@ -683,11 +683,10 @@ jobs:
 
           # ZyC Clang is pure LLVM without sysroot — needs system GCC for host tools
           # (fixdep, conf, etc.) which require crtbeginS.o/crtendS.o
-          if [ "${{ inputs.is_testing }}" = "true" ]; then
-            export HOSTCC=gcc
-            export HOSTCXX=g++
-            echo "Host compiler: gcc (required for ZyC — no bundled sysroot)"
-          fi
+          export HOSTCC=gcc
+          export HOSTCXX=g++
+          echo "Host compiler: gcc (required for ZyC — no bundled sysroot)"
+
           export SKIP_ABI_CHECKS=1
           export SKIP_KMI_CHECK=1
 
