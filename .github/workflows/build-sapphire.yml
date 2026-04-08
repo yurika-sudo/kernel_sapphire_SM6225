@@ -628,11 +628,9 @@ jobs:
       - name: "🏷️ Configure kernel name and remove dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          CURRENT_TIME=$(date -u +"%a %b %d %H:%M:%S UTC %Y")
-          RANDOM_HASH=$(openssl rand -hex 6)
-          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${RANDOM_HASH}\"|" ./scripts/setlocalversion
-          perl -pi -e "s{UTS_VERSION=\\\"\\\\\\$\\(echo \\\\\\$UTS_VERSION \\\\\\$CONFIG_FLAGS \\\\\\$TIMESTAMP \\\\| cut -b -\\\\\\$UTS_LEN\\)\\\"}{UTS_VERSION=\\\"#1 SMP PREEMPT $CURRENT_TIME\\\"}" \
-            ./scripts/mkcompile_h
+          REPO_SHA="${{ github.sha }}"
+          SHORT_SHA="${REPO_SHA:0:9}"
+          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${SHORT_SHA}\"|" ./scripts/setlocalversion
           sed -i 's/-dirty//' ./scripts/setlocalversion
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
