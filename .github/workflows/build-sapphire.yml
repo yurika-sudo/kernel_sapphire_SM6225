@@ -321,7 +321,7 @@ jobs:
               "void susfs_set_i_state_on_external_dir(struct inode *inode);"
             grep -q "#include <linux/susfs.h>" "$SUPERCALLS" 2>/dev/null || \
               sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$SUPERCALLS"
-            sed -i 's/susfs_set_i_state_on_external_dir(arg)/susfs_set_i_state_on_external_dir((struct inode \*)arg)/g' "$SUPERCALLS"
+            sed -i 's/susfs_set_i_state_on_external_dir(arg)/susfs_set_i_state_on_external_dir((struct inode *)arg)/g' "$SUPERCALLS"
           fi
 
       - name: "🩹 Apply SUSFS dentry null checks"
@@ -401,14 +401,6 @@ jobs:
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           BASE_URL="https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/common"
-
-          declare -A PATCHES=(
-            ["unicode_bypass_fix_6.1-.patch"]="fs/unicode/utf8-norm.c — fix UTF-8 zero-width decompose crash"
-            ["silence_irq_cpu_logspam.patch"]="kernel/irq/cpuhotplug.c — silence IRQ affinity logspam"
-            ["silence_system_logspam.patch"]="kernel/printk/printk.c — silence healthd/logd/dashd spam"
-            ["reduce_cache_pressure.patch"]="fs/dcache.c — vfs_cache_pressure 100→50"
-            ["mem_opt_prefetch.patch"]="arch/arm64/lib/copy_template.S — prefetch optimization"
-          )
 
           for patch_name in \
             "unicode_bypass_fix_6.1-.patch" \
@@ -639,7 +631,7 @@ jobs:
           CURRENT_TIME=$(date -u +"%a %b %d %H:%M:%S UTC %Y")
           RANDOM_HASH=$(openssl rand -hex 6)
           sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${RANDOM_HASH}\"|" ./scripts/setlocalversion
-          perl -pi -e "s{UTS_VERSION=\"\\\$\(echo \\\$UTS_VERSION \\\$CONFIG_FLAGS \\\$TIMESTAMP \\| cut -b -\\\$UTS_LEN\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $CURRENT_TIME\"}" \
+          perl -pi -e "s{UTS_VERSION=\\\"\\\\\\$\\(echo \\\\\\$UTS_VERSION \\\\\\$CONFIG_FLAGS \\\\\\$TIMESTAMP \\\\| cut -b -\\\\\\$UTS_LEN\\)\\\"}{UTS_VERSION=\\\"#1 SMP PREEMPT $CURRENT_TIME\\\"}" \
             ./scripts/mkcompile_h
           sed -i 's/-dirty//' ./scripts/setlocalversion
           git config --global user.name "github-actions[bot]"
@@ -719,15 +711,32 @@ jobs:
 
           git clone --depth=1 https://github.com/superuseryu/AnyKernel3 ak3_tmp
 
-          # put as "Image" so anykernel.sh flashes it directly
-          cp out/dist/Image ak3_tmp/Image
+          # kernel image — named per variant so anykernel.sh can detect AIO vs single
+          cp out/dist/Image "ak3_tmp/${{ matrix.kernel.output_name }}"
 
-          # include ath9k_htc firmware for TL-WN722N v1 (AR9271)
-          # placed at /vendor/firmware so Android fw_loader can find it
+          # all built kernel modules → modules/vendor/ (anykernel.sh copies to /vendor/lib/modules/)
+          # includes ath9k_htc, CLO qcom modules (walt, cpufreq-hw, bwmon, etc), zram, etc
+          mkdir -p ak3_tmp/modules/vendor
+          find out/ -name "*.ko" 2>/dev/null | while read ko; do
+            cp "$ko" ak3_tmp/modules/vendor/
+            echo "📦 Added module: $(basename $ko)"
+          done
+          MODULE_COUNT=$(ls ak3_tmp/modules/vendor/*.ko 2>/dev/null | wc -l)
+          echo "Total modules: $MODULE_COUNT"
+
+          # ath9k_htc firmware → vendor/firmware/ (anykernel.sh copies to /vendor/firmware/)
           mkdir -p ak3_tmp/vendor/firmware
-          curl -LSs "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/ath9k_htc/htc_9271-1.4.0.fw" \
-            -o ak3_tmp/vendor/firmware/htc_9271.fw || \
-            echo "⚠️ htc_9271.fw download failed — WiFi dongle won't work without firmware"
+          if curl -LSs --fail \
+            "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/ath9k_htc/htc_9271-1.4.0.fw" \
+            -o ak3_tmp/vendor/firmware/htc_9271.fw; then
+            echo "✅ htc_9271.fw downloaded ($(stat -c%s ak3_tmp/vendor/firmware/htc_9271.fw) bytes)"
+          else
+            echo "⚠️ primary FW source failed — trying fallback"
+            curl -LSs \
+              "https://github.com/openwrt/ath9k-htc-firmware/raw/master/target_firmware/htc_9271.fw" \
+              -o ak3_tmp/vendor/firmware/htc_9271.fw || \
+              echo "⚠️ both FW sources failed — WiFi dongle won't work without firmware"
+          fi
 
           cd ak3_tmp
           zip -r9 "../$ZIP_NAME" * -x .git/*
@@ -741,7 +750,7 @@ jobs:
           echo "ZIP_SHA256=$ZIP_SHA256" >> $GITHUB_ENV
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
 
-          echo "✅ $ZIP_NAME ($ZIP_SIZE_MB MB)"
+          echo "✅ $ZIP_NAME ($ZIP_SIZE_MB MB) | modules: $MODULE_COUNT | FW: $(stat -c%s ak3_tmp/vendor/firmware/htc_9271.fw 2>/dev/null || echo 'missing') bytes"
 
       - name: "📤 Upload variant artifact"
         uses: actions/upload-artifact@v4
@@ -808,7 +817,6 @@ jobs:
           echo "📋 ZIPs:"
           ls -lh ./zips/
 
-          # build zip list for env
           ZIP_LIST=$(ls ./zips/*.zip | tr '\n' ' ')
           echo "ZIP_LIST=$ZIP_LIST" >> $GITHUB_ENV
 
@@ -833,7 +841,7 @@ jobs:
           fi
           BODY="${BODY}**Wild-KSU:** [${{ env.WILD_VERSION }}](https://github.com/WildKernels/Wild_KSU/releases/tag/${{ env.WILD_VERSION }})"$'\n'
           BODY="${BODY}**SUSFS:** [${{ env.SUSFS_VERSION }}](${{ env.SUSFS_MODULE_URL }})"$'\n\n'
-          BODY="${BODY}**Features:** Wild-KSU ${{ env.WILD_VERSION }} (canary) · SUSFS ඞ ${{ env.SUSFS_VERSION }} · BBG · O3+LTO · some TCP algos (BBRv1, Westwood default)"$'\n\n'
+          BODY="${BODY}**Features:** Wild-KSU ${{ env.WILD_VERSION }} (canary) · SUSFS ඞ ${{ env.SUSFS_VERSION }} · BBG · O3+LTO · TCP (BBRv1, Westwood default) · ath9k_htc WiFi dongle"$'\n\n'
           BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"
           echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
           echo "$BODY" >> $GITHUB_ENV
@@ -880,7 +888,8 @@ jobs:
           MESSAGE="${MESSAGE}   • SUSFS ඞ ${{ env.SUSFS_VERSION }}%0A"
           MESSAGE="${MESSAGE}   • BBG (Baseband Guard)%0A"
           MESSAGE="${MESSAGE}   • O3 + LTO Optimization%0A"
-          MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood, Vegas, Yeah, Veno%0A%0A"
+          MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood, Vegas, Yeah, Veno%0A"
+          MESSAGE="${MESSAGE}   • ath9k_htc WiFi dongle (TL-WN722N v1)%0A%0A"
           MESSAGE="${MESSAGE}<b>📦 Variants:</b>%0A"
           MESSAGE="${MESSAGE}   • GKI + Wild-KSU%0A"
           MESSAGE="${MESSAGE}   • CLO + Wild-KSU%0A"
