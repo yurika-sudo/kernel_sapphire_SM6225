@@ -591,6 +591,25 @@ jobs:
           CONFIG_QCOM_BWMON=m
           EOF
 
+      - name: "📡 Add WiFi dongle (ath9k_htc) configs"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
+          # -- wireless core --
+          # required by all wireless drivers
+          CONFIG_CFG80211=m
+          CONFIG_CFG80211_WEXT=y
+          CONFIG_MAC80211=m
+          # -- atheros --
+          # TL-WN722N v1 (AR9271) support
+          CONFIG_WLAN_VENDOR_ATH=y
+          CONFIG_ATH_COMMON=m
+          CONFIG_ATH9K_COMMON=m
+          CONFIG_ATH9K_HTC=m
+          EOF
+          echo "✅ ath9k_htc configs added"
+
       # wild-ksu + susfs configs
       - name: "⚙️ Add Wild-KSU + SUSFS kernel configs"
         if: matrix.kernel.ksu_type == 'wild'
@@ -702,6 +721,13 @@ jobs:
 
           # put as "Image" so anykernel.sh flashes it directly
           cp out/dist/Image ak3_tmp/Image
+
+          # include ath9k_htc firmware for TL-WN722N v1 (AR9271)
+          # placed at /vendor/firmware so Android fw_loader can find it
+          mkdir -p ak3_tmp/vendor/firmware
+          curl -LSs "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/ath9k_htc/htc_9271-1.4.0.fw" \
+            -o ak3_tmp/vendor/firmware/htc_9271.fw || \
+            echo "⚠️ htc_9271.fw download failed — WiFi dongle won't work without firmware"
 
           cd ak3_tmp
           zip -r9 "../$ZIP_NAME" * -x .git/*
