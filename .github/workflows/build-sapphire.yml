@@ -580,15 +580,15 @@ jobs:
           CONFIG_QCOM_BALANCE_ANON_FILE_RECLAIM=y
           CONFIG_IOMMU_IO_PGTABLE_FAST=y
           # qualcomm scheduler & cpufreq
-          CONFIG_SCHED_WALT=m
-          CONFIG_ARM_QCOM_CPUFREQ_HW=m
-          CONFIG_CPU_IDLE_GOV_QCOM_LPM=m
+          CONFIG_SCHED_WALT=y
+          CONFIG_ARM_QCOM_CPUFREQ_HW=y
+          CONFIG_CPU_IDLE_GOV_QCOM_LPM=y
           # qualcomm performance & thermal
-          CONFIG_QCOM_MEMLAT=m
-          CONFIG_QCOM_DCVS=m
-          CONFIG_MSM_PERFORMANCE=m
-          CONFIG_INTERCONNECT_QCOM_BENGAL=m
-          CONFIG_QCOM_BWMON=m
+          CONFIG_QCOM_MEMLAT=y
+          CONFIG_QCOM_DCVS=y
+          CONFIG_MSM_PERFORMANCE=y
+          CONFIG_INTERCONNECT_QCOM_BENGAL=y
+          CONFIG_QCOM_BWMON=y
           EOF
 
       # wild-ksu + susfs configs
