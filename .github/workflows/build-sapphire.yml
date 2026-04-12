@@ -174,17 +174,29 @@ jobs:
           git clone --recursive --branch ${{ env.KERNEL_BRANCH }} \
             ${{ env.KERNEL_REPO }} ${{ env.KERNEL_NAME }} --depth=1
 
-      - name: "🩹 Fix CLO minidump_log implicit-int (clang strict)"
+      - name: "🩹 Fix CLO source compat (clang-r547379 strict)"
         if: matrix.kernel.repo_name == 'clo'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
+          # Fix 1: minidump_log.c — implicit int rejected by clang strict
           FILE="drivers/soc/qcom/minidump_log.c"
           if [ -f "$FILE" ]; then
-            # clang-r547379 rejects implicit int — add explicit type
             sed -i 's/^static md_align_offset;/static int md_align_offset;/' "$FILE"
             echo "✅ minidump_log.c: md_align_offset type fixed"
           else
             echo "⚠️ minidump_log.c not found, skipping"
+          fi
+
+          # Fix 2: qcom_logbuf_boot_log.c — CLO defines print_caller(id,buf) as 2-arg macro
+          # but GKI kernel/printk.h redefines print_caller as 1-arg or no-arg macro → conflict
+          # Solution: rename CLO's local macro to avoid collision
+          FILE2="drivers/soc/qcom/qcom_logbuf_boot_log.c"
+          if [ -f "$FILE2" ]; then
+            sed -i 's/#define print_caller(id, buf)/#define qcom_print_caller(id, buf)/' "$FILE2"
+            sed -i 's/print_caller(info->caller_id/qcom_print_caller(info->caller_id/g' "$FILE2"
+            echo "✅ qcom_logbuf_boot_log.c: print_caller macro conflict fixed"
+          else
+            echo "⚠️ qcom_logbuf_boot_log.c not found, skipping"
           fi
 
       - name: "📥 Initialize AOSP repo and toolchains"
