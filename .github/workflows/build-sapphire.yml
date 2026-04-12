@@ -174,6 +174,19 @@ jobs:
           git clone --recursive --branch ${{ env.KERNEL_BRANCH }} \
             ${{ env.KERNEL_REPO }} ${{ env.KERNEL_NAME }} --depth=1
 
+      - name: "🩹 Fix CLO minidump_log implicit-int (clang strict)"
+        if: matrix.kernel.repo_name == 'clo'
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          FILE="drivers/soc/qcom/minidump_log.c"
+          if [ -f "$FILE" ]; then
+            # clang-r547379 rejects implicit int — add explicit type
+            sed -i 's/^static md_align_offset;/static int md_align_offset;/' "$FILE"
+            echo "✅ minidump_log.c: md_align_offset type fixed"
+          else
+            echo "⚠️ minidump_log.c not found, skipping"
+          fi
+
       - name: "📥 Initialize AOSP repo and toolchains"
         working-directory: ${{ env.WORK_DIR }}
         run: |
