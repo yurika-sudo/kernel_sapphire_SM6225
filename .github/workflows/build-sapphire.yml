@@ -88,37 +88,6 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y repo rsync aria2 bc bison build-essential flex git libelf-dev libssl-dev curl jq
 
-      - name: "🧹 Free disk space"
-        run: |
-          sudo apt-get remove -y \
-            '^dotnet-.*' '^llvm-.*' '^php.*' '^mongodb.*' \
-            azure-cli google-cloud-cli google-chrome-stable \
-            firefox powershell mono-devel snapd \
-            libgl1-mesa-dri 2>/dev/null || true
-          sudo apt-get autoremove -y
-          sudo apt-get clean
-          sudo rm -rf \
-            /usr/share/dotnet \
-            /usr/local/lib/android \
-            /opt/ghc \
-            /opt/hostedtoolcache/CodeQL \
-            /usr/local/share/powershell \
-            /usr/share/swift \
-            /usr/local/.ghcup \
-            /usr/lib/jvm \
-            "$AGENT_TOOLSDIRECTORY" 2>/dev/null || true
-          df -h /
-
-      - name: "📐 Setup SWAP 12GB"
-        uses: pierotofy/set-swap-space@master
-        with:
-          swap-size-gb: 12
-
-      - name: "📐 Tune Swap"
-        run: |
-          echo "vm.swappiness=80" | sudo tee -a /etc/sysctl.conf
-          sudo sysctl -p
-
       - name: "🌟 Clone kernel source"
         working-directory: ./${{ env.KERNEL_LOC_DIR }}
         run: |
@@ -154,7 +123,6 @@ jobs:
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki || true
 
       - name: "🛡️ Setup Baseband-guard (BBG)"
-        if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
@@ -252,10 +220,12 @@ jobs:
             fi
           done
 
+      # base configs
       - name: "⚙️ Add base kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          # remove cgroup_disable=pressure from source cmdline
           sed -i 's/ cgroup_disable=pressure//' "$CONFIG_FILE"
           sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CONFIG_FILE"
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
@@ -299,8 +269,6 @@ jobs:
           # CONFIG_ZRAM_MEMORY_TRACKING is not set
           CONFIG_LRU_GEN=y
           CONFIG_LRU_GEN_ENABLED=y
-          CONFIG_LRU_GEN_MM_WALK=y
-          # CONFIG_LRU_GEN_NONLEAF_YOUNG is not set
           CONFIG_NET_SCH_FQ=y
           CONFIG_NET_SCH_CAKE=y
           CONFIG_TCP_CONG_VEGAS=y
@@ -324,9 +292,7 @@ jobs:
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
-          # ksu
           CONFIG_KSU=y
-          # susfs
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_SUS_MAP=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
@@ -354,14 +320,17 @@ jobs:
       - name: "🔩 Fix ABI and build configs"
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          # ABI compare bypass
+          # ABI compare bypass — dari Wild dev approach
           ABI_SCRIPT="build/kernel/abi/compare_to_symbol_list"
           if [ -f "$ABI_SCRIPT" ]; then
             sed -i 's/^\s*exit 1$/    echo "ABI check bypassed"/' "$ABI_SCRIPT"
           elif [ -f "build/abi/compare_to_symbol_list" ]; then
             mv build/abi/compare_to_symbol_list build/abi/compare_to_symbol_list.disabled
-            printf '#!/bin/bash\necho "ABI checking disabled"\nexit 0\n' \
-              > build/abi/compare_to_symbol_list
+            cat > build/abi/compare_to_symbol_list << 'EOF'
+            #!/bin/bash
+            echo "ABI checking disabled"
+            exit 0
+            EOF
             chmod +x build/abi/compare_to_symbol_list
           fi
 
@@ -372,7 +341,7 @@ jobs:
           sed -i '/KMI_SYMBOL_LIST_STRICT_MODE/d' \
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64
 
-          # glibc 2.38 compat fix for newer Ubuntu runners
+          # glibc 2.38 compat fix — dari Wild dev, untuk build host Ubuntu terbaru
           GLIBC_VERSION=$(ldd --version 2>/dev/null | head -n 1 | awk '{print $NF}')
           if [ "$(printf '%s\n' "2.38" "$GLIBC_VERSION" | sort -V | head -n1)" = "2.38" ]; then
             cd ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -613,7 +582,7 @@ jobs:
           fi
 
           MESSAGE="<b>${STATUS_ICON} ${STATUS_TEXT}</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>📱</b> Redmi Note 13 4G (sapphire/n)%0A"
+          MESSAGE="${MESSAGE}<b>🔄</b> Run #${{ github.run_number }} · ${{ matrix.kernel.name || 'sapphire' }}%0A"
           MESSAGE="${MESSAGE}<b>🏷️</b> <code>${{ env.RELEASE_TAG }}</code>%0A"
           MESSAGE="${MESSAGE}<b>⏱️</b> $((DURATION / 60))m $((DURATION % 60))s%0A"
           MESSAGE="${MESSAGE}<b>🔨</b> <a href='${COMMIT_URL}'>${SHORT_SHA}</a>%0A"
@@ -654,10 +623,9 @@ jobs:
           ICON="❓" && TEXT="Unknown ($JOB_STATUS)"
 
           MESSAGE="<b>${ICON} ${TEXT}!</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>📱 Device:</b> Redmi Note 13 4G (sapphire/n)%0A"
-          MESSAGE="${MESSAGE}<b>📦 Workflow:</b> Build Kernel - Sapphire/n%0A"
-          MESSAGE="${MESSAGE}<b>🕐 Time:</b> $(TZ='Asia/Jakarta' date +'%H:%M:%S WIB')%0A"
-          MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>"
+          MESSAGE="${MESSAGE}<b>🔄</b> Run #${{ github.run_number }} · sapphire%0A"
+          MESSAGE="${MESSAGE}<b>🕐</b> $(date -u +'%Y-%m-%d %H:%M UTC')%0A"
+          MESSAGE="${MESSAGE}<b>🔗</b> <a href='${RUN_URL}'>Logs</a>"
 
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
