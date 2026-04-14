@@ -12,36 +12,28 @@ Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — b
 
 **GKI + Wild-KSU**
 - Source: AOSP `android13-5.15-lts`
-- Root: Wild-KSU (canary) + SUSFS
-
-**CLO + Wild-KSU**
-- Source: CodeLinaro `msm-5.15` (`kernel.lnx.5.15.r18-rel`)
-- Root: Wild-KSU (canary) + SUSFS
+- Root: Wild-KSU (canary) + SUSFS + BBG
 
 **GKI NoKSU**
 - Source: AOSP `android13-5.15-lts`
 - Root: ❌ Vanilla
 
-**CLO NoKSU**
-- Source: CodeLinaro `msm-5.15` (`kernel.lnx.5.15.r18-rel`)
-- Root: ❌ Vanilla
+All variants include: **BBRv1 + Westwood TCP** · **IP_SET** · **Thin LTO** · **MGLRU**
 
-All variants include: **BBG** · **BBRv1 + Westwood TCP** · **IP_SET** · **O3 + LTO**
-
-> **GKI vs CLO** — GKI follows AOSP LTS upstream. CLO is Qualcomm's own kernel fork with MSM-specific patches, potentially better for Snapdragon devices.
+> **CLO dropped** — CodeLinaro `msm-5.15` has too many source-level conflicts with modern GKI toolchain (clang-r547379). GKI follows AOSP LTS upstream which is more stable for automated weekly builds.
 
 ---
 
 ## Build Details
 
-| | GKI | CLO |
-|--|-----|-----|
-| Source | `android.googlesource.com/kernel/common` | `git.codelinaro.org/clo/la/kernel/msm-5.15` |
-| Branch | `android13-5.15-lts` | `kernel.lnx.5.15.r18-rel` |
-| Toolchain | Clang r547379 | Clang r547379 |
-| LTO | thin (testing) / full (stable) | thin (testing) / full (stable) |
+| | GKI |
+|--|-----|
+| Source | `android.googlesource.com/kernel/common` |
+| Branch | `android13-5.15-lts` |
+| Toolchain | Clang r547379 (topnotchfreaks) |
+| LTO | thin |
 
-Auto-build every Sunday 00:00 UTC. All 4 variants build in parallel, each released as a separate ZIP.
+Auto-build every Sunday 00:00 UTC. Both variants build in parallel, each released as a separate ZIP.
 
 ---
 
@@ -69,17 +61,15 @@ Actions tab → `Build Kernel` → **Run workflow**
 
 ## Releases
 
-Each build produces **4 separate ZIPs** — one per variant:
+Each build produces **2 separate ZIPs** — one per variant:
 
 | File | Source | Root |
 |------|--------|------|
 | `AnyKernel3_GKI_KSU_{date}.zip` | AOSP GKI | Wild-KSU + SUSFS |
-| `AnyKernel3_CLO_KSU_{date}.zip` | CodeLinaro | Wild-KSU + SUSFS |
 | `AnyKernel3_GKI_NoKSU_{date}.zip` | AOSP GKI | Vanilla |
-| `AnyKernel3_CLO_NoKSU_{date}.zip` | CodeLinaro | Vanilla |
 
 - **Stable releases** → tagged `v{susfs_version}`, scheduled Sunday builds
-- **Testing pre-releases** → tagged `testing`, manual dispatch
+- **Testing pre-releases** → tagged `{susfs_version}-testing`, manual dispatch
 
 ---
 
@@ -108,7 +98,7 @@ Built and tested on sapphire/sapphiren only. Flash at your own risk, always back
 - [simonpunk](https://gitlab.com/simonpunk/susfs4ksu) — SUSFS
 - [vc-teahouse](https://github.com/vc-teahouse/Baseband-guard) — Baseband Guard
 - [topnotchfreaks](https://github.com/topnotchfreaks) — Clang toolchain
-- Google/AOSP · CodeLinaro/Qualcomm — kernel sources
+- Google/AOSP — kernel source
 
 ---
 

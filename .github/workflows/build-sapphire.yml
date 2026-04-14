@@ -18,7 +18,6 @@ permissions:
 
 jobs:
 
-  # record global start time
   setup:
     name: "⏱️ Setup"
     runs-on: ubuntu-latest
@@ -29,31 +28,6 @@ jobs:
         id: ts
         run: echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
 
-      - name: "📣 Send Telegram — Build started"
-        run: |
-          TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          if [ "${{ inputs.is_testing }}" = "true" ]; then
-            BUILD_TYPE="🧪 Testing Build"
-          else
-            BUILD_TYPE="🧩 Stable Build"
-          fi
-          MESSAGE="<b>🔨 Kernel Build Started</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>📦 Type:</b> ${BUILD_TYPE}%0A"
-          MESSAGE="${MESSAGE}<b>📱 Device:</b> Redmi Note 13 4G (sapphire/n)%0A"
-          MESSAGE="${MESSAGE}<b>📁 Repository:</b> ${{ github.repository }}%0A"
-          MESSAGE="${MESSAGE}<b>🔄 Trigger:</b> ${{ github.event_name }}%0A"
-          MESSAGE="${MESSAGE}<b>🆔 Run:</b> #${{ github.run_number }}%0A"
-          MESSAGE="${MESSAGE}<b>⏰ Started:</b> $(TZ='UTC' date +'%Y-%m-%d %H:%M UTC')%0A"
-          MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>"
-          curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-            -d chat_id="$CHAT_ID" \
-            -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview=true || true
-
-  # matrix build
   build-kernels:
     name: "🔨 Build ${{ matrix.kernel.name }}"
     runs-on: ubuntu-latest
@@ -75,19 +49,6 @@ jobs:
             zip_prefix: "GKI_KSU"
             ksu_type: "wild"
 
-          # CLO + Wild-KSU
-          - name: "CLO-KSU"
-            dir: "common_clo"
-            repo_name: "clo"
-            repo_url: "https://git.codelinaro.org/clo/la/kernel/msm-5.15.git"
-            branch: "kernel.lnx.5.15.r18-rel"
-            config_branch: "android13-5.15"
-            defconfig: "gki_defconfig"
-            output_name: "Image.clo.ksu"
-            artifact_name: "clo-ksu-kernel"
-            zip_prefix: "CLO_KSU"
-            ksu_type: "wild"
-
           # GKI vanilla
           - name: "GKI-NoKSU"
             dir: "common_gki_noksu"
@@ -101,18 +62,6 @@ jobs:
             zip_prefix: "GKI_NoKSU"
             ksu_type: "none"
 
-          # CLO vanilla
-          - name: "CLO-NoKSU"
-            dir: "common_clo_noksu"
-            repo_name: "clo"
-            repo_url: "https://git.codelinaro.org/clo/la/kernel/msm-5.15.git"
-            branch: "kernel.lnx.5.15.r18-rel"
-            config_branch: "android13-5.15"
-            defconfig: "gki_defconfig"
-            output_name: "Image.clo.noksu"
-            artifact_name: "clo-noksu-kernel"
-            zip_prefix: "CLO_NoKSU"
-            ksu_type: "none"
 
     env:
       KERNEL_LOC_DIR: ${{ matrix.kernel.dir }}
@@ -136,37 +85,6 @@ jobs:
           echo "BUILD_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
           sudo apt-get update -qq
           sudo apt-get install -y repo rsync aria2 bc bison build-essential flex git libelf-dev libssl-dev curl jq
-
-      - name: "🧹 Free disk space"
-        run: |
-          sudo apt-get remove -y \
-            '^dotnet-.*' '^llvm-.*' '^php.*' '^mongodb.*' \
-            azure-cli google-cloud-cli google-chrome-stable \
-            firefox powershell mono-devel snapd \
-            libgl1-mesa-dri 2>/dev/null || true
-          sudo apt-get autoremove -y
-          sudo apt-get clean
-          sudo rm -rf \
-            /usr/share/dotnet \
-            /usr/local/lib/android \
-            /opt/ghc \
-            /opt/hostedtoolcache/CodeQL \
-            /usr/local/share/powershell \
-            /usr/share/swift \
-            /usr/local/.ghcup \
-            /usr/lib/jvm \
-            "$AGENT_TOOLSDIRECTORY" 2>/dev/null || true
-          df -h /
-
-      - name: "📐 Setup SWAP 12GB"
-        uses: pierotofy/set-swap-space@master
-        with:
-          swap-size-gb: 12
-
-      - name: "📐 Tune Swap"
-        run: |
-          echo "vm.swappiness=80" | sudo tee -a /etc/sysctl.conf
-          sudo sysctl -p
 
       - name: "🌟 Clone kernel source"
         working-directory: ./${{ env.KERNEL_LOC_DIR }}
@@ -218,18 +136,6 @@ jobs:
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
             security/Kconfig
 
-      - name: "🩹 Fix BBG get_link (bbg_fix_get_link)"
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/experimental/bbg/bbg_fix_get_link.patch" \
-            -o /tmp/bbg_fix_get_link.patch
-          if patch -p1 --forward < /tmp/bbg_fix_get_link.patch; then
-            echo "✅ bbg_fix_get_link applied"
-          else
-            echo "⚠️ bbg_fix_get_link had issues (may already be applied), continuing..."
-          fi
-
-      # wild-ksu + susfs setup
       - name: "😋 Setup Wild-KSU with SUSFS"
         if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -245,7 +151,6 @@ jobs:
             exit 1
           fi
 
-          # extract wild-ksu version
           cd Wild_KSU
           KSU_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
           echo "WILD_KSU_TAG=$KSU_TAG" >> $GITHUB_ENV
@@ -282,121 +187,6 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # fix susfs symbol mismatches
-      - name: "🔧 Fix SUSFS compatibility stubs"
-        if: matrix.kernel.ksu_type == 'wild'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          set -e
-          SUSFS_C="fs/susfs.c"
-          SUSFS_H="include/linux/susfs.h"
-          SETUID_HOOK="drivers/kernelsu/setuid_hook.c"
-          SUPERCALLS="drivers/kernelsu/supercalls.c"
-
-          add_stub_c() {
-            local func="$1" signature="$2" body="$3"
-            if ! grep -q "$func" "$SUSFS_C" 2>/dev/null; then
-              printf "\n/* stub: %s */\n%s\n{\n\t%s\n}\n" "$func" "$signature" "$body" >> "$SUSFS_C"
-            fi
-          }
-
-          add_stub_h() {
-            local func="$1" decl="$2"
-            grep -q "$func" "$SUSFS_H" 2>/dev/null || sed -i "/^#endif/i $decl" "$SUSFS_H"
-          }
-
-          # susfs_reorder_mnt_id
-          if grep -q "susfs_reorder_mnt_id" "$SETUID_HOOK" 2>/dev/null; then
-            add_stub_c "susfs_reorder_mnt_id" \
-              "void susfs_reorder_mnt_id(struct task_struct *task)" "return;"
-            add_stub_h "susfs_reorder_mnt_id" \
-              "void susfs_reorder_mnt_id(struct task_struct *task);"
-          fi
-
-          # susfs_set_i_state_on_external_dir
-          if grep -q "susfs_set_i_state_on_external_dir" "$SUPERCALLS" 2>/dev/null; then
-            add_stub_c "susfs_set_i_state_on_external_dir" \
-              "void susfs_set_i_state_on_external_dir(struct inode *inode)" "return;"
-            add_stub_h "susfs_set_i_state_on_external_dir" \
-              "void susfs_set_i_state_on_external_dir(struct inode *inode);"
-            grep -q "#include <linux/susfs.h>" "$SUPERCALLS" 2>/dev/null || \
-              sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$SUPERCALLS"
-            sed -i 's/susfs_set_i_state_on_external_dir(arg)/susfs_set_i_state_on_external_dir((struct inode *)arg)/g' "$SUPERCALLS"
-          fi
-
-      - name: "🩹 Apply SUSFS dentry null checks"
-        if: matrix.kernel.ksu_type == 'wild'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/experimental/susfs/susfs_dentry_checks.patch" \
-            -o /tmp/susfs_dentry_checks.patch
-          if patch -p1 --forward < /tmp/susfs_dentry_checks.patch; then
-            echo "✅ susfs_dentry_checks applied"
-          else
-            echo "⚠️ susfs_dentry_checks had issues (may already be applied), continuing..."
-          fi
-
-      - name: "🩹 Apply wild SUSFS v2.0.0 a13-5.15 fixes"
-        if: matrix.kernel.ksu_type == 'wild'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          BASE_URL="https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/wild/susfs_fix_patches/v2.0.0/a13-5.15"
-          for patch_name in fdinfo.c.patch namespace.c.patch open.c.patch; do
-            echo "--- Applying $patch_name ---"
-            curl -LSs "${BASE_URL}/${patch_name}" -o "/tmp/${patch_name}"
-            if patch -p1 --forward < "/tmp/${patch_name}"; then
-              echo "✅ $patch_name applied"
-            else
-              echo "⚠️ $patch_name had issues (may already be applied), continuing..."
-            fi
-          done
-
-      # gki fixup patches
-      - name: "🩹 Apply GKI fixup patches"
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          # io-channel fix skipped — breaks dwc3-msm-core + fuel gauge (sapphire/sapphiren)
-          DWC3_CORE="drivers/usb/dwc3/core.c"
-          DWC3_GADGET="drivers/usb/dwc3/gadget.c"
-          DWC3_HEADER="drivers/usb/dwc3/core.h"
-
-          if [ -f "$DWC3_GADGET" ]; then
-            sed -i '/dwc3_core_soft_reset(dwc);/{N; /dwc3_event_buffers_setup(dwc);/{d}}' "$DWC3_GADGET"
-            sed -i '/^\s*dwc3_core_soft_reset(dwc);\s*$/d' "$DWC3_GADGET"
-          fi
-          if [ -f "$DWC3_CORE" ]; then
-            grep -q "static int dwc3_core_soft_reset" "$DWC3_CORE" || \
-              sed -i '/^static void __dwc3_set_mode/i static int dwc3_core_soft_reset(struct dwc3 *dwc);' "$DWC3_CORE"
-            sed -i 's/^int dwc3_core_soft_reset(struct dwc3 \*dwc)$/static int dwc3_core_soft_reset(struct dwc3 *dwc)/' "$DWC3_CORE"
-          fi
-          [ -f "$DWC3_HEADER" ] && \
-            sed -i '/^int dwc3_core_soft_reset(struct dwc3 \*dwc);$/d' "$DWC3_HEADER"
-
-      - name: "⚡ Apply Khaje arch + MLGO optimization patches"
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          ARCH_MK="arch/arm64/Makefile"
-          MAIN_MK="Makefile"
-
-          # --- Khaje CPU optimization (ref: chickendrop89/device_xiaomi_gemstones-kernel) ---
-          # -march=armv8.2-a+crc+sha2+aes — SM6225-AD supported extensions
-          if [ -f "$ARCH_MK" ] && ! grep -q "KHAJE_FLAGS" "$ARCH_MK"; then
-            INJECT='ifeq ($(CONFIG_ARCH_KHAJE),y)\n\tKHAJE_FLAGS := -march=armv8.2-a+crc+sha2+aes\n\tKHAJE_FLAGS += $(call cc-option,-mtune=kryo)\n\tKBUILD_AFLAGS += $(KHAJE_FLAGS)\n\tKBUILD_CFLAGS += $(KHAJE_FLAGS)'
-            OLD='ifeq ($(CONFIG_ARCH_KHAJE),y)'
-            sed -i "s|${OLD}|${INJECT}|" "$ARCH_MK"
-            echo "OK arch/arm64/Makefile Khaje patched"
-          else
-            echo "OK Khaje flags already present"
-          fi
-
-          # --- MLGO + hot-cold-split ---
-          if [ -f "$MAIN_MK" ] && ! grep -q "regalloc-enable-advisor" "$MAIN_MK"; then
-            sed -i 's|-mllvm -polly-scheduling-chunksize=1|-mllvm -polly-scheduling-chunksize=1 -mllvm -regalloc-enable-advisor=release -mllvm -hot-cold-split=true|' "$MAIN_MK"
-            echo "OK Makefile MLGO patched"
-          else
-            echo "OK MLGO flags already present"
-          fi
-
       - name: "⚡ Apply common optimization patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -426,79 +216,10 @@ jobs:
             fi
           done
 
-      # suppress vendor module debug spam
-      - name: "🔇 Suppress vendor module debugging"
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          cat > /tmp/vendor_debug.py << 'PYEOF'
-          import sys
-
-          with open("init/Kconfig") as f:
-              k = f.read()
-          if "SUPPRESS_VENDOR_MODULE_DEBUGGING" not in k:
-              entry = (
-                  "\nconfig SUPPRESS_VENDOR_MODULE_DEBUGGING\n"
-                  "\tbool \"Suppress vendor module debugging\"\n"
-                  "\thelp\n"
-                  "\t  Suppress vendor GKI module debug spam. Xiaomi-specific. If unsure, say N.\n"
-              )
-              k = k.replace("endif # MODULES", entry + "endif # MODULES")
-              open("init/Kconfig", "w").write(k)
-              print("Kconfig: patched")
-          else:
-              print("Kconfig: skip")
-
-          with open("kernel/printk/printk.c") as f:
-              c = f.read()
-          if "should_filter_vendor_message" not in c:
-              func = (
-                  "\n__maybe_unused static bool should_filter_vendor_message(const char *text)\n"
-                  "{\n"
-                  "\tconst char *const *module;\n"
-                  "\tstatic const char *const fm[] = {\n"
-                  "\t\t\"[bq25\", \"[sm56\", \"nopmi\", \"[sc85\",\n"
-                  "\t\t\"st21n\", \"[Awin\", \"qpnp_\",\n"
-                  "\t\t\"(virq\", \"(ipi:\", \"(cpu:\",\n"
-                  "\t\tNULL\n"
-                  "\t};\n"
-                  "\tfor (module = fm; likely(*module); module++) {\n"
-                  "\t\tif (strstr(text, *module))\n"
-                  "\t\t\treturn true;\n"
-                  "\t}\n"
-                  "\treturn false;\n"
-                  "}\n\n"
-              )
-              hook = (
-                  "\tva_end(args2);\n\n"
-                  "#if IS_ENABLED(CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING)\n"
-                  "\tif (should_filter_vendor_message(prefix_buf)) {\n"
-                  "\t\tret = 0;\n"
-                  "\t\tgoto out;\n"
-                  "\t}\n"
-                  "#endif\n\n"
-              )
-              c = c.replace("\n__printf(4, 0)\nint vprintk_store", func + "__printf(4, 0)\nint vprintk_store")
-              c = c.replace(
-                  "\tva_end(args2);\n\n\tif (reserve_size > LOG_LINE_MAX)",
-                  hook + "\tif (reserve_size > LOG_LINE_MAX)"
-              )
-              open("kernel/printk/printk.c", "w").write(c)
-              print("printk.c: patched")
-          else:
-              print("printk.c: skip")
-          PYEOF
-
-          python3 /tmp/vendor_debug.py
-          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          grep -q "CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING" "$CONFIG_FILE" || \
-            echo "CONFIG_SUPPRESS_VENDOR_MODULE_DEBUGGING=y" >> "$CONFIG_FILE"
-
-      # base configs
       - name: "⚙️ Add base kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          # remove cgroup_disable=pressure from source cmdline (CLO/GKI hardcodes this)
           sed -i 's/ cgroup_disable=pressure//' "$CONFIG_FILE"
           sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CONFIG_FILE"
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
@@ -540,6 +261,7 @@ jobs:
           CONFIG_IP_SET_LIST_SET=y
           CONFIG_ZRAM_WRITEBACK=y
           # CONFIG_ZRAM_MEMORY_TRACKING is not set
+          CONFIG_LRU_GEN=y
           CONFIG_LRU_GEN_ENABLED=y
           CONFIG_NET_SCH_FQ=y
           CONFIG_NET_SCH_CAKE=y
@@ -554,64 +276,16 @@ jobs:
           # CONFIG_PRINTK_CALLER is not set
           # CONFIG_DEBUG_FS is not set
           # CONFIG_F2FS_IOSTAT is not set
-          # add some testing conf
           CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
           EOF
 
-      - name: "⚙️ Add CLO bengal/khaje specific configs"
-        if: matrix.kernel.repo_name == 'clo'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
-          # bengal/khaje (SM6225) platform
-          CONFIG_ARCH_BENGAL=y
-          CONFIG_ARCH_KHAJE=y
-          CONFIG_ARCH_QCOM=y
-          # qualcomm memory management
-          CONFIG_QCOM_BALANCE_ANON_FILE_RECLAIM=y
-          CONFIG_IOMMU_IO_PGTABLE_FAST=y
-          # qualcomm scheduler & cpufreq
-          CONFIG_SCHED_WALT=m
-          CONFIG_ARM_QCOM_CPUFREQ_HW=m
-          CONFIG_CPU_IDLE_GOV_QCOM_LPM=m
-          # qualcomm performance & thermal
-          CONFIG_QCOM_MEMLAT=m
-          CONFIG_QCOM_DCVS=m
-          CONFIG_MSM_PERFORMANCE=m
-          CONFIG_INTERCONNECT_QCOM_BENGAL=m
-          CONFIG_QCOM_BWMON=m
-          EOF
-
-      - name: "📡 Add WiFi dongle (ath9k_htc) configs"
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
-          # -- wireless core --
-          # required by all wireless drivers
-          CONFIG_CFG80211=m
-          CONFIG_CFG80211_WEXT=y
-          CONFIG_MAC80211=m
-          # -- atheros --
-          # TL-WN722N v1 (AR9271) support
-          CONFIG_WLAN_VENDOR_ATH=y
-          CONFIG_ATH_COMMON=m
-          CONFIG_ATH9K_COMMON=m
-          CONFIG_ATH9K_HTC=m
-          EOF
-          echo "✅ ath9k_htc configs added"
-
-      # wild-ksu + susfs configs
       - name: "⚙️ Add Wild-KSU + SUSFS kernel configs"
         if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
-          # ksu
           CONFIG_KSU=y
-          # susfs
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_SUS_MAP=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
@@ -639,15 +313,16 @@ jobs:
       - name: "🔩 Fix ABI and build configs"
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          if [ -f "build/abi/compare_to_symbol_list" ]; then
+          # ABI compare bypass
+          ABI_SCRIPT="build/kernel/abi/compare_to_symbol_list"
+          if [ -f "$ABI_SCRIPT" ]; then
+            sed -i 's/^\s*exit 1$/    echo "ABI check bypassed"/' "$ABI_SCRIPT"
+          elif [ -f "build/abi/compare_to_symbol_list" ]; then
             mv build/abi/compare_to_symbol_list build/abi/compare_to_symbol_list.disabled
+            printf '#!/bin/bash\necho "ABI checking disabled"\nexit 0\n' \
+              > build/abi/compare_to_symbol_list
+            chmod +x build/abi/compare_to_symbol_list
           fi
-          cat > build/abi/compare_to_symbol_list << 'EOF'
-          #!/bin/bash
-          echo "ABI checking disabled"
-          exit 0
-          EOF
-          chmod +x build/abi/compare_to_symbol_list
 
           sed -i 's/BUILD_SYSTEM_DLKM=1/BUILD_SYSTEM_DLKM=0/' \
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64
@@ -655,6 +330,16 @@ jobs:
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64
           sed -i '/KMI_SYMBOL_LIST_STRICT_MODE/d' \
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64
+
+          # glibc 2.38 compat fix for newer Ubuntu runners
+          GLIBC_VERSION=$(ldd --version 2>/dev/null | head -n 1 | awk '{print $NF}')
+          if [ "$(printf '%s\n' "2.38" "$GLIBC_VERSION" | sort -V | head -n1)" = "2.38" ]; then
+            cd ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+            sed -i '/\$(Q)\$(MAKE) -C \$(SUBCMD_SRC) OUTPUT=\$(abspath \$(dir \$@))\/ \$(abspath \$@)/s//$(Q)$(MAKE) -C $(SUBCMD_SRC) EXTRA_CFLAGS="$(CFLAGS)" OUTPUT=$(abspath $(dir $@))\/ $(abspath $@)/' \
+              tools/bpf/resolve_btfids/Makefile 2>/dev/null || true
+            cd ${{ env.WORK_DIR }}
+            echo "✅ glibc 2.38 compat fix applied (host: $GLIBC_VERSION)"
+          fi
 
       - name: "🚀 Build kernel"
         id: build
@@ -664,15 +349,8 @@ jobs:
           set -e
           echo "🚀 Starting kernel build with $(nproc) cores..."
 
-          if [ "${{ inputs.is_testing }}" = "true" ]; then
-            export LTO=thin
-            echo "🧪 Testing build: LTO=thin (faster)"
-          else
-            export LTO=full
-            echo "🧩 Stable build: LTO=full (optimized)"
-          fi
-
-          export KCFLAGS="-O3 -pipe -fno-strict-aliasing -Wno-error"
+          export LTO=thin
+          export KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
           echo "KCFLAGS: $KCFLAGS"
           export SKIP_ABI_CHECKS=1
           export SKIP_KMI_CHECK=1
@@ -700,6 +378,37 @@ jobs:
           echo "KERNEL_VERSION=$VERSION_CLEAN" >> $GITHUB_ENV
           echo "$VERSION_CLEAN" > kernel_version.txt
 
+      - name: "🔎 Scan patch rejects"
+        if: always()
+        working-directory: ${{ env.WORK_DIR }}
+        run: |
+          REJECTS_DIR="${{ env.WORK_DIR }}/patch-rejects"
+          mkdir -p "$REJECTS_DIR"
+          mapfile -t REJS < <(find "${{ env.KERNEL_LOC_DIR }}" -type f -name '*.rej')
+          REJ_COUNT=${#REJS[@]}
+          echo "Found $REJ_COUNT .rej file(s)"
+          echo "REJ_COUNT=$REJ_COUNT" >> $GITHUB_ENV
+          if [ "$REJ_COUNT" -gt 0 ]; then
+            for REJ in "${REJS[@]}"; do
+              REL="${REJ#${{ env.WORK_DIR }}/}"
+              DEST="$REJECTS_DIR/$REL"
+              mkdir -p "$(dirname "$DEST")"
+              cp "$REJ" "$DEST"
+              echo "⚠️ $REL"
+            done
+          fi
+
+      - name: "📋 Build summary"
+        if: always()
+        run: |
+          echo "Kernel  : ${{ env.KERNEL_VERSION }}"
+          echo "Variant : ${{ matrix.kernel.name }}"
+          echo "Repo    : ${{ env.KERNEL_REPO }}"
+          echo "Branch  : ${{ env.KERNEL_BRANCH }}"
+          echo "KSU     : ${{ matrix.kernel.ksu_type }}"
+          echo "SHA     : ${{ github.sha }}"
+          echo "Rejects : ${REJ_COUNT:-0}"
+
       - name: "📦 Create variant ZIP"
         working-directory: ${{ env.WORK_DIR }}
         run: |
@@ -709,32 +418,7 @@ jobs:
 
           git clone --depth=1 https://github.com/superuseryu/AnyKernel3 ak3_tmp
 
-          # kernel image — named per variant so anykernel.sh can detect AIO vs single
-          cp out/dist/Image "ak3_tmp/${{ matrix.kernel.output_name }}"
-
-          # all built kernel modules → modules/vendor/ (anykernel.sh copies to /vendor/lib/modules/)
-          # includes ath9k_htc, CLO qcom modules (walt, cpufreq-hw, bwmon, etc), zram, etc
-          mkdir -p ak3_tmp/modules/vendor
-          find out/ -name "*.ko" 2>/dev/null | while read ko; do
-            cp "$ko" ak3_tmp/modules/vendor/
-            echo "📦 Added module: $(basename $ko)"
-          done
-          MODULE_COUNT=$(ls ak3_tmp/modules/vendor/*.ko 2>/dev/null | wc -l)
-          echo "Total modules: $MODULE_COUNT"
-
-          # ath9k_htc firmware → vendor/firmware/ (anykernel.sh copies to /vendor/firmware/)
-          mkdir -p ak3_tmp/vendor/firmware
-          if curl -LSs --fail \
-            "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/ath9k_htc/htc_9271-1.4.0.fw" \
-            -o ak3_tmp/vendor/firmware/htc_9271.fw; then
-            echo "✅ htc_9271.fw downloaded ($(stat -c%s ak3_tmp/vendor/firmware/htc_9271.fw) bytes)"
-          else
-            echo "⚠️ primary FW source failed — trying fallback"
-            curl -LSs \
-              "https://github.com/openwrt/ath9k-htc-firmware/raw/master/target_firmware/htc_9271.fw" \
-              -o ak3_tmp/vendor/firmware/htc_9271.fw || \
-              echo "⚠️ both FW sources failed — WiFi dongle won't work without firmware"
-          fi
+          cp out/dist/Image ak3_tmp/Image
 
           cd ak3_tmp
           zip -r9 "../$ZIP_NAME" * -x .git/*
@@ -760,7 +444,6 @@ jobs:
             ${{ env.WORK_DIR }}/wild_ksu_tag.txt
           retention-days: 1
 
-  # package + release
   package-kernels:
     name: "📦 Package & Release"
     runs-on: ubuntu-latest
@@ -775,7 +458,6 @@ jobs:
 
       - name: "🔖 Get versions"
         run: |
-          # kernel version
           VERSION_FILE=$(find ./artifacts -name "kernel_version.txt" | head -1)
           KERNEL_VERSION=$([ -f "$VERSION_FILE" ] && cat "$VERSION_FILE" || echo "5.15.x")
           echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
@@ -786,14 +468,11 @@ jobs:
           echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
           echo "SUSFS_MODULE_URL=https://github.com/sidex15/susfs4ksu-module/releases/latest" >> $GITHUB_ENV
 
-          # Wild KSU version — read from build artifact (set during build step)
-          # fallback to GitHub API if not available
           WILD_VERSION=$(find ./artifacts -name "wild_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || \
             curl -sf https://api.github.com/repos/WildKernels/Wild_KSU/releases/latest \
             | jq -r '.tag_name' || echo "v3.1.1")
           echo "WILD_VERSION=$WILD_VERSION" >> $GITHUB_ENV
 
-          # release tag
           DATE_TAG=$(date +'%Y%m%d')
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
           if [ "${{ inputs.is_testing }}" = "true" ]; then
@@ -823,7 +502,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ env.RELEASE_TAG }}"
-          # delete existing assets if release exists
           gh release view "$TAG" --repo ${{ github.repository }} --json assets \
             | jq -r '.assets[].name' \
             | while read asset; do
@@ -833,13 +511,18 @@ jobs:
 
       - name: "📝 Generate release body"
         run: |
+          COMMIT_URL="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:9}"
+
           BODY=""
           if [ "${{ inputs.is_testing }}" = "true" ]; then
             BODY="> ⚠️ **Testing build** — use at your own risk."$'\n\n'
           fi
           BODY="${BODY}**Wild-KSU:** [${{ env.WILD_VERSION }}](https://github.com/WildKernels/Wild_KSU/releases/tag/${{ env.WILD_VERSION }})"$'\n'
           BODY="${BODY}**SUSFS:** [${{ env.SUSFS_VERSION }}](${{ env.SUSFS_MODULE_URL }})"$'\n\n'
-          BODY="${BODY}**Features:** Wild-KSU ${{ env.WILD_VERSION }} (canary) · SUSFS ඞ ${{ env.SUSFS_VERSION }} · BBG · O3+LTO · TCP (BBRv1, Westwood default) · ath9k_htc WiFi dongle"$'\n\n'
+          BODY="${BODY}**Features:** Wild-KSU ${{ env.WILD_VERSION }} (canary) · SUSFS ඞ · BBG · Thin LTO · TCP (BBR, Westwood default)"$'\n\n'
+          BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
           BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"
           echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
           echo "$BODY" >> $GITHUB_ENV
@@ -864,37 +547,27 @@ jobs:
           ENCODED_TAG=$(echo "${{ env.RELEASE_TAG }}" | sed 's/+/%2B/g')
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${ENCODED_TAG}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          COMMIT_URL="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:9}"
 
           BUILD_END=$(date +%s)
           DURATION=$(( BUILD_END - ${{ needs.setup.outputs.start_time }} ))
 
           if [ "${{ inputs.is_testing }}" = "true" ]; then
-            BUILD_TYPE="🧪 Testing Build (LTO=thin)"
+            STATUS_ICON="🧪"
+            STATUS_TEXT="Testing Build"
           else
-            BUILD_TYPE="🧩 Stable Build (LTO=full)"
+            STATUS_ICON="✅"
+            STATUS_TEXT="Build Success"
           fi
 
-          MESSAGE="<b>🎉 Build Success!</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>✏️ Type:</b> ${BUILD_TYPE}%0A"
-          MESSAGE="${MESSAGE}<b>📱 Device:</b> Redmi Note 13 4G (sapphire/n)%0A"
-          MESSAGE="${MESSAGE}<b>🏷️ Tag:</b> <code>${{ env.RELEASE_TAG }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>⏱️ Build Time:</b> $((DURATION / 60))m $((DURATION % 60))s%0A"
-          MESSAGE="${MESSAGE}<b>🔗 Release:</b> <a href='${RELEASE_URL}'>Download</a>%0A"
-          MESSAGE="${MESSAGE}<b>📝 Logs:</b> <a href='${RUN_URL}'>View</a>%0A%0A"
-          MESSAGE="${MESSAGE}<b>⚡ Features:</b>%0A"
-          MESSAGE="${MESSAGE}   • Wild-KSU ${{ env.WILD_VERSION }} (canary)%0A"
-          MESSAGE="${MESSAGE}   • SUSFS ඞ ${{ env.SUSFS_VERSION }}%0A"
-          MESSAGE="${MESSAGE}   • BBG (Baseband Guard)%0A"
-          MESSAGE="${MESSAGE}   • O3 + LTO Optimization%0A"
-          MESSAGE="${MESSAGE}   • TCP: BBRv1, Westwood, Vegas, Yeah, Veno%0A"
-          MESSAGE="${MESSAGE}   • ath9k_htc WiFi dongle (TL-WN722N v1)%0A%0A"
-          MESSAGE="${MESSAGE}<b>📦 Variants:</b>%0A"
-          MESSAGE="${MESSAGE}   • GKI + Wild-KSU%0A"
-          MESSAGE="${MESSAGE}   • CLO + Wild-KSU%0A"
-          MESSAGE="${MESSAGE}   • GKI Vanilla%0A"
-          MESSAGE="${MESSAGE}   • CLO Vanilla%0A%0A"
-          MESSAGE="${MESSAGE}<b>📣 Maintainer:</b> @superuseryu%0A%0A"
-          MESSAGE="${MESSAGE}#kernel #wildksu #gki #clo #sapphire #sapphiren"
+          MESSAGE="<b>${STATUS_ICON} ${STATUS_TEXT}</b>%0A%0A"
+          MESSAGE="${MESSAGE}<b>🔄</b> Run #${{ github.run_number }} · ${{ matrix.kernel.name || 'sapphire' }}%0A"
+          MESSAGE="${MESSAGE}<b>🏷️</b> <code>${{ env.RELEASE_TAG }}</code>%0A"
+          MESSAGE="${MESSAGE}<b>⏱️</b> $((DURATION / 60))m $((DURATION % 60))s%0A"
+          MESSAGE="${MESSAGE}<b>🔨</b> <a href='${COMMIT_URL}'>${SHORT_SHA}</a>%0A"
+          MESSAGE="${MESSAGE}<b>🔗</b> <a href='${RELEASE_URL}'>Release</a> · <a href='${RUN_URL}'>Logs</a>"
 
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
@@ -902,17 +575,15 @@ jobs:
             -d parse_mode="HTML" \
             -d disable_web_page_preview=true
 
-          # send each zip as document
           for ZIP in ./zips/*.zip; do
             [ -f "$ZIP" ] || continue
             SIZE_MB=$(echo "scale=2; $(stat -c%s "$ZIP") / 1024 / 1024" | bc)
             curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendDocument" \
               -F chat_id="$CHAT_ID" \
               -F document=@"$ZIP" \
-              -F caption="📦 $(basename $ZIP) (${SIZE_MB} MB)" || true
+              -F caption="📦 $(basename $ZIP) — ${SIZE_MB} MB" || true
           done
 
-  # notify on failure
   notify-failure:
     name: "❌ Notify Failure"
     runs-on: ubuntu-latest
@@ -931,10 +602,9 @@ jobs:
           ICON="❓" && TEXT="Unknown ($JOB_STATUS)"
 
           MESSAGE="<b>${ICON} ${TEXT}!</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>📱 Device:</b> Redmi Note 13 4G (sapphire/n)%0A"
-          MESSAGE="${MESSAGE}<b>📦 Workflow:</b> Build Kernel - Sapphire/n%0A"
-          MESSAGE="${MESSAGE}<b>🕐 Time:</b> $(TZ='Asia/Jakarta' date +'%H:%M:%S WIB')%0A"
-          MESSAGE="${MESSAGE}<b>🔗 Logs:</b> <a href='${RUN_URL}'>View Logs</a>"
+          MESSAGE="${MESSAGE}<b>🔄</b> Run #${{ github.run_number }} · sapphire%0A"
+          MESSAGE="${MESSAGE}<b>🕐</b> $(date -u +'%Y-%m-%d %H:%M UTC')%0A"
+          MESSAGE="${MESSAGE}<b>🔗</b> <a href='${RUN_URL}'>Logs</a>"
 
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHAT_ID" \
