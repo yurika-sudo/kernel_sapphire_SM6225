@@ -18,7 +18,6 @@ permissions:
 
 jobs:
 
-  # record global start time
   setup:
     name: "⏱️ Setup"
     runs-on: ubuntu-latest
@@ -29,7 +28,6 @@ jobs:
         id: ts
         run: echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
 
-  # matrix build
   build-kernels:
     name: "🔨 Build ${{ matrix.kernel.name }}"
     runs-on: ubuntu-latest
@@ -138,7 +136,6 @@ jobs:
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
             security/Kconfig
 
-      # wild-ksu + susfs setup
       - name: "😋 Setup Wild-KSU with SUSFS"
         if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -154,7 +151,6 @@ jobs:
             exit 1
           fi
 
-          # extract wild-ksu version
           cd Wild_KSU
           KSU_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
           echo "WILD_KSU_TAG=$KSU_TAG" >> $GITHUB_ENV
@@ -220,12 +216,10 @@ jobs:
             fi
           done
 
-      # base configs
       - name: "⚙️ Add base kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          # remove cgroup_disable=pressure from source cmdline
           sed -i 's/ cgroup_disable=pressure//' "$CONFIG_FILE"
           sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CONFIG_FILE"
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
@@ -285,7 +279,6 @@ jobs:
           CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
           EOF
 
-      # wild-ksu + susfs configs
       - name: "⚙️ Add Wild-KSU + SUSFS kernel configs"
         if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -320,17 +313,14 @@ jobs:
       - name: "🔩 Fix ABI and build configs"
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          # ABI compare bypass — dari Wild dev approach
+          # ABI compare bypass
           ABI_SCRIPT="build/kernel/abi/compare_to_symbol_list"
           if [ -f "$ABI_SCRIPT" ]; then
             sed -i 's/^\s*exit 1$/    echo "ABI check bypassed"/' "$ABI_SCRIPT"
           elif [ -f "build/abi/compare_to_symbol_list" ]; then
             mv build/abi/compare_to_symbol_list build/abi/compare_to_symbol_list.disabled
-            cat > build/abi/compare_to_symbol_list << 'EOF'
-            #!/bin/bash
-            echo "ABI checking disabled"
-            exit 0
-            EOF
+            printf '#!/bin/bash\necho "ABI checking disabled"\nexit 0\n' \
+              > build/abi/compare_to_symbol_list
             chmod +x build/abi/compare_to_symbol_list
           fi
 
@@ -341,7 +331,7 @@ jobs:
           sed -i '/KMI_SYMBOL_LIST_STRICT_MODE/d' \
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64
 
-          # glibc 2.38 compat fix — dari Wild dev, untuk build host Ubuntu terbaru
+          # glibc 2.38 compat fix for newer Ubuntu runners
           GLIBC_VERSION=$(ldd --version 2>/dev/null | head -n 1 | awk '{print $NF}')
           if [ "$(printf '%s\n' "2.38" "$GLIBC_VERSION" | sort -V | head -n1)" = "2.38" ]; then
             cd ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -428,7 +418,6 @@ jobs:
 
           git clone --depth=1 https://github.com/superuseryu/AnyKernel3 ak3_tmp
 
-          # put as "Image" so anykernel.sh flashes it directly
           cp out/dist/Image ak3_tmp/Image
 
           cd ak3_tmp
@@ -455,7 +444,6 @@ jobs:
             ${{ env.WORK_DIR }}/wild_ksu_tag.txt
           retention-days: 1
 
-  # package + release
   package-kernels:
     name: "📦 Package & Release"
     runs-on: ubuntu-latest
@@ -470,7 +458,6 @@ jobs:
 
       - name: "🔖 Get versions"
         run: |
-          # kernel version
           VERSION_FILE=$(find ./artifacts -name "kernel_version.txt" | head -1)
           KERNEL_VERSION=$([ -f "$VERSION_FILE" ] && cat "$VERSION_FILE" || echo "5.15.x")
           echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
@@ -481,14 +468,11 @@ jobs:
           echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
           echo "SUSFS_MODULE_URL=https://github.com/sidex15/susfs4ksu-module/releases/latest" >> $GITHUB_ENV
 
-          # Wild KSU version — read from build artifact (set during build step)
-          # fallback to GitHub API if not available
           WILD_VERSION=$(find ./artifacts -name "wild_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || \
             curl -sf https://api.github.com/repos/WildKernels/Wild_KSU/releases/latest \
             | jq -r '.tag_name' || echo "v3.1.1")
           echo "WILD_VERSION=$WILD_VERSION" >> $GITHUB_ENV
 
-          # release tag
           DATE_TAG=$(date +'%Y%m%d')
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
           if [ "${{ inputs.is_testing }}" = "true" ]; then
@@ -510,7 +494,6 @@ jobs:
           echo "📋 ZIPs:"
           ls -lh ./zips/
 
-          # build zip list for env
           ZIP_LIST=$(ls ./zips/*.zip | tr '\n' ' ')
           echo "ZIP_LIST=$ZIP_LIST" >> $GITHUB_ENV
 
@@ -519,7 +502,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ env.RELEASE_TAG }}"
-          # delete existing assets if release exists
           gh release view "$TAG" --repo ${{ github.repository }} --json assets \
             | jq -r '.assets[].name' \
             | while read asset; do
@@ -529,7 +511,6 @@ jobs:
 
       - name: "📝 Generate release body"
         run: |
-          # get latest commit info from kernel source repo
           COMMIT_URL="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
           SHORT_SHA="${{ github.sha }}"
           SHORT_SHA="${SHORT_SHA:0:9}"
@@ -594,7 +575,6 @@ jobs:
             -d parse_mode="HTML" \
             -d disable_web_page_preview=true
 
-          # send each zip as document — backup copy, persists even if GitHub release tag gets overridden
           for ZIP in ./zips/*.zip; do
             [ -f "$ZIP" ] || continue
             SIZE_MB=$(echo "scale=2; $(stat -c%s "$ZIP") / 1024 / 1024" | bc)
@@ -604,7 +584,6 @@ jobs:
               -F caption="📦 $(basename $ZIP) — ${SIZE_MB} MB" || true
           done
 
-  # notify on failure
   notify-failure:
     name: "❌ Notify Failure"
     runs-on: ubuntu-latest
