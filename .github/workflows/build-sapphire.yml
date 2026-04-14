@@ -432,7 +432,7 @@ jobs:
           echo "ZIP_SHA256=$ZIP_SHA256" >> $GITHUB_ENV
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
 
-          echo "✅ $ZIP_NAME ($ZIP_SIZE_MB MB)"
+          echo "✅ $ZIP_NAME ($ZIP_SIZE_MB MB) | modules: $MODULE_COUNT | FW: $(stat -c%s ak3_tmp/vendor/firmware/htc_9271.fw 2>/dev/null || echo 'missing') bytes"
 
       - name: "📤 Upload variant artifact"
         uses: actions/upload-artifact@v4
