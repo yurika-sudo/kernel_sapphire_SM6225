@@ -305,10 +305,6 @@ jobs:
           apply_patch "$KP/add_timeout_wakelocks_globally.patch"  "add_timeout_wakelocks_globally"
           apply_patch "$KP/reduce_pci_pme_wakeups.patch"          "reduce_pci_pme_wakeups"
 
-          # --- ntsync: NT synchronization primitives for a13-5.15 ---
-          apply_patch "${{ github.workspace }}/kernel_patches-main/common/ntsync/ntsync_compat_android13-5.15.patch" \
-            "ntsync_compat_android13-5.15"
-
           echo "--- common patches done ---"
 
       - name: "🔏 Apply SUSFS fix patches (a13-5.15)"
@@ -392,6 +388,8 @@ jobs:
           CONFIG_IP_NF_TARGET_TTL=y
           CONFIG_IP6_NF_TARGET_HL=y
           CONFIG_IP6_NF_MATCH_HL=y
+          CONFIG_IP6_NF_NAT=y
+          # CONFIG_NTSYNC is not set
           CONFIG_IP_SET=y
           CONFIG_IP_SET_MAX=65534
           CONFIG_IP_SET_BITMAP_IP=y
