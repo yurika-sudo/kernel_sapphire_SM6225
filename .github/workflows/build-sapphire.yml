@@ -48,17 +48,6 @@ jobs:
             zip_prefix: "GKI_Wild"
             ksu_type: "wild"
 
-          # GKI + ReSukiSU
-          - name: "GKI-ReSuki"
-            dir: "common_gki_resuki"
-            repo_name: "common"
-            repo_url: "https://android.googlesource.com/kernel/common"
-            branch: "android13-5.15-lts"
-            config_branch: "android13-5.15"
-            defconfig: "gki_defconfig"
-            artifact_name: "gki-resuki-kernel"
-            zip_prefix: "GKI_ReSuki"
-            ksu_type: "resuki"
 
           # GKI + SukiSU-Ultra
           - name: "GKI-Suki"
@@ -205,7 +194,7 @@ jobs:
             "${{ github.workspace }}/kernel_patches-main"
 
       - name: "🛡️ Setup Baseband-guard (BBG)"
-        if: matrix.kernel.ksu_type != 'suki' && matrix.kernel.ksu_type != 'resuki'
+        if: matrix.kernel.ksu_type != 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
@@ -273,63 +262,7 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # ReSukiSU setup
-      - name: "🔄 Setup ReSukiSU with SUSFS + KPM"
-        if: matrix.kernel.ksu_type == 'resuki'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          set -e
 
-          rm -rf ./KernelSU ./drivers/kernelsu
-
-          # No branch arg — setup.sh uses main by default, clones to KernelSU/
-          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s dev
-
-          if [ ! -d "KernelSU" ]; then
-            echo "ERROR: KernelSU directory not found!"
-            exit 1
-          fi
-
-          cd KernelSU
-          RESUKI_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
-          echo "RESUKI_TAG=$RESUKI_TAG" >> $GITHUB_ENV
-          echo "$RESUKI_TAG" > ${{ env.WORK_DIR }}/ksu_tag.txt
-          echo "-- ReSukiSU tag: $RESUKI_TAG"
-          cd ..
-
-          # Apply kernel-side SUSFS base patch (fs/ and include/linux/)
-          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-
-          SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-          if [ -f "$SUSFS_PATCH" ]; then
-            patch -p1 --forward < "$SUSFS_PATCH" || echo "[WARN] susfs base patch had issues, continuing..."
-          fi
-
-          mkdir -p fs include/linux
-          cp -f susfs4ksu/kernel_patches/fs/* fs/
-          cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
-
-          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
-            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/ || true
-          fi
-
-          # Inject susfs_init if ksu.c exists and susfs_init not already there
-          # ReSukiSU may already have SUSFS integrated, so this is best-effort
-          KSU_C_FILE="KernelSU/kernel/ksu.c"
-          if [ -f "$KSU_C_FILE" ] && ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
-            grep -q "#include <linux/susfs.h>" "$KSU_C_FILE" ||               sed -i '/#include <linux\/fs\.h>/a #include <linux\/susfs.h>/' "$KSU_C_FILE" || true
-            grep -q "susfs_init()" "$KSU_C_FILE" ||               sed -i '/ksu_core_init();/a \tsusfs_init();' "$KSU_C_FILE" ||               sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \tsusfs_init(); }' "$KSU_C_FILE" || true
-            echo "[OK]  susfs_init injected into ksu.c"
-          else
-            echo "[SKIP] ksu.c not found or susfs already integrated — skipping injection"
-          fi
-
-          [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
-            ln -sf ../KernelSU drivers/kernelsu
-
-          rm -rf susfs4ksu
-
-      # SukiSU-Ultra setup
       - name: "🌸 Setup SukiSU-Ultra with SUSFS + KPM"
         if: matrix.kernel.ksu_type == 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -371,7 +304,6 @@ jobs:
           fi
 
           # Inject susfs_init if ksu.c exists and susfs_init not already there
-          # ReSukiSU may already have SUSFS integrated, so this is best-effort
           KSU_C_FILE="KernelSU/kernel/ksu.c"
           if [ -f "$KSU_C_FILE" ] && ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
             grep -q "#include <linux/susfs.h>" "$KSU_C_FILE" ||               sed -i '/#include <linux\/fs\.h>/a #include <linux\/susfs.h>/' "$KSU_C_FILE" || true
@@ -456,10 +388,9 @@ jobs:
             for f in "$SUSFS_FIX"/*.patch; do
               [ -f "$f" ] && apply_patch "$f" "wild_susfs_$(basename $f .patch)"
             done
-          elif [ "$KSU_TYPE" = "resuki" ]; then
+
             SUSFS_FIX="${{ github.workspace }}/kernel_patches-main/ksu/susfs_fix_patches/v2.0.0"
             for f in "$SUSFS_FIX"/*.patch; do
-              [ -f "$f" ] && apply_patch "$f" "resuki_susfs_$(basename $f .patch)"
             done
           else
             SUSFS_FIX="${{ github.workspace }}/kernel_patches-main/ksu/susfs_fix_patches/v2.0.0"
@@ -471,7 +402,7 @@ jobs:
           echo "--- SUSFS fix patches done ---"
 
       - name: "🔒 Apply BBG experimental patches"
-        if: matrix.kernel.ksu_type != 'none' && matrix.kernel.ksu_type != 'suki' && matrix.kernel.ksu_type != 'resuki'
+        if: matrix.kernel.ksu_type != 'none' && matrix.kernel.ksu_type != 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           set +e
@@ -507,7 +438,6 @@ jobs:
           sed -i 's/ cgroup_disable=pressure//' "$CONFIG_FILE"
           sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CONFIG_FILE"
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
-          CONFIG_KALLSYMS=y
           CONFIG_OVERLAY_FS=y
           CONFIG_OVERLAY_FS_REDIRECT_DIR=y
           CONFIG_OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW=y
@@ -586,28 +516,6 @@ jobs:
           CONFIG_BBG=y
           EOF
 
-      - name: "⚙️ Add ReSukiSU + SUSFS + KPM configs"
-        if: matrix.kernel.ksu_type == 'resuki'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
-          CONFIG_KSU=y
-          CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_SUSFS_SUS_MAP=y
-          CONFIG_KSU_SUSFS_SUS_PATH=y
-          CONFIG_KSU_SUSFS_SUS_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_KSTAT=y
-          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-          CONFIG_KSU_SUSFS_ENABLE_LOG=y
-          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=y
-          CONFIG_KPM=y
-          CONFIG_KALLSYMS_ALL=y
-          EOF
-
       - name: "⚙️ Add SukiSU-Ultra + SUSFS + KPM configs"
         if: matrix.kernel.ksu_type == 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -627,7 +535,6 @@ jobs:
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
           CONFIG_KSU_SUSFS_SUS_SU=y
           CONFIG_KPM=y
-          CONFIG_KALLSYMS_ALL=y
           EOF
 
       - name: "🏷️ Configure kernel name and remove dirty"
@@ -844,8 +751,8 @@ jobs:
           fi
           BODY="${BODY}**KSU Version:** \`${{ env.KSU_VERSION }}\`"$'\n'
           BODY="${BODY}**SUSFS:** [${{ env.SUSFS_VERSION }}](${{ env.SUSFS_MODULE_URL }})"$'\n\n'
-          BODY="${BODY}**Variants:** Wild-KSU · ReSukiSU · SukiSU-Ultra · NoKSU"$'\n'
-          BODY="${BODY}**Features:** SUSFS ඞ · BBG (Wild) · KPM (ReSuki/Suki) · Thin LTO · TCP (BBR, Westwood default)"$'\n\n'
+          BODY="${BODY}**Variants:** Wild-KSU · SukiSU-Ultra · NoKSU"$'\n'
+          BODY="${BODY}**Features:** SUSFS ඞ · BBG (Wild) · KPM (Suki) · Thin LTO · TCP (BBR, Westwood default)"$'\n\n'
           BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
           BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"
           echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
@@ -889,7 +796,7 @@ jobs:
           MESSAGE="<b>${STATUS_ICON} ${STATUS_TEXT}</b>%0A%0A"
           MESSAGE="${MESSAGE}<b>🔄</b> Run #${{ github.run_number }} · sapphire%0A"
           MESSAGE="${MESSAGE}<b>🏷️</b> <code>${{ env.RELEASE_TAG }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>📦</b> Wild · ReSuki · Suki · NoKSU%0A"
+          MESSAGE="${MESSAGE}<b>📦</b> Wild · Suki · NoKSU%0A"
           MESSAGE="${MESSAGE}<b>⏱️</b> $((DURATION / 60))m $((DURATION % 60))s%0A"
           MESSAGE="${MESSAGE}<b>🔨</b> <a href='${COMMIT_URL}'>${SHORT_SHA}</a>%0A"
           MESSAGE="${MESSAGE}<b>🔗</b> <a href='${RELEASE_URL}'>Release</a> · <a href='${RUN_URL}'>Logs</a>"
