@@ -282,8 +282,10 @@ jobs:
 
           rm -rf ./KernelSU ./KernelSU-Next ./drivers/kernelsu
 
+          # Use legacy_susfs branch - SUSFS is already integrated in the driver.
+          # dev/stable branches have been refactored and have no SUSFS support yet.
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" \
-            | bash -s dev
+            | bash -s legacy_susfs
 
           if [ ! -d "KernelSU-Next" ]; then
             echo "ERROR: KernelSU-Next directory not found!"
@@ -297,6 +299,8 @@ jobs:
           echo "-- KSUN tag: $KSUN_TAG"
           cd ..
 
+          # Apply kernel-side SUSFS base patch (fs/ and include/linux/).
+          # The KSU driver side is already patched in legacy_susfs branch.
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
 
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
@@ -307,57 +311,6 @@ jobs:
           mkdir -p fs include/linux
           cp -f susfs4ksu/kernel_patches/fs/* fs/
           cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
-
-          # KSUN dev uses kernel/Makefile instead of kernel/Kbuild.
-          # The fix patches target Kbuild, so create a temp alias before applying.
-          KSUN_FIXES="${{ github.workspace }}/kernel_patches-main/next/susfs_fix_patches/v2.0.0"
-          if [ -d "$KSUN_FIXES" ]; then
-            cd KernelSU-Next
-
-            if [ -f "kernel/Makefile" ] && [ ! -f "kernel/Kbuild" ]; then
-              cp kernel/Makefile kernel/Kbuild
-              KBUILD_ALIAS=1
-            fi
-
-            for PFILE in "$KSUN_FIXES"/*.patch; do
-              [ -f "$PFILE" ] || continue
-              NAME="ksun_$(basename $PFILE .patch)"
-              TMP="/tmp/p_${NAME}"
-              cp "$PFILE" "$TMP"
-
-              MISSING=""
-              while IFS= read -r line; do
-                [[ "$line" =~ ^---\ a/(.+)$ ]] || continue
-                T="${BASH_REMATCH[1]}"
-                [[ "$T" == "/dev/null" ]] && continue
-                [ -f "$T" ] || MISSING="$MISSING $T"
-              done < "$TMP"
-
-              if [ -n "$MISSING" ]; then
-                echo "[SKIP] $NAME - missing:$MISSING"
-                rm -f "$TMP"; continue
-              fi
-
-              if ! patch -p1 --dry-run --forward --quiet < "$TMP" 2>/dev/null; then
-                echo "[SKIP] $NAME - dry-run failed"
-                rm -f "$TMP"; continue
-              fi
-
-              if patch -p1 --forward < "$TMP"; then
-                echo "[OK]   $NAME"
-              else
-                echo "[WARN] $NAME - apply failed"
-              fi
-              rm -f "$TMP"
-            done
-
-            if [ "${KBUILD_ALIAS:-0}" = "1" ]; then
-              cp kernel/Kbuild kernel/Makefile
-              rm -f kernel/Kbuild
-            fi
-
-            cd ..
-          fi
 
           [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
             ln -sf ../KernelSU-Next drivers/kernelsu
@@ -491,8 +444,9 @@ jobs:
               [ -f "$f" ] && apply_patch "$f" "wild_susfs_$(basename $f .patch)"
             done
           elif [ "$KSU_TYPE" = "ksun" ]; then
-            # Already handled inside the KSUN setup step.
-            echo "[INFO] KSUN SUSFS fix patches applied in setup step, skipping."
+            # legacy_susfs branch already has SUSFS integrated in the driver.
+            # No fix patches needed.
+            echo "[INFO] KSUN legacy_susfs: no fix patches needed."
           else
             SUSFS_FIX="${{ github.workspace }}/kernel_patches-main/ksu/susfs_fix_patches/v2.0.0"
             for f in "$SUSFS_FIX"/*.patch; do
