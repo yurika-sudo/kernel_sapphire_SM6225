@@ -205,7 +205,7 @@ jobs:
             "${{ github.workspace }}/kernel_patches-main"
 
       - name: "🛡️ Setup Baseband-guard (BBG)"
-        if: matrix.kernel.ksu_type != 'suki'
+        if: matrix.kernel.ksu_type != 'suki' && matrix.kernel.ksu_type != 'resuki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
@@ -255,73 +255,7 @@ jobs:
           cp -f susfs4ksu/kernel_patches/fs/* fs/
           cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
 
-          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
-            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* Wild_KSU/kernel/ || true
-          fi
-
-          KSU_C_FILE="Wild_KSU/kernel/ksu.c"
-          if ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
-            grep -q "#include <linux/susfs.h>" "$KSU_C_FILE" || \
-              sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE"
-            grep -q "susfs_init()" "$KSU_C_FILE" || \
-              sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE" || \
-              sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$KSU_C_FILE"
-          fi
-
-          [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
-            ln -sf ../Wild_KSU drivers/kernelsu
-
-          rm -rf susfs4ksu
-
-      # ReSukiSU setup
-      - name: "🔄 Setup ReSukiSU with SUSFS + KPM"
-        if: matrix.kernel.ksu_type == 'resuki'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          set -e
-
-          rm -rf ./KernelSU ./drivers/kernelsu
-
-          # No branch arg — setup.sh uses main by default, clones to KernelSU/
-          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
-
-          if [ ! -d "KernelSU" ]; then
-            echo "ERROR: KernelSU directory not found!"
-            exit 1
-          fi
-
-          cd KernelSU
-          RESUKI_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
-          echo "RESUKI_TAG=$RESUKI_TAG" >> $GITHUB_ENV
-          echo "$RESUKI_TAG" > ${{ env.WORK_DIR }}/ksu_tag.txt
-          echo "-- ReSukiSU tag: $RESUKI_TAG"
-          cd ..
-
-          # Apply kernel-side SUSFS base patch (fs/ and include/linux/)
-          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-
-          SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-          if [ -f "$SUSFS_PATCH" ]; then
-            patch -p1 --forward < "$SUSFS_PATCH" || echo "[WARN] susfs base patch had issues, continuing..."
-          fi
-
-          mkdir -p fs include/linux
-          cp -f susfs4ksu/kernel_patches/fs/* fs/
-          cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
-
-          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
-            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/ || true
-          fi
-
-          # Inject susfs_init into ksu.c if not already present
-          KSU_C_FILE="KernelSU/kernel/ksu.c"
-          if ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
-            grep -q "#include <linux/susfs.h>" "$KSU_C_FILE" || \
-              sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE"
-            grep -q "susfs_init()" "$KSU_C_FILE" || \
-              sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE" || \
-              sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$KSU_C_FILE"
-          fi
+          # ReSukiSU already has SUSFS integrated at driver level — no injection needed
 
           [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
             ln -sf ../KernelSU drivers/kernelsu
@@ -369,14 +303,15 @@ jobs:
             cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/ || true
           fi
 
-          # Inject susfs_init into ksu.c if not already present
+          # Inject susfs_init if ksu.c exists and susfs_init not already there
+          # ReSukiSU may already have SUSFS integrated, so this is best-effort
           KSU_C_FILE="KernelSU/kernel/ksu.c"
-          if ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
-            grep -q "#include <linux/susfs.h>" "$KSU_C_FILE" || \
-              sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE"
-            grep -q "susfs_init()" "$KSU_C_FILE" || \
-              sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE" || \
-              sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$KSU_C_FILE"
+          if [ -f "$KSU_C_FILE" ] && ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
+            grep -q "#include <linux/susfs.h>" "$KSU_C_FILE" ||               sed -i '/#include <linux\/fs\.h>/a #include <linux\/susfs.h>/' "$KSU_C_FILE" || true
+            grep -q "susfs_init()" "$KSU_C_FILE" ||               sed -i '/ksu_core_init();/a \tsusfs_init();' "$KSU_C_FILE" ||               sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \tsusfs_init(); }' "$KSU_C_FILE" || true
+            echo "[OK]  susfs_init injected into ksu.c"
+          else
+            echo "[SKIP] ksu.c not found or susfs already integrated — skipping injection"
           fi
 
           [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
