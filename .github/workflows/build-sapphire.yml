@@ -288,7 +288,7 @@ jobs:
 
           # pershoot next-susfs fork — SUSFS already integrated into driver
           curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/refs/heads/next-susfs/kernel/setup.sh" \
-            | bash -s next-susfs-a13-5.15-dev
+            | bash -s stable
 
           if [ ! -d "KernelSU-Next" ]; then
             echo "ERROR: KernelSU-Next directory not found!"
