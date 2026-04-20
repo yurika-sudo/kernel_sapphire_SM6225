@@ -48,17 +48,17 @@ jobs:
             zip_prefix: "GKI_Wild"
             ksu_type: "wild"
 
-          # GKI + KernelSU-Next
-          - name: "GKI-KSUN"
-            dir: "common_gki_ksun"
+          # GKI + ReSukiSU
+          - name: "GKI-ReSuki"
+            dir: "common_gki_resuki"
             repo_name: "common"
             repo_url: "https://android.googlesource.com/kernel/common"
             branch: "android13-5.15-lts"
             config_branch: "android13-5.15"
             defconfig: "gki_defconfig"
-            artifact_name: "gki-ksun-kernel"
-            zip_prefix: "GKI_KSUN"
-            ksu_type: "ksun"
+            artifact_name: "gki-resuki-kernel"
+            zip_prefix: "GKI_ReSuki"
+            ksu_type: "resuki"
 
           # GKI + SukiSU-Ultra
           - name: "GKI-Suki"
@@ -273,34 +273,31 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # KSU Next setup
-      - name: "⚡ Setup KernelSU-Next with SUSFS"
-        if: matrix.kernel.ksu_type == 'ksun'
+      # ReSukiSU setup
+      - name: "🔄 Setup ReSukiSU with SUSFS + KPM"
+        if: matrix.kernel.ksu_type == 'resuki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           set -e
 
-          rm -rf ./KernelSU ./KernelSU-Next ./drivers/kernelsu
+          rm -rf ./KernelSU ./drivers/kernelsu
 
-          # Use legacy_susfs branch - SUSFS is already integrated in the driver.
-          # dev/stable branches have been refactored and have no SUSFS support yet.
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" \
-            | bash -s legacy_susfs
+          # No branch arg — setup.sh uses main by default, clones to KernelSU/
+          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
 
-          if [ ! -d "KernelSU-Next" ]; then
-            echo "ERROR: KernelSU-Next directory not found!"
+          if [ ! -d "KernelSU" ]; then
+            echo "ERROR: KernelSU directory not found!"
             exit 1
           fi
 
-          cd KernelSU-Next
-          KSUN_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
-          echo "KSUN_TAG=$KSUN_TAG" >> $GITHUB_ENV
-          echo "$KSUN_TAG" > ${{ env.WORK_DIR }}/ksu_tag.txt
-          echo "-- KSUN tag: $KSUN_TAG"
+          cd KernelSU
+          RESUKI_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
+          echo "RESUKI_TAG=$RESUKI_TAG" >> $GITHUB_ENV
+          echo "$RESUKI_TAG" > ${{ env.WORK_DIR }}/ksu_tag.txt
+          echo "-- ReSukiSU tag: $RESUKI_TAG"
           cd ..
 
-          # Apply kernel-side SUSFS base patch (fs/ and include/linux/).
-          # The KSU driver side is already patched in legacy_susfs branch.
+          # Apply kernel-side SUSFS base patch (fs/ and include/linux/)
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
 
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
@@ -312,8 +309,22 @@ jobs:
           cp -f susfs4ksu/kernel_patches/fs/* fs/
           cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
 
+          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
+            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/ || true
+          fi
+
+          # Inject susfs_init into ksu.c if not already present
+          KSU_C_FILE="KernelSU/kernel/ksu.c"
+          if ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
+            grep -q "#include <linux/susfs.h>" "$KSU_C_FILE" || \
+              sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE"
+            grep -q "susfs_init()" "$KSU_C_FILE" || \
+              sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE" || \
+              sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$KSU_C_FILE"
+          fi
+
           [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
-            ln -sf ../KernelSU-Next drivers/kernelsu
+            ln -sf ../KernelSU drivers/kernelsu
 
           rm -rf susfs4ksu
 
@@ -443,10 +454,11 @@ jobs:
             for f in "$SUSFS_FIX"/*.patch; do
               [ -f "$f" ] && apply_patch "$f" "wild_susfs_$(basename $f .patch)"
             done
-          elif [ "$KSU_TYPE" = "ksun" ]; then
-            # legacy_susfs branch already has SUSFS integrated in the driver.
-            # No fix patches needed.
-            echo "[INFO] KSUN legacy_susfs: no fix patches needed."
+          elif [ "$KSU_TYPE" = "resuki" ]; then
+            SUSFS_FIX="${{ github.workspace }}/kernel_patches-main/ksu/susfs_fix_patches/v2.0.0"
+            for f in "$SUSFS_FIX"/*.patch; do
+              [ -f "$f" ] && apply_patch "$f" "resuki_susfs_$(basename $f .patch)"
+            done
           else
             SUSFS_FIX="${{ github.workspace }}/kernel_patches-main/ksu/susfs_fix_patches/v2.0.0"
             for f in "$SUSFS_FIX"/*.patch; do
@@ -457,7 +469,7 @@ jobs:
           echo "--- SUSFS fix patches done ---"
 
       - name: "🔒 Apply BBG experimental patches"
-        if: matrix.kernel.ksu_type != 'none' && matrix.kernel.ksu_type != 'suki'
+        if: matrix.kernel.ksu_type != 'none' && matrix.kernel.ksu_type != 'suki' && matrix.kernel.ksu_type != 'resuki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           set +e
@@ -572,8 +584,8 @@ jobs:
           CONFIG_BBG=y
           EOF
 
-      - name: "⚙️ Add KernelSU-Next + SUSFS configs"
-        if: matrix.kernel.ksu_type == 'ksun'
+      - name: "⚙️ Add ReSukiSU + SUSFS + KPM configs"
+        if: matrix.kernel.ksu_type == 'resuki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
@@ -836,8 +848,8 @@ jobs:
           fi
           BODY="${BODY}**KSU Version:** \`${{ env.KSU_VERSION }}\`"$'\n'
           BODY="${BODY}**SUSFS:** [${{ env.SUSFS_VERSION }}](${{ env.SUSFS_MODULE_URL }})"$'\n\n'
-          BODY="${BODY}**Variants:** Wild-KSU · KernelSU-Next · SukiSU-Ultra · NoKSU"$'\n'
-          BODY="${BODY}**Features:** SUSFS ඞ · BBG (Wild/KSUN) · KPM (Suki) · Thin LTO · TCP (BBR, Westwood default)"$'\n\n'
+          BODY="${BODY}**Variants:** Wild-KSU · ReSukiSU · SukiSU-Ultra · NoKSU"$'\n'
+          BODY="${BODY}**Features:** SUSFS ඞ · BBG (Wild) · KPM (ReSuki/Suki) · Thin LTO · TCP (BBR, Westwood default)"$'\n\n'
           BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
           BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"
           echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
@@ -881,7 +893,7 @@ jobs:
           MESSAGE="<b>${STATUS_ICON} ${STATUS_TEXT}</b>%0A%0A"
           MESSAGE="${MESSAGE}<b>🔄</b> Run #${{ github.run_number }} · sapphire%0A"
           MESSAGE="${MESSAGE}<b>🏷️</b> <code>${{ env.RELEASE_TAG }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>📦</b> Wild · KSUN · Suki · NoKSU%0A"
+          MESSAGE="${MESSAGE}<b>📦</b> Wild · ReSuki · Suki · NoKSU%0A"
           MESSAGE="${MESSAGE}<b>⏱️</b> $((DURATION / 60))m $((DURATION % 60))s%0A"
           MESSAGE="${MESSAGE}<b>🔨</b> <a href='${COMMIT_URL}'>${SHORT_SHA}</a>%0A"
           MESSAGE="${MESSAGE}<b>🔗</b> <a href='${RELEASE_URL}'>Release</a> · <a href='${RUN_URL}'>Logs</a>"
