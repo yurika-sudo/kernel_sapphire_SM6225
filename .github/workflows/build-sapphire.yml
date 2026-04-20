@@ -579,6 +579,10 @@ jobs:
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KSU=y
+          # Force kprobes hook mode - GKI 5.15 has KPROBES/KRETPROBES/TRACEPOINTS.
+          # Without this, legacy_susfs Kbuild errors: "No hooks were defined".
+          CONFIG_KSU_KPROBES_HOOK=y
+          # CONFIG_KSU_MANUAL_HOOK is not set
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_SUS_MAP=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
