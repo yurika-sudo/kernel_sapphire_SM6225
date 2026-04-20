@@ -310,6 +310,21 @@ jobs:
           cp -f susfs4ksu/kernel_patches/fs/* fs/
           cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
 
+          # enable SUSFS in KernelSU-Next driver
+          KSUN_PATCH="susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
+          if [ -f "$KSUN_PATCH" ]; then
+            cd KernelSU-Next
+            if patch -p1 --dry-run --forward --fuzz=3 < "../$KSUN_PATCH" > /dev/null 2>&1; then
+              patch -p1 --forward --fuzz=3 < "../$KSUN_PATCH"
+              echo "[OK] 10_enable_susfs_for_ksu.patch applied"
+            else
+              echo "[WARN] 10_enable_susfs_for_ksu.patch dry-run failed — already applied or incompatible"
+            fi
+            cd ..
+          else
+            echo "[WARN] 10_enable patch not found"
+          fi
+
           [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
             ln -sf ../KernelSU-Next drivers/kernelsu
 
