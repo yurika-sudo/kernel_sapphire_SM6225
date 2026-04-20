@@ -557,6 +557,20 @@ jobs:
           echo "KERNEL_VERSION=$VERSION_CLEAN" >> $GITHUB_ENV
           echo "$VERSION_CLEAN" > kernel_version.txt
 
+      - name: "💉 Patch Image for KPM"
+        if: matrix.kernel.ksu_type == 'suki'
+        working-directory: ${{ env.WORK_DIR }}/out/dist
+        run: |
+          # CONFIG_KPM=y alone is not enough - Image needs a binary patch
+          # to embed the KPM loader so the manager can detect it.
+          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" \
+            -o patch_linux
+          chmod +x patch_linux
+          ./patch_linux
+          rm -f Image
+          mv oImage Image
+          echo "[OK] KPM patch applied"
+
       - name: "🔎 Scan patch rejects"
         if: always()
         working-directory: ${{ env.WORK_DIR }}
