@@ -37,17 +37,40 @@ jobs:
       matrix:
         kernel:
           # GKI + Wild-KSU
-          - name: "GKI-KSU"
-            dir: "common_gki"
+          - name: "GKI-Wild"
+            dir: "common_gki_wild"
             repo_name: "common"
             repo_url: "https://android.googlesource.com/kernel/common"
             branch: "android13-5.15-lts"
             config_branch: "android13-5.15"
             defconfig: "gki_defconfig"
-            output_name: "Image.gki.ksu"
-            artifact_name: "gki-ksu-kernel"
-            zip_prefix: "GKI_KSU"
+            artifact_name: "gki-wild-kernel"
+            zip_prefix: "GKI_Wild"
             ksu_type: "wild"
+
+          # GKI + KernelSU-Next
+          - name: "GKI-KSUN"
+            dir: "common_gki_ksun"
+            repo_name: "common"
+            repo_url: "https://android.googlesource.com/kernel/common"
+            branch: "android13-5.15-lts"
+            config_branch: "android13-5.15"
+            defconfig: "gki_defconfig"
+            artifact_name: "gki-ksun-kernel"
+            zip_prefix: "GKI_KSUN"
+            ksu_type: "ksun"
+
+          # GKI + SukiSU-Ultra
+          - name: "GKI-Suki"
+            dir: "common_gki_suki"
+            repo_name: "common"
+            repo_url: "https://android.googlesource.com/kernel/common"
+            branch: "android13-5.15-lts"
+            config_branch: "android13-5.15"
+            defconfig: "gki_defconfig"
+            artifact_name: "gki-suki-kernel"
+            zip_prefix: "GKI_Suki"
+            ksu_type: "suki"
 
           # GKI vanilla
           - name: "GKI-NoKSU"
@@ -57,7 +80,6 @@ jobs:
             branch: "android13-5.15-lts"
             config_branch: "android13-5.15"
             defconfig: "gki_defconfig"
-            output_name: "Image.gki.noksu"
             artifact_name: "gki-noksu-kernel"
             zip_prefix: "GKI_NoKSU"
             ksu_type: "none"
@@ -85,7 +107,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y repo rsync aria2 bc bison build-essential flex git libelf-dev libssl-dev curl jq
 
-          # Write shared patch helper to /tmp — sourced by every patch step
+          # Shared patch helper — sourced by every patch step
           cat > /tmp/apply_patch.sh << 'APHELPER'
           apply_patch() {
             local SRC="$1"
@@ -93,7 +115,6 @@ jobs:
             local STRICT="${3:-0}"
             local TMP="/tmp/p_${NAME//[^a-zA-Z0-9]/_}"
 
-            # Download if URL, copy if local
             if [[ "$SRC" == http* ]]; then
               if ! curl -LSs --fail "$SRC" -o "$TMP" 2>/dev/null; then
                 echo "[SKIP] $NAME — download failed"
@@ -107,7 +128,7 @@ jobs:
               cp "$SRC" "$TMP"
             fi
 
-            # Sanity check 1: verify all target files exist in source tree
+            # Sanity check 1: verify target files exist in source tree
             local missing=""
             while IFS= read -r line; do
               [[ "$line" =~ ^---\ a/(.+)$ ]] || continue
@@ -122,14 +143,13 @@ jobs:
               return 0
             fi
 
-            # Sanity check 2: dry-run before real apply
+            # Sanity check 2: dry-run
             if ! patch -p1 --dry-run --forward --quiet < "$TMP" 2>/dev/null; then
               echo "[SKIP] $NAME — dry-run failed (already applied or conflict)"
               rm -f "$TMP"
               return 0
             fi
 
-            # Apply
             if patch -p1 --forward < "$TMP"; then
               echo "[OK]  $NAME"
             else
@@ -179,13 +199,13 @@ jobs:
           sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' \
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki || true
 
-      # Downloads WildKernels/kernel_patches so all local patch paths below resolve correctly
       - name: "📂 Download kernel_patches"
         run: |
           git clone --depth=1 https://github.com/WildKernels/kernel_patches \
             "${{ github.workspace }}/kernel_patches-main"
 
       - name: "🛡️ Setup Baseband-guard (BBG)"
+        if: matrix.kernel.ksu_type != 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
@@ -201,6 +221,9 @@ jobs:
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
             security/Kconfig
 
+      # ─────────────────────────────────────────────────────────────────────────
+      # KSU SETUP — Wild
+      # ─────────────────────────────────────────────────────────────────────────
       - name: "😋 Setup Wild-KSU with SUSFS"
         if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -219,7 +242,7 @@ jobs:
           cd Wild_KSU
           KSU_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
           echo "WILD_KSU_TAG=$KSU_TAG" >> $GITHUB_ENV
-          echo "$KSU_TAG" > ${{ env.WORK_DIR }}/wild_ksu_tag.txt
+          echo "$KSU_TAG" > ${{ env.WORK_DIR }}/ksu_tag.txt
           echo "-- Wild KSU tag: $KSU_TAG"
           cd ..
 
@@ -252,6 +275,103 @@ jobs:
 
           rm -rf susfs4ksu
 
+      # ─────────────────────────────────────────────────────────────────────────
+      # KSU SETUP — KernelSU-Next (pershoot next-susfs, SUSFS built-in to driver)
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: "⚡ Setup KernelSU-Next with SUSFS"
+        if: matrix.kernel.ksu_type == 'ksun'
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          set -e
+
+          rm -rf ./KernelSU ./KernelSU-Next ./drivers/kernelsu
+
+          # pershoot next-susfs fork — SUSFS already integrated into driver
+          curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/refs/heads/next-susfs/kernel/setup.sh" \
+            | bash -s next-susfs
+
+          if [ ! -d "KernelSU-Next" ]; then
+            echo "ERROR: KernelSU-Next directory not found!"
+            exit 1
+          fi
+
+          cd KernelSU-Next
+          KSUN_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
+          echo "KSUN_TAG=$KSUN_TAG" >> $GITHUB_ENV
+          echo "$KSUN_TAG" > ${{ env.WORK_DIR }}/ksu_tag.txt
+          echo "-- KSUN tag: $KSUN_TAG"
+          cd ..
+
+          # Apply kernel-side SUSFS base patch (fs/ and include/linux/)
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+
+          SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
+          if [ -f "$SUSFS_PATCH" ]; then
+            patch -p1 --forward < "$SUSFS_PATCH" || echo "[WARN] susfs base patch had issues, continuing..."
+          fi
+
+          mkdir -p fs include/linux
+          cp -f susfs4ksu/kernel_patches/fs/* fs/
+          cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
+
+          [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
+            ln -sf ../KernelSU-Next drivers/kernelsu
+
+          rm -rf susfs4ksu
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # KSU SETUP — SukiSU-Ultra (susfs-main branch, SUSFS + KPM built-in)
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: "🌸 Setup SukiSU-Ultra with SUSFS + KPM"
+        if: matrix.kernel.ksu_type == 'suki'
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          set -e
+
+          rm -rf ./KernelSU ./SukiSU-Ultra ./drivers/kernelsu
+
+          # susfs-main branch — SUSFS + KPM already integrated into driver
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" \
+            | bash -s susfs-main
+
+          if [ ! -d "SukiSU-Ultra" ]; then
+            echo "ERROR: SukiSU-Ultra directory not found!"
+            exit 1
+          fi
+
+          cd SukiSU-Ultra
+          SUKI_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
+          echo "SUKI_TAG=$SUKI_TAG" >> $GITHUB_ENV
+          echo "$SUKI_TAG" > ${{ env.WORK_DIR }}/ksu_tag.txt
+          echo "-- SukiSU tag: $SUKI_TAG"
+          cd ..
+
+          # Apply kernel-side SUSFS base patch (fs/ and include/linux/)
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+
+          SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
+          if [ -f "$SUSFS_PATCH" ]; then
+            patch -p1 --forward < "$SUSFS_PATCH" || echo "[WARN] susfs base patch had issues, continuing..."
+          fi
+
+          mkdir -p fs include/linux
+          cp -f susfs4ksu/kernel_patches/fs/* fs/
+          cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
+
+          [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
+            ln -sf ../SukiSU-Ultra drivers/kernelsu
+
+          rm -rf susfs4ksu
+
+          # KPM patch — required for SukiSU KPM support
+          KPM_PATCH_URL="https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/main/patches/50_add_susfs_in_gki-android13-5.15.patch"
+          curl -LSs --fail "$KPM_PATCH_URL" -o /tmp/kpm.patch 2>/dev/null && \
+            { patch -p1 --forward < /tmp/kpm.patch || echo "[WARN] KPM patch had issues, continuing..."; } || \
+            echo "[SKIP] KPM patch download failed"
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # PATCHES
+      # ─────────────────────────────────────────────────────────────────────────
       - name: "⚡ Apply common optimization patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -261,7 +381,7 @@ jobs:
           BASE_URL="https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/common"
           KP="${{ github.workspace }}/kernel_patches-main/common"
 
-          # --- patches from remote (already tested in original workflow) ---
+          # Remote patches
           for p in \
             "unicode_bypass_fix_6.1-.patch" \
             "silence_irq_cpu_logspam.patch" \
@@ -280,51 +400,55 @@ jobs:
             apply_patch "${BASE_URL}/${p}" "$p"
           done
 
-          # --- F2FS storage: reduce stutter on f2fs partitions ---
-          apply_patch "$KP/f2fs_enlarge_min_fsync_blocks.patch"   "f2fs_enlarge_min_fsync_blocks"
-          apply_patch "$KP/f2fs_reduce_congestion.patch"          "f2fs_reduce_congestion"
-          apply_patch "$KP/reduce_gc_thread_sleep_time.patch"     "reduce_gc_thread_sleep_time"
+          # F2FS storage
+          apply_patch "$KP/f2fs_enlarge_min_fsync_blocks.patch"      "f2fs_enlarge_min_fsync_blocks"
+          apply_patch "$KP/f2fs_reduce_congestion.patch"             "f2fs_reduce_congestion"
+          apply_patch "$KP/reduce_gc_thread_sleep_time.patch"        "reduce_gc_thread_sleep_time"
 
-          # --- scheduler / CPU efficiency ---
-          apply_patch "$KP/disable_cache_hot_buddy.patch"         "disable_cache_hot_buddy"
-          apply_patch "$KP/use_unlikely_wrap_cpufreq.patch"       "use_unlikely_wrap_cpufreq"
+          # Scheduler / CPU efficiency
+          apply_patch "$KP/disable_cache_hot_buddy.patch"            "disable_cache_hot_buddy"
+          apply_patch "$KP/use_unlikely_wrap_cpufreq.patch"          "use_unlikely_wrap_cpufreq"
 
-          # --- cpufreq scaling_min_freq limiter (add must come before re_write) ---
+          # cpufreq scaling_min_freq (order matters: add before re_write)
           apply_patch "$KP/add_limitation_scaling_min_freq.patch"    "add_limitation_scaling_min_freq"
           apply_patch "$KP/re_write_limitation_scaling_min_freq.patch" "re_write_limitation_scaling_min_freq"
 
-          # --- memory / lib: SIMD-optimized operations ---
-          apply_patch "$KP/optimise_memcmp.patch"                 "optimise_memcmp"
-          apply_patch "$KP/optimized_mem_operations.patch"        "optimized_mem_operations"
+          # Memory / lib
+          apply_patch "$KP/optimise_memcmp.patch"                    "optimise_memcmp"
+          apply_patch "$KP/optimized_mem_operations.patch"           "optimized_mem_operations"
 
-          # --- network: latency + IPv6 NAT fix ---
-          apply_patch "$KP/force_tcp_nodelay.patch"               "force_tcp_nodelay"
-          apply_patch "$KP/IPv6_NAT_FIX.patch"                    "IPv6_NAT_FIX"
+          # Network
+          apply_patch "$KP/force_tcp_nodelay.patch"                  "force_tcp_nodelay"
+          apply_patch "$KP/IPv6_NAT_FIX.patch"                       "IPv6_NAT_FIX"
 
-          # --- power: wakelock timeout + PCI PME reduction ---
-          apply_patch "$KP/add_timeout_wakelocks_globally.patch"  "add_timeout_wakelocks_globally"
-          apply_patch "$KP/reduce_pci_pme_wakeups.patch"          "reduce_pci_pme_wakeups"
+          # Power
+          apply_patch "$KP/add_timeout_wakelocks_globally.patch"     "add_timeout_wakelocks_globally"
+          apply_patch "$KP/reduce_pci_pme_wakeups.patch"             "reduce_pci_pme_wakeups"
 
           echo "--- common patches done ---"
 
-      - name: "🔏 Apply SUSFS fix patches (a13-5.15)"
-        if: matrix.kernel.ksu_type == 'wild'
+      - name: "🔏 Apply SUSFS fix patches"
+        if: matrix.kernel.ksu_type != 'none'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           set +e
           source /tmp/apply_patch.sh
 
-          SUSFS_FIX="${{ github.workspace }}/kernel_patches-main/wild/susfs_fix_patches/v2.0.0/a13-5.15"
+          # Wild uses its own fix patches; KSUN and Suki share ksu/ fix patches
+          if [ "${{ matrix.kernel.ksu_type }}" = "wild" ]; then
+            SUSFS_FIX="${{ github.workspace }}/kernel_patches-main/wild/susfs_fix_patches/v2.0.0/a13-5.15"
+          else
+            SUSFS_FIX="${{ github.workspace }}/kernel_patches-main/ksu/susfs_fix_patches/v2.0.0"
+          fi
 
-          # Fix SUSFS v2.0.0 compatibility issues on android13-5.15
-          # File names include .c extension as part of the filename (fdinfo.c.patch etc.)
-          for f in fdinfo.c namespace.c open.c; do
-            [ -f "$SUSFS_FIX/${f}.patch" ] && apply_patch "$SUSFS_FIX/${f}.patch" "susfs_fix_${f}"
+          for f in $(ls "$SUSFS_FIX"/*.patch 2>/dev/null); do
+            apply_patch "$f" "susfs_fix_$(basename $f .patch)"
           done
 
           echo "--- SUSFS fix patches done ---"
 
       - name: "🔒 Apply BBG experimental patches"
+        if: matrix.kernel.ksu_type != 'none' && matrix.kernel.ksu_type != 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           set +e
@@ -332,16 +456,13 @@ jobs:
 
           BBG_DIR="${{ github.workspace }}/kernel_patches-main/experimental/bbg"
 
-          # Fix IS_ERR_OR_NULL check in BBG — stability fix
-          apply_patch "$BBG_DIR/bbg_fix_get_link.patch" "bbg_fix_get_link"
-
-          # Mark KSU-elevated processes as untrusted in BBG — security, strict
-          apply_patch "$BBG_DIR/bbg_untrusted_cred.patch" "bbg_untrusted_cred" "1" || exit 1
+          apply_patch "$BBG_DIR/bbg_fix_get_link.patch"    "bbg_fix_get_link"
+          apply_patch "$BBG_DIR/bbg_untrusted_cred.patch"  "bbg_untrusted_cred" "1" || exit 1
 
           echo "--- BBG patches done ---"
 
       - name: "🎭 Apply hide/stealth patches"
-        if: matrix.kernel.ksu_type == 'wild'
+        if: matrix.kernel.ksu_type != 'none'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           set +e
@@ -349,17 +470,10 @@ jobs:
 
           KP="${{ github.workspace }}/kernel_patches-main"
 
-          # Hide KSU entries from /proc/<pid>/maps (requires SUSFS already applied)
-          apply_patch "$KP/69_hide_stuff.patch"                            "69_hide_stuff"
-
-          # Additional /proc/maps stealth for suspicious kernel entries
-          apply_patch "$KP/maps/xx_maps_sus_kernel.patch"                  "xx_maps_sus_kernel"
-
-          # NULL-check safety in susfs dentry functions
-          apply_patch "$KP/experimental/susfs/susfs_dentry_checks.patch"   "susfs_dentry_checks"
-
-          # Fix ptrace_notify signature mismatch on GKI 5.15
-          apply_patch "$KP/gki_ptrace.patch"                               "gki_ptrace"
+          apply_patch "$KP/69_hide_stuff.patch"                           "69_hide_stuff"
+          apply_patch "$KP/maps/xx_maps_sus_kernel.patch"                 "xx_maps_sus_kernel"
+          apply_patch "$KP/experimental/susfs/susfs_dentry_checks.patch"  "susfs_dentry_checks"
+          apply_patch "$KP/gki_ptrace.patch"                              "gki_ptrace"
 
           echo "--- stealth patches done ---"
 
@@ -389,7 +503,6 @@ jobs:
           CONFIG_IP6_NF_TARGET_HL=y
           CONFIG_IP6_NF_MATCH_HL=y
           CONFIG_IP6_NF_NAT=y
-          # CONFIG_NTSYNC is not set
           CONFIG_IP_SET=y
           CONFIG_IP_SET_MAX=65534
           CONFIG_IP_SET_BITMAP_IP=y
@@ -425,10 +538,11 @@ jobs:
           # CONFIG_PRINTK_CALLER is not set
           # CONFIG_DEBUG_FS is not set
           # CONFIG_F2FS_IOSTAT is not set
+          # CONFIG_NTSYNC is not set
           CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
           EOF
 
-      - name: "⚙️ Add Wild-KSU + SUSFS kernel configs"
+      - name: "⚙️ Add Wild-KSU + SUSFS configs"
         if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -446,6 +560,50 @@ jobs:
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
           CONFIG_KSU_SUSFS_SUS_SU=y
+          CONFIG_BBG=y
+          EOF
+
+      - name: "⚙️ Add KernelSU-Next + SUSFS configs"
+        if: matrix.kernel.ksu_type == 'ksun'
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_KSU=y
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_SUS_MAP=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=y
+          CONFIG_BBG=y
+          EOF
+
+      - name: "⚙️ Add SukiSU-Ultra + SUSFS + KPM configs"
+        if: matrix.kernel.ksu_type == 'suki'
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_KSU=y
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_SUS_MAP=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=y
+          CONFIG_KPM=y
+          CONFIG_KALLSYMS_ALL=y
           EOF
 
       - name: "🏷️ Configure kernel name and remove dirty"
@@ -462,7 +620,6 @@ jobs:
       - name: "🔩 Fix ABI and build configs"
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          # ABI compare bypass
           ABI_SCRIPT="build/kernel/abi/compare_to_symbol_list"
           if [ -f "$ABI_SCRIPT" ]; then
             sed -i 's/^\s*exit 1$/    echo "ABI check bypassed"/' "$ABI_SCRIPT"
@@ -480,7 +637,6 @@ jobs:
           sed -i '/KMI_SYMBOL_LIST_STRICT_MODE/d' \
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64
 
-          # glibc 2.38 compat fix for newer Ubuntu runners
           GLIBC_VERSION=$(ldd --version 2>/dev/null | head -n 1 | awk '{print $NF}')
           if [ "$(printf '%s\n' "2.38" "$GLIBC_VERSION" | sort -V | head -n1)" = "2.38" ]; then
             cd ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -505,7 +661,8 @@ jobs:
 
           START_BUILD=$(date +%s)
 
-          if ! KCFLAGS="$KCFLAGS" LLVM_PARALLEL_LINK_JOBS=1 BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
+          if ! KCFLAGS="$KCFLAGS" LLVM_PARALLEL_LINK_JOBS=1 \
+            BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
             build/build.sh -j$(nproc); then
             exit 1
           fi
@@ -589,7 +746,7 @@ jobs:
           path: |
             ${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
-            ${{ env.WORK_DIR }}/wild_ksu_tag.txt
+            ${{ env.WORK_DIR }}/ksu_tag.txt
           retention-days: 1
 
   package-kernels:
@@ -615,24 +772,22 @@ jobs:
           echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
           echo "SUSFS_MODULE_URL=https://github.com/sidex15/susfs4ksu-module/releases/latest" >> $GITHUB_ENV
 
-          WILD_VERSION=$(find ./artifacts -name "wild_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || \
-            curl -sf https://api.github.com/repos/WildKernels/Wild_KSU/releases/latest \
-            | jq -r '.tag_name' || echo "v3.1.1")
-          echo "WILD_VERSION=$WILD_VERSION" >> $GITHUB_ENV
+          KSU_VERSION=$(find ./artifacts -name "ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || echo "unknown")
+          echo "KSU_VERSION=$KSU_VERSION" >> $GITHUB_ENV
 
           DATE_TAG=$(date +'%Y%m%d')
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
           if [ "${{ inputs.is_testing }}" = "true" ]; then
             echo "RELEASE_TAG=${SUSFS_VERSION}-testing" >> $GITHUB_ENV
-            echo "RELEASE_NAME=Wild KSU Kernel ${SUSFS_VERSION} — Testing" >> $GITHUB_ENV
+            echo "RELEASE_NAME=Sapphire Kernel ${SUSFS_VERSION} — Testing" >> $GITHUB_ENV
             echo "IS_PRERELEASE=true" >> $GITHUB_ENV
           else
             echo "RELEASE_TAG=${SUSFS_VERSION}" >> $GITHUB_ENV
-            echo "RELEASE_NAME=Wild KSU Kernel ${SUSFS_VERSION}" >> $GITHUB_ENV
+            echo "RELEASE_NAME=Sapphire Kernel ${SUSFS_VERSION}" >> $GITHUB_ENV
             echo "IS_PRERELEASE=false" >> $GITHUB_ENV
           fi
 
-          echo "Kernel: $KERNEL_VERSION | SUSFS: $SUSFS_VERSION | Wild-KSU: $WILD_VERSION"
+          echo "Kernel: $KERNEL_VERSION | SUSFS: $SUSFS_VERSION | KSU: $KSU_VERSION"
 
       - name: "🗂️ Collect ZIP files"
         run: |
@@ -640,9 +795,6 @@ jobs:
           find ./artifacts -name "AnyKernel3_*.zip" -exec cp {} ./zips/ \;
           echo "📋 ZIPs:"
           ls -lh ./zips/
-
-          ZIP_LIST=$(ls ./zips/*.zip | tr '\n' ' ')
-          echo "ZIP_LIST=$ZIP_LIST" >> $GITHUB_ENV
 
       - name: "🧹 Cleanup old release assets"
         env:
@@ -666,9 +818,10 @@ jobs:
           if [ "${{ inputs.is_testing }}" = "true" ]; then
             BODY="> ⚠️ **Testing build** — use at your own risk."$'\n\n'
           fi
-          BODY="${BODY}**Wild-KSU:** [${{ env.WILD_VERSION }}](https://github.com/WildKernels/Wild_KSU/releases/tag/${{ env.WILD_VERSION }})"$'\n'
+          BODY="${BODY}**KSU Version:** \`${{ env.KSU_VERSION }}\`"$'\n'
           BODY="${BODY}**SUSFS:** [${{ env.SUSFS_VERSION }}](${{ env.SUSFS_MODULE_URL }})"$'\n\n'
-          BODY="${BODY}**Features:** Wild-KSU ${{ env.WILD_VERSION }} (canary) · SUSFS ඞ · BBG · Thin LTO · TCP (BBR, Westwood default)"$'\n\n'
+          BODY="${BODY}**Variants:** Wild-KSU · KernelSU-Next · SukiSU-Ultra · NoKSU"$'\n'
+          BODY="${BODY}**Features:** SUSFS ඞ · BBG (Wild/KSUN) · KPM (Suki) · Thin LTO · TCP (BBR, Westwood default)"$'\n\n'
           BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
           BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"
           echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
@@ -712,6 +865,7 @@ jobs:
           MESSAGE="<b>${STATUS_ICON} ${STATUS_TEXT}</b>%0A%0A"
           MESSAGE="${MESSAGE}<b>🔄</b> Run #${{ github.run_number }} · sapphire%0A"
           MESSAGE="${MESSAGE}<b>🏷️</b> <code>${{ env.RELEASE_TAG }}</code>%0A"
+          MESSAGE="${MESSAGE}<b>📦</b> Wild · KSUN · Suki · NoKSU%0A"
           MESSAGE="${MESSAGE}<b>⏱️</b> $((DURATION / 60))m $((DURATION % 60))s%0A"
           MESSAGE="${MESSAGE}<b>🔨</b> <a href='${COMMIT_URL}'>${SHORT_SHA}</a>%0A"
           MESSAGE="${MESSAGE}<b>🔗</b> <a href='${RELEASE_URL}'>Release</a> · <a href='${RUN_URL}'>Logs</a>"
