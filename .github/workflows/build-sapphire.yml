@@ -221,9 +221,7 @@ jobs:
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
             security/Kconfig
 
-      # ─────────────────────────────────────────────────────────────────────────
       # KSU SETUP — Wild
-      # ─────────────────────────────────────────────────────────────────────────
       - name: "😋 Setup Wild-KSU with SUSFS"
         if: matrix.kernel.ksu_type == 'wild'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -275,9 +273,7 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # ─────────────────────────────────────────────────────────────────────────
-      # KSU SETUP — KernelSU-Next (pershoot next-susfs, SUSFS built-in to driver)
-      # ─────────────────────────────────────────────────────────────────────────
+      # KSU Next setup
       - name: "⚡ Setup KernelSU-Next with SUSFS"
         if: matrix.kernel.ksu_type == 'ksun'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -286,9 +282,9 @@ jobs:
 
           rm -rf ./KernelSU ./KernelSU-Next ./drivers/kernelsu
 
-          # pershoot next-susfs fork — SUSFS already integrated into driver
-          curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/refs/heads/next-susfs/kernel/setup.sh" \
-            | bash -s stable
+          # KernelSU-Next dev branch
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" \
+            | bash -s dev
 
           if [ ! -d "KernelSU-Next" ]; then
             echo "ERROR: KernelSU-Next directory not found!"
@@ -319,9 +315,7 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # ─────────────────────────────────────────────────────────────────────────
-      # KSU SETUP — SukiSU-Ultra (susfs-main branch, SUSFS + KPM built-in)
-      # ─────────────────────────────────────────────────────────────────────────
+      # SukiSU-Ultra setup
       - name: "🌸 Setup SukiSU-Ultra with SUSFS + KPM"
         if: matrix.kernel.ksu_type == 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -377,9 +371,7 @@ jobs:
 
           rm -rf susfs4ksu
 
-      # ─────────────────────────────────────────────────────────────────────────
       # PATCHES
-      # ─────────────────────────────────────────────────────────────────────────
       - name: "⚡ Apply common optimization patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -442,9 +434,11 @@ jobs:
           set +e
           source /tmp/apply_patch.sh
 
-          # Wild uses its own fix patches; KSUN and Suki share ksu/ fix patches
+          # select susfs fix patches per manager type
           if [ "${{ matrix.kernel.ksu_type }}" = "wild" ]; then
             SUSFS_FIX="${{ github.workspace }}/kernel_patches-main/wild/susfs_fix_patches/v2.0.0/a13-5.15"
+          elif [ "${{ matrix.kernel.ksu_type }}" = "ksun" ]; then
+            SUSFS_FIX="${{ github.workspace }}/kernel_patches-main/next/susfs_fix_patches/v2.0.0"
           else
             SUSFS_FIX="${{ github.workspace }}/kernel_patches-main/ksu/susfs_fix_patches/v2.0.0"
           fi
