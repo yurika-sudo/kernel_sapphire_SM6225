@@ -469,10 +469,6 @@ jobs:
           echo "KBUILD_BUILD_TIMESTAMP=$(date -u -d @${KERNEL_TIMESTAMP} +'%a %b %d %T UTC %Y')" >> $GITHUB_ENV
           echo "SOURCE_DATE_EPOCH=${KERNEL_TIMESTAMP}" >> $GITHUB_ENV
 
-          # Patch mkcompile_h directly - build.sh overrides env vars internally.
-          sed -i 's/KBUILD_BUILD_USER=$(id -un)/KBUILD_BUILD_USER=superuseryu/' scripts/mkcompile_h || true
-          sed -i 's/KBUILD_BUILD_HOST=$(hostname)/KBUILD_BUILD_HOST=github/' scripts/mkcompile_h || true
-
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add . && git commit -m "clean dirty flag" || true
@@ -504,6 +500,20 @@ jobs:
               tools/bpf/resolve_btfids/Makefile 2>/dev/null || true
             cd ${{ env.WORK_DIR }}
             echo "[OK]  glibc 2.38 compat fix (host: $GLIBC_VERSION)"
+          fi
+
+          # Patch AOSP build/_setup_env.sh — this is what actually overrides
+          # KBUILD_BUILD_USER/HOST at build time, not scripts/mkcompile_h.
+          # Covers both syntax variants across AOSP versions.
+          SETUP_ENV="build/_setup_env.sh"
+          if [ -f "$SETUP_ENV" ]; then
+            sed -i 's/export KBUILD_BUILD_USER=build-user/export KBUILD_BUILD_USER=superuseryu/g' "$SETUP_ENV" || true
+            sed -i 's/${KBUILD_BUILD_USER:-build-user}/${KBUILD_BUILD_USER:-superuseryu}/g' "$SETUP_ENV" || true
+            sed -i 's/export KBUILD_BUILD_HOST=build-host/export KBUILD_BUILD_HOST=github/g' "$SETUP_ENV" || true
+            sed -i 's/${KBUILD_BUILD_HOST:-build-host}/${KBUILD_BUILD_HOST:-github}/g' "$SETUP_ENV" || true
+            echo "[OK]  Patched build/_setup_env.sh — KBUILD_BUILD_USER=superuseryu HOST=github"
+          else
+            echo "[WARN] build/_setup_env.sh not found — skipping"
           fi
 
       - name: "🚀 Build kernel"
