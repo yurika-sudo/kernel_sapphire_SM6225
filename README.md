@@ -1,39 +1,37 @@
-# msm-5.15 Kernel Builder
+# Seiran Kernel
 
-Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — built for `android13-5.15` devices.
+Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — `android13-5.15` GKI.
 
-> **Why only sapphire/sapphiren?** Don't wanna risk it, don't have any other device.
->
-> If you want to request support for another device, hit me up on [Telegram](https://t.me/home_yu_chat). You accept all risks and take full responsibility — be ready for testing. Bootloop/brick ain't on me.
+> Flash at your own risk. Built and tested on sapphire/sapphiren only.
+> Support for other devices? Hit me up on [Telegram](https://t.me/home_yu_chat). You take full responsibility — bootloop/brick ain't on me.
 
 ---
 
 ## Variants
 
-**GKI + Wild-KSU**
-- Source: AOSP `android13-5.15-lts`
-- Root: Wild-KSU (canary) + SUSFS + BBG
+| Variant | Root | Extras |
+|---------|------|--------|
+| GKI-Wild | Wild-KSU (canary) + SUSFS | BBG |
+| GKI-Suki | SukiSU-Ultra + SUSFS | KPM |
+| GKI-NoKSU | Vanilla | — |
 
-**GKI NoKSU**
-- Source: AOSP `android13-5.15-lts`
-- Root: ❌ Vanilla
+All variants include: **BBRv1 + Westwood TCP** · **IP_SET** · **O3 + Thin LTO** · **MGLRU**
 
-All variants include: **BBRv1 + Westwood TCP** · **IP_SET** · **Thin LTO** · **MGLRU**
+> Wild-KSU supports both Wild and KernelSU-Next managers natively.
 
-> **CLO dropped** — CodeLinaro `msm-5.15` has too many source-level conflicts with modern GKI toolchain (clang-r547379). GKI follows AOSP LTS upstream which is more stable for automated weekly builds.
+> **CLO dropped** — CodeLinaro `msm-5.15` has too many conflicts with clang-r547379. GKI follows AOSP LTS upstream which is more stable for automated weekly builds.
 
 ---
 
 ## Build Details
 
-| | GKI |
-|--|-----|
+| | |
+|--|--|
 | Source | `android.googlesource.com/kernel/common` |
 | Branch | `android13-5.15-lts` |
 | Toolchain | Clang r547379 (topnotchfreaks) |
-| LTO | thin |
-
-Auto-build every Sunday 00:00 UTC. Both variants build in parallel, each released as a separate ZIP.
+| LTO | Thin |
+| Schedule | Every Sunday 00:00 UTC |
 
 ---
 
@@ -42,10 +40,7 @@ Auto-build every Sunday 00:00 UTC. Both variants build in parallel, each release
 ### Telegram Notifications (Optional)
 
 1. Create a bot via [@BotFather](https://t.me/BotFather), copy the token
-2. Get your chat ID:
-   ```
-   https://api.telegram.org/botYOUR_TOKEN/getUpdates
-   ```
+2. Get your chat ID: `https://api.telegram.org/botYOUR_TOKEN/getUpdates`
 3. Add to repo → **Settings → Secrets → Actions**:
 
 | Secret | Value |
@@ -55,21 +50,7 @@ Auto-build every Sunday 00:00 UTC. Both variants build in parallel, each release
 
 ### Run a Build
 
-Actions tab → `Build Kernel` → **Run workflow**
-
----
-
-## Releases
-
-Each build produces **2 separate ZIPs** — one per variant:
-
-| File | Source | Root |
-|------|--------|------|
-| `AnyKernel3_GKI_KSU_{date}.zip` | AOSP GKI | Wild-KSU + SUSFS |
-| `AnyKernel3_GKI_NoKSU_{date}.zip` | AOSP GKI | Vanilla |
-
-- **Stable releases** → tagged `v{susfs_version}`, scheduled Sunday builds
-- **Testing pre-releases** → tagged `{susfs_version}-testing`, manual dispatch
+Actions tab → `Build Kernel - Sapphire/n` → **Run workflow**
 
 ---
 
@@ -77,27 +58,23 @@ Each build produces **2 separate ZIPs** — one per variant:
 
 > ⚠️ **Flash via OrangeFox / TWRP only.**
 
-1. Download the ZIP for your preferred variant from [Releases](../../releases)
+1. Download ZIP from [Releases](../../releases)
 2. Boot into recovery
 3. Flash the ZIP
 4. Reboot
 
-> ⚠️ Using **Magisk**? Re-patch your boot image after flashing.
-
----
-
-## Disclaimer
-
-Built and tested on sapphire/sapphiren only. Flash at your own risk, always backup first.
+> Using **Magisk**? Re-patch your boot image after flashing.
 
 ---
 
 ## Credits
 
 - [WildKernels](https://github.com/WildKernels) — Wild-KSU
+- [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) — SukiSU-Ultra
 - [simonpunk](https://gitlab.com/simonpunk/susfs4ksu) — SUSFS
 - [vc-teahouse](https://github.com/vc-teahouse/Baseband-guard) — Baseband Guard
 - [topnotchfreaks](https://github.com/topnotchfreaks) — Clang toolchain
+- [chickendrop89](https://github.com/chickendrop89) — kernel patch reference
 - Google/AOSP — kernel source
 
 ---
