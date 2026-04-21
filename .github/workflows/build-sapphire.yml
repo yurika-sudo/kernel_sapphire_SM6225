@@ -462,6 +462,13 @@ jobs:
           SHORT_SHA="${REPO_SHA:0:9}"
           sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${SHORT_SHA}\"|" ./scripts/setlocalversion
           sed -i 's/-dirty//' ./scripts/setlocalversion
+
+          # Use kernel source last commit timestamp instead of CI run time.
+          # This prevents DuckDetector buildTime flags from a "too fresh" build.
+          KERNEL_TIMESTAMP=$(git log -1 --format=%ct)
+          echo "KBUILD_BUILD_TIMESTAMP=$(date -u -d @${KERNEL_TIMESTAMP} +'%a %b %d %T UTC %Y')" >> $GITHUB_ENV
+          echo "SOURCE_DATE_EPOCH=${KERNEL_TIMESTAMP}" >> $GITHUB_ENV
+
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add . && git commit -m "clean dirty flag" || true
@@ -507,6 +514,10 @@ jobs:
           export KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
           export SKIP_ABI_CHECKS=1
           export SKIP_KMI_CHECK=1
+          export KBUILD_BUILD_TIMESTAMP="${{ env.KBUILD_BUILD_TIMESTAMP }}"
+          export SOURCE_DATE_EPOCH="${{ env.SOURCE_DATE_EPOCH }}"
+          export KBUILD_BUILD_USER="superuseryu"
+          export KBUILD_BUILD_HOST="github"
 
           START_BUILD=$(date +%s)
 
