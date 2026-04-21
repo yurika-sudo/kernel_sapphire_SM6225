@@ -328,49 +328,24 @@ jobs:
           BASE_URL="https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/common"
           KP="${{ github.workspace }}/kernel_patches-main/common"
 
-          # Remote patches
-          for p in \
-            "unicode_bypass_fix_6.1-.patch" \
-            "silence_irq_cpu_logspam.patch" \
-            "silence_system_logspam.patch" \
-            "reduce_cache_pressure.patch" \
-            "mem_opt_prefetch.patch" \
-            "minimise_wakeup_time.patch" \
-            "reduce_freeze_timeout.patch" \
-            "int_sqrt.patch" \
-            "increase_sk_mem_packets.patch" \
-            "file_struct_8bytes_align.patch" \
-            "clear_page_16bytes_align.patch" \
-            "avoid_extra_s2idle_wake_attempts.patch" \
-            "adjust_cpu_scan_order.patch" \
-            "increase_ext4_default_commit_age.patch"; do
-            apply_patch "${BASE_URL}/${p}" "$p"
-          done
+          # Logging - safe, no functional change
+          apply_patch "${BASE_URL}/silence_irq_cpu_logspam.patch"        "silence_irq_cpu_logspam"
+          apply_patch "${BASE_URL}/silence_system_logspam.patch"         "silence_system_logspam"
 
-          # F2FS storage
-          apply_patch "$KP/f2fs_enlarge_min_fsync_blocks.patch"      "f2fs_enlarge_min_fsync_blocks"
-          apply_patch "$KP/f2fs_reduce_congestion.patch"             "f2fs_reduce_congestion"
-          apply_patch "$KP/reduce_gc_thread_sleep_time.patch"        "reduce_gc_thread_sleep_time"
+          # Memory pressure - stable mm/ tweak
+          apply_patch "${BASE_URL}/reduce_cache_pressure.patch"          "reduce_cache_pressure"
 
-          # Scheduler / CPU efficiency
-          apply_patch "$KP/disable_cache_hot_buddy.patch"            "disable_cache_hot_buddy"
-          apply_patch "$KP/use_unlikely_wrap_cpufreq.patch"          "use_unlikely_wrap_cpufreq"
+          # Power / wakeup - battery focused
+          apply_patch "${BASE_URL}/minimise_wakeup_time.patch"           "minimise_wakeup_time"
+          apply_patch "${BASE_URL}/reduce_freeze_timeout.patch"          "reduce_freeze_timeout"
+          apply_patch "${BASE_URL}/avoid_extra_s2idle_wake_attempts.patch" "avoid_extra_s2idle_wake_attempts"
 
-          # cpufreq scaling_min_freq (order matters: add before re_write)
-          apply_patch "$KP/add_limitation_scaling_min_freq.patch"    "add_limitation_scaling_min_freq"
-          apply_patch "$KP/re_write_limitation_scaling_min_freq.patch" "re_write_limitation_scaling_min_freq"
+          # Scheduler
+          apply_patch "${BASE_URL}/adjust_cpu_scan_order.patch"          "adjust_cpu_scan_order"
+          apply_patch "$KP/disable_cache_hot_buddy.patch"                "disable_cache_hot_buddy"
 
-          # Memory / lib
-          apply_patch "$KP/optimise_memcmp.patch"                    "optimise_memcmp"
-          apply_patch "$KP/optimized_mem_operations.patch"           "optimized_mem_operations"
-
-          # Network
-          apply_patch "$KP/force_tcp_nodelay.patch"                  "force_tcp_nodelay"
-          apply_patch "$KP/IPv6_NAT_FIX.patch"                       "IPv6_NAT_FIX"
-
-          # Power
-          apply_patch "$KP/add_timeout_wakelocks_globally.patch"     "add_timeout_wakelocks_globally"
-          apply_patch "$KP/reduce_pci_pme_wakeups.patch"             "reduce_pci_pme_wakeups"
+          # Storage
+          apply_patch "${BASE_URL}/increase_ext4_default_commit_age.patch" "increase_ext4_default_commit_age"
 
           echo "--- common patches done ---"
 
@@ -753,7 +728,7 @@ jobs:
           MESSAGE="<b>${STATUS_ICON} ${STATUS_TEXT}</b>%0A%0A"
           MESSAGE="${MESSAGE}<b>🔄</b> Run #${{ github.run_number }} · sapphire%0A"
           MESSAGE="${MESSAGE}<b>🏷️</b> <code>${{ env.RELEASE_TAG }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>📦</b> Wild · Suki · NoKSU%0A"
+          MESSAGE="${MESSAGE}<b>📦</b> Wild · SukiSU · NoKSU%0A"
           MESSAGE="${MESSAGE}<b>⏱️</b> $((DURATION / 60))m $((DURATION % 60))s%0A"
           MESSAGE="${MESSAGE}<b>🔨</b> <a href='${COMMIT_URL}'>${SHORT_SHA}</a>%0A"
           MESSAGE="${MESSAGE}<b>🔗</b> <a href='${RELEASE_URL}'>Release</a> · <a href='${RUN_URL}'>Logs</a>"
