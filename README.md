@@ -15,7 +15,7 @@ Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — `
 | GKI-Suki | SukiSU-Ultra + SUSFS | KPM |
 | GKI-NoKSU | Vanilla | — |
 
-All variants include: **BBRv1 + Westwood TCP** · **IP_SET** · **O3 + Thin LTO** · **MGLRU**
+All variants include: **BBRv1 + Westwood TCP** · **IP_SET** · **Thin LTO** · **MGLRU**
 
 > Wild-KSU supports both Wild and KernelSU-Next managers natively.
 
