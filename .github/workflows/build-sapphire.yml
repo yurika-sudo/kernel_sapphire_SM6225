@@ -230,7 +230,7 @@ jobs:
           git fetch --tags 2>/dev/null || true
           KSU_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
           echo "WILD_KSU_TAG=$KSU_TAG" >> $GITHUB_ENV
-          echo "$KSU_TAG" > ${{ env.WORK_DIR }}/ksu_tag.txt
+          echo "$KSU_TAG" > ${{ env.WORK_DIR }}/wild_ksu_tag.txt
           echo "-- Wild KSU tag: $KSU_TAG"
           cd ..
 
@@ -318,7 +318,7 @@ jobs:
             curl -sf "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest" \
             | jq -r '.tag_name' 2>/dev/null || echo "unknown")
           echo "SUKI_TAG=$SUKI_TAG" >> $GITHUB_ENV
-          echo "$SUKI_TAG" > ${{ env.WORK_DIR }}/ksu_tag.txt
+          echo "$SUKI_TAG" > ${{ env.WORK_DIR }}/suki_ksu_tag.txt
           echo "-- SukiSU tag: $SUKI_TAG"
           cd ..
 
@@ -711,7 +711,8 @@ jobs:
           path: |
             ${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
-            ${{ env.WORK_DIR }}/ksu_tag.txt
+            ${{ env.WORK_DIR }}/wild_ksu_tag.txt
+            ${{ env.WORK_DIR }}/suki_ksu_tag.txt
           retention-days: 1
 
   package-kernels:
@@ -737,8 +738,10 @@ jobs:
           echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
           echo "SUSFS_MODULE_URL=https://github.com/sidex15/susfs4ksu-module/releases/latest" >> $GITHUB_ENV
 
-          KSU_VERSION=$(find ./artifacts -name "ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || echo "unknown")
-          echo "KSU_VERSION=$KSU_VERSION" >> $GITHUB_ENV
+          WILD_TAG=$(find ./artifacts -name "wild_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || echo "unknown")
+          SUKI_TAG=$(find ./artifacts -name "suki_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || echo "unknown")
+          echo "WILD_TAG=$WILD_TAG" >> $GITHUB_ENV
+          echo "SUKI_TAG=$SUKI_TAG" >> $GITHUB_ENV
 
           DATE_TAG=$(date +'%Y%m%d')
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
@@ -783,7 +786,8 @@ jobs:
           if [ "${{ inputs.is_testing }}" = "true" ]; then
             BODY="> ⚠️ **Testing build** — use at your own risk."$'\n\n'
           fi
-          BODY="${BODY}**KSU Version:** \`${{ env.KSU_VERSION }}\`"$'\n'
+          BODY="${BODY}**Wild-KSU:** \`${{ env.WILD_TAG }}\`"$'\n'
+          BODY="${BODY}**SukiSU-Ultra:** \`${{ env.SUKI_TAG }}\`"$'\n'
           BODY="${BODY}**SUSFS:** [${{ env.SUSFS_VERSION }}](${{ env.SUSFS_MODULE_URL }})"$'\n\n'
           BODY="${BODY}**Variants:** Wild-KSU · SukiSU-Ultra · NoKSU"$'\n'
           BODY="${BODY}**Features:** SUSFS ඞ · BBG (Wild) · KPM (Suki) · Thin LTO · TCP (BBR, Westwood default)"$'\n\n'
@@ -830,6 +834,7 @@ jobs:
           MESSAGE="<b>${STATUS_ICON} ${STATUS_TEXT}</b>%0A%0A"
           MESSAGE="${MESSAGE}<b>🔄</b> Run #${{ github.run_number }} · sapphire%0A"
           MESSAGE="${MESSAGE}<b>🏷️</b> <code>${{ env.RELEASE_TAG }}</code>%0A"
+          MESSAGE="${MESSAGE}<b>📌</b> Wild <code>${{ env.WILD_TAG }}</code> · Suki <code>${{ env.SUKI_TAG }}</code>%0A"
           MESSAGE="${MESSAGE}<b>📦</b> Wild · SukiSU · NoKSU%0A"
           MESSAGE="${MESSAGE}<b>⏱️</b> $((DURATION / 60))m $((DURATION % 60))s%0A"
           MESSAGE="${MESSAGE}<b>🔨</b> <a href='${COMMIT_URL}'>${SHORT_SHA}</a>%0A"
