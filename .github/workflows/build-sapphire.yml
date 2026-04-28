@@ -246,9 +246,9 @@ jobs:
           cp -f susfs4ksu/kernel_patches/fs/* fs/
           cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
 
-          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
-            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* Wild_KSU/kernel/ || true
-          fi
+          # NOTE: intentionally NOT copying susfs4ksu/kernel_patches/KernelSU/kernel/* here.
+          # Wild_KSU/dev has its own modified sucompat.c/hooks — overwriting with SUSFS's
+          # upstream KernelSU version causes type errors (bool, u64, KSU_FEATURE_SU_COMPAT).
 
           KSU_C_FILE="Wild_KSU/kernel/ksu.c"
           if ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
@@ -319,9 +319,10 @@ jobs:
           cd ..
 
           # Apply kernel-side SUSFS base patch (fs/ and include/linux/)
-          # Pin to 820aaf95 (Apr 20) — post-static_key, pre-variable-rename, compatible with SukiSU builtin
+          # Pin to cc7763b9 (Apr 18) — introduced static_key, same sync point as SukiSU builtin Apr 19
+          # pre-variable-rename (befaffc7 Apr 24), so variable names match SukiSU
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          cd susfs4ksu && git checkout 820aaf95 && cd ..
+          cd susfs4ksu && git checkout cc7763b9 && cd ..
 
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
           if [ -f "$SUSFS_PATCH" ]; then
