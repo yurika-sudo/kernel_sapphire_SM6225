@@ -219,7 +219,7 @@ jobs:
 
           rm -rf ./KernelSU ./drivers/kernelsu ./Wild_KSU
 
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s dev
+          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s canary
 
           if [ ! -d "Wild_KSU" ]; then
             echo "ERROR: Wild_KSU directory not found!"
@@ -227,6 +227,7 @@ jobs:
           fi
 
           cd Wild_KSU
+          git fetch --tags 2>/dev/null || true
           KSU_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
           echo "WILD_KSU_TAG=$KSU_TAG" >> $GITHUB_ENV
           echo "$KSU_TAG" > ${{ env.WORK_DIR }}/ksu_tag.txt
@@ -312,6 +313,7 @@ jobs:
           fi
 
           cd KernelSU
+          git fetch --tags 2>/dev/null || true
           SUKI_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
           echo "SUKI_TAG=$SUKI_TAG" >> $GITHUB_ENV
           echo "$SUKI_TAG" > ${{ env.WORK_DIR }}/ksu_tag.txt
