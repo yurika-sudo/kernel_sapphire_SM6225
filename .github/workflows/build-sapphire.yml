@@ -663,7 +663,7 @@ jobs:
           zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
 
-          ZIP_SIZE_MB=$(echo "scale=2; $(stat -c%s "$ZIP_NAME") / 1024 / 1024" | bc)
+          ZIP_SIZE_MB=$(echo "scale=2; $(stat -c%s "$ZIP_NAME") / 1024 / 1024" | bc | sed 's/^\./0./')
           ZIP_SHA256=$(sha256sum "$ZIP_NAME" | cut -d' ' -f1)
 
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
@@ -773,7 +773,7 @@ jobs:
 
           LOG_ZIP="build-audit-logs-${DATE_TAG}.zip"
           zip -r9 "$LOG_ZIP" audit_logs/
-          LOG_SIZE_MB=$(echo "scale=2; $(stat -c%s "$LOG_ZIP") / 1024 / 1024" | bc)
+          LOG_SIZE_MB=$(echo "scale=2; $(stat -c%s "$LOG_ZIP") / 1024 / 1024" | bc | sed 's/^\./0./')
           echo "LOG_AUDIT_ZIP=$LOG_ZIP" >> $GITHUB_ENV
           echo "LOG_AUDIT_SIZE_MB=$LOG_SIZE_MB" >> $GITHUB_ENV
           echo "✅ Audit log packed: $LOG_ZIP (${LOG_SIZE_MB} MB)"
@@ -865,7 +865,7 @@ jobs:
 
           for ZIP in ./zips/*.zip; do
             [ -f "$ZIP" ] || continue
-            SIZE_MB=$(echo "scale=2; $(stat -c%s "$ZIP") / 1024 / 1024" | bc)
+            SIZE_MB=$(echo "scale=2; $(stat -c%s "$ZIP") / 1024 / 1024" | bc | sed 's/^\./0./')
             curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendDocument" \
               -F chat_id="$CHAT_ID" \
               -F document=@"$ZIP" \
