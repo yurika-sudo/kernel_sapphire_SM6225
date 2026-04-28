@@ -219,7 +219,7 @@ jobs:
 
           rm -rf ./KernelSU ./drivers/kernelsu ./Wild_KSU
 
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s canary
+          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s dev
 
           if [ ! -d "Wild_KSU" ]; then
             echo "ERROR: Wild_KSU directory not found!"
@@ -233,7 +233,8 @@ jobs:
           echo "-- Wild KSU tag: $KSU_TAG"
           cd ..
 
-          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+          cd susfs4ksu && git checkout 8bc57ca && cd ..
 
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
           if [ -f "$SUSFS_PATCH" ]; then
@@ -263,6 +264,35 @@ jobs:
           rm -rf susfs4ksu
 
 
+      - name: "🔧 Enforce KSU driver Makefile entry (Wild)"
+        if: matrix.kernel.ksu_type == 'wild'
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          grep -q "obj-.*kernelsu" drivers/Makefile || \
+            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+          grep -q "kernelsu/Kconfig" drivers/Kconfig || \
+            echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+          echo "[verify] drivers/Makefile KSU entry:"
+          grep kernelsu drivers/Makefile || echo "STILL MISSING - bail out"
+
+      - name: "🩺 KSU debug pre-flight (Wild)"
+        if: matrix.kernel.ksu_type == 'wild'
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          echo "=== drivers/kernelsu symlink ==="
+          ls -la drivers/kernelsu || echo "❌ MISSING"
+          echo "=== drivers/Makefile KSU entry ==="
+          grep -n kernelsu drivers/Makefile || echo "❌ NOT IN MAKEFILE"
+          echo "=== KSU .c files ==="
+          find drivers/kernelsu -name "*.c" 2>/dev/null | sort || echo "❌ NO .c FILES FOUND"
+          echo "=== Static key DEFINE locations ==="
+          grep -r "DEFINE_STATIC_KEY" drivers/kernelsu/ 2>/dev/null || echo "⚠️  NO DEFINE_STATIC_KEY IN KSU DRIVER"
+          echo "=== Static key references in kernel (non-KSU) ==="
+          grep -r "ksu_is_init_rc_hook_enabled\|ksu_is_input_hook_enabled\|ksu_vfs_read_hook_key\|ksu_input_hook_key" \
+            --include="*.c" . --exclude-dir=drivers/kernelsu 2>/dev/null | head -20 || echo "(none)"
+          echo "=== CONFIG_KSU in defconfig ==="
+          grep "CONFIG_KSU" arch/arm64/configs/${{ env.DEFCONFIG_NAME }} || echo "❌ CONFIG_KSU NOT SET"
+
       - name: "🌸 Setup SukiSU-Ultra with SUSFS + KPM"
         if: matrix.kernel.ksu_type == 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -288,7 +318,8 @@ jobs:
           cd ..
 
           # Apply kernel-side SUSFS base patch (fs/ and include/linux/)
-          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+          cd susfs4ksu && git checkout 8bc57ca && cd ..
 
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
           if [ -f "$SUSFS_PATCH" ]; then
@@ -317,6 +348,35 @@ jobs:
             ln -sf ../KernelSU drivers/kernelsu
 
           rm -rf susfs4ksu
+
+      - name: "🔧 Enforce KSU driver Makefile entry (Suki)"
+        if: matrix.kernel.ksu_type == 'suki'
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          grep -q "obj-.*kernelsu" drivers/Makefile || \
+            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+          grep -q "kernelsu/Kconfig" drivers/Kconfig || \
+            echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+          echo "[verify] drivers/Makefile KSU entry:"
+          grep kernelsu drivers/Makefile || echo "STILL MISSING - bail out"
+
+      - name: "🩺 KSU debug pre-flight (Suki)"
+        if: matrix.kernel.ksu_type == 'suki'
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          echo "=== drivers/kernelsu symlink ==="
+          ls -la drivers/kernelsu || echo "❌ MISSING"
+          echo "=== drivers/Makefile KSU entry ==="
+          grep -n kernelsu drivers/Makefile || echo "❌ NOT IN MAKEFILE"
+          echo "=== KSU .c files ==="
+          find drivers/kernelsu -name "*.c" 2>/dev/null | sort || echo "❌ NO .c FILES FOUND"
+          echo "=== Static key DEFINE locations ==="
+          grep -r "DEFINE_STATIC_KEY" drivers/kernelsu/ 2>/dev/null || echo "⚠️  NO DEFINE_STATIC_KEY IN KSU DRIVER"
+          echo "=== Static key references in kernel (non-KSU) ==="
+          grep -r "ksu_is_init_rc_hook_enabled\|ksu_is_input_hook_enabled\|ksu_vfs_read_hook_key\|ksu_input_hook_key" \
+            --include="*.c" . --exclude-dir=drivers/kernelsu 2>/dev/null | head -20 || echo "(none)"
+          echo "=== CONFIG_KSU in defconfig ==="
+          grep "CONFIG_KSU" arch/arm64/configs/${{ env.DEFCONFIG_NAME }} || echo "❌ CONFIG_KSU NOT SET"
 
       # PATCHES
       - name: "⚡ Apply common optimization patches"
@@ -537,7 +597,9 @@ jobs:
 
           if ! KCFLAGS="$KCFLAGS" LLVM_PARALLEL_LINK_JOBS=1 \
             BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
-            build/build.sh -j$(nproc); then
+            build/build.sh -j$(nproc) 2>&1 | tee /tmp/build_${{ matrix.kernel.name }}.log; then
+            echo "=== LINKER ERRORS ==="
+            grep -E "undefined symbol|error:|ld.lld" /tmp/build_${{ matrix.kernel.name }}.log | tail -30
             exit 1
           fi
 
@@ -545,6 +607,14 @@ jobs:
           DURATION=$((END_BUILD - START_BUILD))
           echo "✅ Build completed in $((DURATION / 60))m $((DURATION % 60))s"
           echo "duration=$DURATION" >> $GITHUB_OUTPUT
+
+      - name: "📤 Upload build log (on failure)"
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.kernel.name }}
+          path: /tmp/build_${{ matrix.kernel.name }}.log
+          retention-days: 7
 
       - name: "🔍 Verify kernel version"
         working-directory: ${{ env.WORK_DIR }}/out/dist
