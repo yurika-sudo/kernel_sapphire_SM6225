@@ -50,15 +50,15 @@ jobs:
 
 
           # GKI + SukiSU-Ultra
-          - name: "GKI-Suki"
+          - name: "GKI-SukiSU"
             dir: "common_gki_suki"
             repo_name: "common"
             repo_url: "https://android.googlesource.com/kernel/common"
             branch: "android13-5.15-lts"
             config_branch: "android13-5.15"
             defconfig: "gki_defconfig"
-            artifact_name: "gki-suki-kernel"
-            zip_prefix: "GKI_Suki"
+            artifact_name: "gki-sukisu-kernel"
+            zip_prefix: "GKI_SukiSU"
             ksu_type: "suki"
 
           # GKI vanilla
@@ -263,39 +263,15 @@ jobs:
           [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
             ln -sf ../Wild_KSU drivers/kernelsu
 
-          rm -rf susfs4ksu
-
-
-      - name: "🔧 Enforce KSU driver Makefile entry (Wild)"
-        if: matrix.kernel.ksu_type == 'wild'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
+          # Enforce Makefile/Kconfig entries
           grep -q "obj-.*kernelsu" drivers/Makefile || \
             echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
           grep -q "kernelsu/Kconfig" drivers/Kconfig || \
             echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
-          echo "[verify] drivers/Makefile KSU entry:"
-          grep kernelsu drivers/Makefile || echo "STILL MISSING - bail out"
 
-      - name: "🩺 KSU debug pre-flight (Wild)"
-        if: matrix.kernel.ksu_type == 'wild'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          echo "=== drivers/kernelsu symlink ==="
-          ls -la drivers/kernelsu || echo "❌ MISSING"
-          echo "=== drivers/Makefile KSU entry ==="
-          grep -n kernelsu drivers/Makefile || echo "❌ NOT IN MAKEFILE"
-          echo "=== KSU .c files ==="
-          find drivers/kernelsu -name "*.c" 2>/dev/null | sort || echo "❌ NO .c FILES FOUND"
-          echo "=== Static key DEFINE locations ==="
-          grep -r "DEFINE_STATIC_KEY" drivers/kernelsu/ 2>/dev/null || echo "⚠️  NO DEFINE_STATIC_KEY IN KSU DRIVER"
-          echo "=== Static key references in kernel (non-KSU) ==="
-          grep -r "ksu_is_init_rc_hook_enabled\|ksu_is_input_hook_enabled\|ksu_vfs_read_hook_key\|ksu_input_hook_key" \
-            --include="*.c" . --exclude-dir=drivers/kernelsu 2>/dev/null | head -20 || echo "(none)"
-          echo "=== CONFIG_KSU in defconfig ==="
-          grep "CONFIG_KSU" arch/arm64/configs/${{ env.DEFCONFIG_NAME }} || echo "❌ CONFIG_KSU NOT SET"
+          rm -rf susfs4ksu
 
-      - name: "🌸 Setup SukiSU-Ultra with SUSFS + KPM"
+      - name: "🌸 Setup SukiSU with SUSFS + KPM"
         if: matrix.kernel.ksu_type == 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -354,36 +330,13 @@ jobs:
           [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
             ln -sf ../KernelSU drivers/kernelsu
 
-          rm -rf susfs4ksu
-
-      - name: "🔧 Enforce KSU driver Makefile entry (Suki)"
-        if: matrix.kernel.ksu_type == 'suki'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
+          # Enforce Makefile/Kconfig entries
           grep -q "obj-.*kernelsu" drivers/Makefile || \
             echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
           grep -q "kernelsu/Kconfig" drivers/Kconfig || \
             echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
-          echo "[verify] drivers/Makefile KSU entry:"
-          grep kernelsu drivers/Makefile || echo "STILL MISSING - bail out"
 
-      - name: "🩺 KSU debug pre-flight (Suki)"
-        if: matrix.kernel.ksu_type == 'suki'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          echo "=== drivers/kernelsu symlink ==="
-          ls -la drivers/kernelsu || echo "❌ MISSING"
-          echo "=== drivers/Makefile KSU entry ==="
-          grep -n kernelsu drivers/Makefile || echo "❌ NOT IN MAKEFILE"
-          echo "=== KSU .c files ==="
-          find drivers/kernelsu -name "*.c" 2>/dev/null | sort || echo "❌ NO .c FILES FOUND"
-          echo "=== Static key DEFINE locations ==="
-          grep -r "DEFINE_STATIC_KEY" drivers/kernelsu/ 2>/dev/null || echo "⚠️  NO DEFINE_STATIC_KEY IN KSU DRIVER"
-          echo "=== Static key references in kernel (non-KSU) ==="
-          grep -r "ksu_is_init_rc_hook_enabled\|ksu_is_input_hook_enabled\|ksu_vfs_read_hook_key\|ksu_input_hook_key" \
-            --include="*.c" . --exclude-dir=drivers/kernelsu 2>/dev/null | head -20 || echo "(none)"
-          echo "=== CONFIG_KSU in defconfig ==="
-          grep "CONFIG_KSU" arch/arm64/configs/${{ env.DEFCONFIG_NAME }} || echo "❌ CONFIG_KSU NOT SET"
+          rm -rf susfs4ksu
 
       # PATCHES
       - name: "⚡ Apply common optimization patches"
@@ -615,14 +568,6 @@ jobs:
           echo "✅ Build completed in $((DURATION / 60))m $((DURATION % 60))s"
           echo "duration=$DURATION" >> $GITHUB_OUTPUT
 
-      - name: "📤 Upload build log (on failure)"
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log-${{ matrix.kernel.name }}
-          path: /tmp/build_${{ matrix.kernel.name }}.log
-          retention-days: 7
-
       - name: "🔍 Verify kernel version"
         working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
@@ -648,36 +593,60 @@ jobs:
           mv oImage Image
           echo "[OK] KPM patch applied"
 
-      - name: "🔎 Scan patch rejects"
-        if: always()
-        working-directory: ${{ env.WORK_DIR }}
-        run: |
-          REJECTS_DIR="${{ env.WORK_DIR }}/patch-rejects"
-          mkdir -p "$REJECTS_DIR"
-          mapfile -t REJS < <(find "${{ env.KERNEL_LOC_DIR }}" -type f -name '*.rej')
-          REJ_COUNT=${#REJS[@]}
-          echo "Found $REJ_COUNT .rej file(s)"
-          echo "REJ_COUNT=$REJ_COUNT" >> $GITHUB_ENV
-          if [ "$REJ_COUNT" -gt 0 ]; then
-            for REJ in "${REJS[@]}"; do
-              REL="${REJ#${{ env.WORK_DIR }}/}"
-              DEST="$REJECTS_DIR/$REL"
-              mkdir -p "$(dirname "$DEST")"
-              cp "$REJ" "$DEST"
-              echo "⚠️ $REL"
-            done
-          fi
-
       - name: "📋 Build summary"
         if: always()
         run: |
-          echo "Kernel  : ${{ env.KERNEL_VERSION }}"
-          echo "Variant : ${{ matrix.kernel.name }}"
-          echo "Repo    : ${{ env.KERNEL_REPO }}"
-          echo "Branch  : ${{ env.KERNEL_BRANCH }}"
-          echo "KSU     : ${{ matrix.kernel.ksu_type }}"
-          echo "SHA     : ${{ github.sha }}"
-          echo "Rejects : ${REJ_COUNT:-0}"
+          VARIANT="${{ matrix.kernel.name }}"
+          KSU_TYPE="${{ matrix.kernel.ksu_type }}"
+
+          # Resolve KSU label and version
+          if [ "$KSU_TYPE" = "wild" ]; then
+            KSU_LABEL="Wild-KSU"
+            KSU_VER="${{ env.WILD_KSU_TAG }}"
+          elif [ "$KSU_TYPE" = "suki" ]; then
+            KSU_LABEL="SukiSU"
+            KSU_VER="${{ env.SUKI_TAG }}"
+          else
+            KSU_LABEL="None (NoKSU)"
+            KSU_VER="—"
+          fi
+
+          # Resolve SUSFS version (fetched in package stage but pin commit shown in build)
+          if [ "$KSU_TYPE" = "wild" ]; then
+            SUSFS_VER="pinned d8358055 (gki-android13-5.15)"
+          elif [ "$KSU_TYPE" = "suki" ]; then
+            SUSFS_VER="pinned cc7763b9 (gki-android13-5.15)"
+          else
+            SUSFS_VER="—"
+          fi
+
+          # BBG presence
+          if [ "$KSU_TYPE" = "wild" ]; then
+            BBG_STATUS="✅ Included (CONFIG_BBG=y)"
+          else
+            BBG_STATUS="❌ Not included"
+          fi
+
+          # KPM presence
+          if [ "$KSU_TYPE" = "suki" ]; then
+            KPM_STATUS="✅ Included (CONFIG_KPM=y + binary patch)"
+          else
+            KPM_STATUS="❌ Not included"
+          fi
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Build Summary — ${VARIANT}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Kernel   : ${{ env.KERNEL_VERSION }}"
+          echo "  Repo     : ${{ env.KERNEL_REPO }}"
+          echo "  Branch   : ${{ env.KERNEL_BRANCH }}"
+          echo "  SHA      : ${{ github.sha }}"
+          echo "────────────────────────────────────────"
+          echo "  KSU      : ${KSU_LABEL} ${KSU_VER}"
+          echo "  SUSFS    : ${SUSFS_VER}"
+          echo "  BBG      : ${BBG_STATUS}"
+          echo "  KPM      : ${KPM_STATUS}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: "📦 Create variant ZIP"
         working-directory: ${{ env.WORK_DIR }}
@@ -764,6 +733,51 @@ jobs:
           echo "📋 ZIPs:"
           ls -lh ./zips/
 
+      - name: "📋 Download build audit logs"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p ./audit_logs
+          DATE_TAG="${{ env.DATE_TAG }}"
+
+          # Fetch all jobs for this run, filter build jobs
+          gh api /repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs \
+            --jq '.jobs[] | select(.name | test("Build ")) | [.id, .name] | @tsv' \
+            > /tmp/build_jobs.tsv
+
+          echo "📋 Build jobs:"
+          cat /tmp/build_jobs.tsv
+
+          while IFS=$'\t' read -r JOB_ID JOB_NAME; do
+            SAFE_NAME=$(echo "$JOB_NAME" | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g')
+            echo "⬇️  $JOB_NAME ($JOB_ID)"
+            gh api /repos/${{ github.repository }}/actions/jobs/${JOB_ID}/logs \
+              > "./audit_logs/${SAFE_NAME}.log" 2>/dev/null || \
+              echo "[WARN] Could not fetch logs for $JOB_NAME" \
+              > "./audit_logs/${SAFE_NAME}.log"
+          done < /tmp/build_jobs.tsv
+
+          # Run metadata
+          cat > ./audit_logs/00_run_info.txt << EOF
+          Run      : #${{ github.run_number }}
+          Run ID   : ${{ github.run_id }}
+          Repo     : ${{ github.repository }}
+          SHA      : ${{ github.sha }}
+          Branch   : ${{ github.ref_name }}
+          Date     : $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          Actions  : https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EOF
+
+          echo "📂 Log files:"
+          ls -lh ./audit_logs/
+
+          LOG_ZIP="build-audit-logs-${DATE_TAG}.zip"
+          zip -r9 "$LOG_ZIP" audit_logs/
+          LOG_SIZE_MB=$(echo "scale=2; $(stat -c%s "$LOG_ZIP") / 1024 / 1024" | bc)
+          echo "LOG_AUDIT_ZIP=$LOG_ZIP" >> $GITHUB_ENV
+          echo "LOG_AUDIT_SIZE_MB=$LOG_SIZE_MB" >> $GITHUB_ENV
+          echo "✅ Audit log packed: $LOG_ZIP (${LOG_SIZE_MB} MB)"
+
       - name: "🧹 Cleanup old release assets"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -786,13 +800,14 @@ jobs:
           if [ "${{ inputs.is_testing }}" = "true" ]; then
             BODY="> ⚠️ **Testing build** — use at your own risk."$'\n\n'
           fi
-          BODY="${BODY}**Wild-KSU:** \`${{ env.WILD_TAG }}\`"$'\n'
-          BODY="${BODY}**SukiSU-Ultra:** \`${{ env.SUKI_TAG }}\`"$'\n'
+          BODY="${BODY}**Wild-KSU:** [${{ env.WILD_TAG }}](https://github.com/WildKernels/Wild_KSU/releases/tag/${{ env.WILD_TAG }})"$'\n'
+          BODY="${BODY}**SukiSU-Ultra:** [${{ env.SUKI_TAG }}](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases/tag/${{ env.SUKI_TAG }})"$'\n'
           BODY="${BODY}**SUSFS:** [${{ env.SUSFS_VERSION }}](${{ env.SUSFS_MODULE_URL }})"$'\n\n'
-          BODY="${BODY}**Variants:** Wild-KSU · SukiSU-Ultra · NoKSU"$'\n'
-          BODY="${BODY}**Features:** SUSFS ඞ · BBG (Wild) · KPM (Suki) · Thin LTO · TCP (BBR, Westwood default)"$'\n\n'
+          BODY="${BODY}**Variants:** Wild-KSU · SukiSU · NoKSU"$'\n'
+          BODY="${BODY}**Features:** SUSFS ඞ · BBG (Wild) · KPM (SukiSU) · Thin LTO · TCP (BBR, Westwood default)"$'\n\n'
           BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
-          BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"
+          BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"$'\n\n'
+          BODY="${BODY}> 📋 \`build-audit-logs-*.zip\` — full GitHub Actions raw log, attached for transparency."
           echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
           echo "$BODY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
@@ -802,7 +817,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: ./zips/*.zip
+          files: |
+            ./zips/*.zip
+            ${{ env.LOG_AUDIT_ZIP }}
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_NAME }}
           prerelease: ${{ env.IS_PRERELEASE }}
@@ -834,7 +851,7 @@ jobs:
           MESSAGE="<b>${STATUS_ICON} ${STATUS_TEXT}</b>%0A%0A"
           MESSAGE="${MESSAGE}<b>🔄</b> Run #${{ github.run_number }} · sapphire%0A"
           MESSAGE="${MESSAGE}<b>🏷️</b> <code>${{ env.RELEASE_TAG }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>📌</b> Wild <code>${{ env.WILD_TAG }}</code> · Suki <code>${{ env.SUKI_TAG }}</code>%0A"
+          MESSAGE="${MESSAGE}<b>📌</b> Wild <code>${{ env.WILD_TAG }}</code> · SukiSU <code>${{ env.SUKI_TAG }}</code>%0A"
           MESSAGE="${MESSAGE}<b>📦</b> Wild · SukiSU · NoKSU%0A"
           MESSAGE="${MESSAGE}<b>⏱️</b> $((DURATION / 60))m $((DURATION % 60))s%0A"
           MESSAGE="${MESSAGE}<b>🔨</b> <a href='${COMMIT_URL}'>${SHORT_SHA}</a>%0A"
@@ -854,6 +871,26 @@ jobs:
               -F document=@"$ZIP" \
               -F caption="📦 $(basename $ZIP) — ${SIZE_MB} MB" || true
           done
+
+          # Send audit log — max 45MB for Telegram bot API
+          LOG_ZIP="${{ env.LOG_AUDIT_ZIP }}"
+          LOG_SIZE_MB="${{ env.LOG_AUDIT_SIZE_MB }}"
+          if [ -f "$LOG_ZIP" ]; then
+            if (( $(echo "$LOG_SIZE_MB < 45" | bc -l) )); then
+              curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendDocument" \
+                -F chat_id="$CHAT_ID" \
+                -F document=@"$LOG_ZIP" \
+                -F caption="📋 Build audit log — ${LOG_SIZE_MB} MB (full GitHub Actions raw log)" || true
+            else
+              ENCODED_TAG=$(echo "${{ env.RELEASE_TAG }}" | sed 's/+/%2B/g')
+              RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${ENCODED_TAG}"
+              curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
+                -d chat_id="$CHAT_ID" \
+                -d text="📋 Audit log too large to send via bot (${LOG_SIZE_MB} MB) — available in the <a href='${RELEASE_URL}'>release</a>." \
+                -d parse_mode="HTML" \
+                -d disable_web_page_preview=true || true
+            fi
+          fi
 
   notify-failure:
     name: "❌ Notify Failure"
