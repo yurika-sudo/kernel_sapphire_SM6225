@@ -414,7 +414,7 @@ jobs:
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           sed -i 's/ cgroup_disable=pressure//' "$CONFIG_FILE"
-          sed -i 's/CONFIG_CMDLINE="/&audit=0 uclamp_min=0 cpufreq.default_governor=schedutil net.core.default_qdisc=cake workqueue.power_efficient=1 slub_debug=- page_owner=off /' "$CONFIG_FILE"
+          sed -i 's/CONFIG_CMDLINE="/&audit=0 net.core.default_qdisc=cake workqueue.power_efficient=1 slub_debug=- page_owner=off /' "$CONFIG_FILE"
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
           CONFIG_OVERLAY_FS=y
           CONFIG_OVERLAY_FS_REDIRECT_DIR=y
@@ -454,6 +454,9 @@ jobs:
           CONFIG_IP_SET_LIST_SET=y
           CONFIG_ZRAM_WRITEBACK=y
           # CONFIG_ZRAM_MEMORY_TRACKING is not set
+          CONFIG_ZRAM_DEF_COMP_ZSTD=y
+          # CONFIG_ZRAM_DEF_COMP_LZORLE is not set
+          CONFIG_ZRAM_DEF_COMP="zstd"
           CONFIG_LRU_GEN=y
           CONFIG_LRU_GEN_ENABLED=y
           CONFIG_NET_SCH_FQ=y
@@ -596,6 +599,9 @@ jobs:
           export CCACHE_DIR="$HOME/.ccache"
           export CC="ccache clang"
           export CXX="ccache clang++"
+          export CCACHE_CPP2=1
+          export CCACHE_SLOPPINESS="file_stat_matches,include_file_mtime,time_macros"
+          mkdir -p "$HOME/.ccache"
 
           START_BUILD=$(date +%s)
 
