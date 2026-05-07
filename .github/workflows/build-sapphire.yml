@@ -299,10 +299,8 @@ jobs:
           cd ..
 
           # Apply kernel-side SUSFS base patch (fs/ and include/linux/)
-          # Pin to cc7763b9 (Apr 18) — introduced static_key, same sync point as SukiSU builtin Apr 19
-          # pre-variable-rename (befaffc7 Apr 24), so variable names match SukiSU
+          # Unpinned — tracking HEAD to stay in sync with SukiSU builtin branch
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          cd susfs4ksu && git checkout cc7763b9 && cd ..
 
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
           if [ -f "$SUSFS_PATCH" ]; then
@@ -644,7 +642,7 @@ jobs:
           if [ "$KSU_TYPE" = "wild" ]; then
             SUSFS_VER="pinned d8358055 (gki-android13-5.15)"
           elif [ "$KSU_TYPE" = "suki" ]; then
-            SUSFS_VER="pinned cc7763b9 (gki-android13-5.15)"
+            SUSFS_VER="HEAD (gki-android13-5.15)"
           else
             SUSFS_VER="—"
           fi
