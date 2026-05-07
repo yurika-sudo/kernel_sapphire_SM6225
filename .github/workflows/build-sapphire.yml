@@ -88,53 +88,13 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: "🧹 Smart disk cleanup"
-        run: |
-          AVAIL_GB=$(df / --output=avail -BG | tail -1 | tr -d 'G ')
-          echo "Available disk: ${AVAIL_GB}GB"
-          if [ "$AVAIL_GB" -lt 30 ]; then
-            echo "⚠️ Low disk (<30GB), running cleanup..."
-            sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-              /usr/local/share/boost /usr/share/swift /usr/local/.ghcup \
-              /usr/share/haskell-stack 2>/dev/null || true
-            sudo apt-get remove -y --auto-remove \
-              azure-cli google-cloud-sdk google-chrome-stable firefox \
-              dotnet-* mono-* php* ruby* 2>/dev/null || true
-            sudo apt-get autoremove -y -qq 2>/dev/null || true
-            AVAIL_AFTER=$(df / --output=avail -BG | tail -1 | tr -d 'G ')
-            echo "✅ After cleanup: ${AVAIL_AFTER}GB"
-          else
-            echo "✅ Sufficient disk, skipping cleanup"
-          fi
-          # Set ccache size: 40% of available (capped 4-12GB)
-          AVAIL_NOW=$(df / --output=avail -BG | tail -1 | tr -d 'G ')
-          CCACHE_SIZE=$(( AVAIL_NOW * 40 / 100 ))
-          [ "$CCACHE_SIZE" -lt 4 ] && CCACHE_SIZE=4
-          [ "$CCACHE_SIZE" -gt 12 ] && CCACHE_SIZE=12
-          echo "CCACHE_MAX_SIZE=${CCACHE_SIZE}G" >> $GITHUB_ENV
-          echo "📦 ccache will use max ${CCACHE_SIZE}GB"
-
-      - name: "♻️ Restore ccache"
-        uses: actions/cache@v4
-        with:
-          path: ~/.ccache
-          key: ccache-${{ matrix.kernel.name }}-clang-r547379-${{ github.ref_name }}
-          restore-keys: |
-            ccache-${{ matrix.kernel.name }}-clang-r547379-
-            ccache-${{ matrix.kernel.name }}-
-
       - name: "🛠️ Setup workspace"
         run: |
           mkdir -p ${{ env.KERNEL_LOC_DIR }}
           echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
           sudo apt-get update -qq
-          sudo apt-get install -y repo rsync aria2 bc bison build-essential flex git libelf-dev libssl-dev curl jq ccache
-          ccache --set-config=max_size="${{ env.CCACHE_MAX_SIZE }}"
-          ccache --set-config=compression=true
-          ccache --set-config=direct_mode=true
-          ccache -z
-          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+          sudo apt-get install -y repo rsync aria2 bc bison build-essential flex git libelf-dev libssl-dev curl jq
 
           # Shared patch helper — sourced by every patch step
           cat > /tmp/apply_patch.sh << 'APHELPER'
@@ -409,12 +369,41 @@ jobs:
 
           echo "--- common patches done ---"
 
+      - name: "🐳 Setup Droidspaces kernel support"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          set +e
+          source /tmp/apply_patch.sh
+
+          # kABI fix — required before enabling SYSVIPC/IPC_NS on GKI < 6.12.
+          # Without this patch, task_struct offsets shift and vendor modules (GPU, camera) crash on boot.
+          apply_patch \
+            "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/refs/heads/main/Documentation/resources/kernel-patches/GKI/below-kernel-6.12/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch" \
+            "droidspaces_sysvipc_kabi_fix" \
+            "1"
+
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_SYSVIPC=y
+          CONFIG_POSIX_MQUEUE=y
+          CONFIG_IPC_NS=y
+          CONFIG_PID_NS=y
+          CONFIG_DEVTMPFS=y
+          CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
+          CONFIG_NETFILTER_XT_TARGET_REJECT=y
+          CONFIG_NETFILTER_XT_TARGET_LOG=y
+          CONFIG_NETFILTER_XT_MATCH_RECENT=y
+          CONFIG_NETFILTER_XT_SET=y
+          EOF
+
+          echo "--- droidspaces configs done ---"
+
       - name: "⚙️ Add base kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           sed -i 's/ cgroup_disable=pressure//' "$CONFIG_FILE"
-          sed -i 's/CONFIG_CMDLINE="/&audit=0 net.core.default_qdisc=cake workqueue.power_efficient=1 slub_debug=- page_owner=off /' "$CONFIG_FILE"
+          sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CONFIG_FILE"
           sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
           CONFIG_OVERLAY_FS=y
           CONFIG_OVERLAY_FS_REDIRECT_DIR=y
@@ -454,14 +443,10 @@ jobs:
           CONFIG_IP_SET_LIST_SET=y
           CONFIG_ZRAM_WRITEBACK=y
           # CONFIG_ZRAM_MEMORY_TRACKING is not set
-          CONFIG_ZRAM_DEF_COMP_ZSTD=y
-          # CONFIG_ZRAM_DEF_COMP_LZORLE is not set
-          CONFIG_ZRAM_DEF_COMP="zstd"
           CONFIG_LRU_GEN=y
           CONFIG_LRU_GEN_ENABLED=y
           CONFIG_NET_SCH_FQ=y
           CONFIG_NET_SCH_CAKE=y
-          CONFIG_DEFAULT_NET_SCH="cake"
           CONFIG_TCP_CONG_VEGAS=y
           CONFIG_TCP_CONG_YEAH=y
           CONFIG_TCP_CONG_VENO=y
@@ -596,12 +581,6 @@ jobs:
           export SOURCE_DATE_EPOCH="${{ env.SOURCE_DATE_EPOCH }}"
           export KBUILD_BUILD_USER="superuseryu"
           export KBUILD_BUILD_HOST="github"
-          export CCACHE_DIR="$HOME/.ccache"
-          export CC="ccache clang"
-          export CXX="ccache clang++"
-          export CCACHE_CPP2=1
-          export CCACHE_SLOPPINESS="file_stat_matches,include_file_mtime,time_macros"
-          mkdir -p "$HOME/.ccache"
 
           START_BUILD=$(date +%s)
 
@@ -617,9 +596,6 @@ jobs:
           DURATION=$((END_BUILD - START_BUILD))
           echo "✅ Build completed in $((DURATION / 60))m $((DURATION % 60))s"
           echo "duration=$DURATION" >> $GITHUB_OUTPUT
-
-          echo "📊 ccache stats:"
-          ccache -s | grep -E "Hits|Misses|cache size|Cacheable" || true
 
       - name: "🔍 Verify kernel version"
         working-directory: ${{ env.WORK_DIR }}/out/dist
