@@ -311,9 +311,9 @@ jobs:
           cp -f susfs4ksu/kernel_patches/fs/* fs/
           cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
 
-          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
-            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/ || true
-          fi
+          # NOTE: intentionally NOT copying susfs4ksu/kernel_patches/KernelSU/kernel/* here.
+          # SukiSU builtin branch already integrates SUSFS — overwriting sucompat.c/sulog/event.c
+          # with SUSFS upstream versions causes type errors and unterminated #ifdef blocks.
 
           # Inject susfs_init if ksu.c exists and susfs_init not already there
           KSU_C_FILE="KernelSU/kernel/ksu.c"
