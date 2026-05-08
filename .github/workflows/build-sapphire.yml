@@ -299,8 +299,10 @@ jobs:
           cd ..
 
           # Apply kernel-side SUSFS base patch (fs/ and include/linux/)
-          # Unpinned — tracking HEAD to stay in sync with SukiSU builtin branch
+          # Pin to cc7763b9 (Apr 18) — introduced static_key, same sync point as SukiSU builtin Apr 19
+          # pre-variable-rename (befaffc7 Apr 24), so variable names match SukiSU
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+          cd susfs4ksu && git checkout cc7763b9 && cd ..
 
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
           if [ -f "$SUSFS_PATCH" ]; then
@@ -311,9 +313,9 @@ jobs:
           cp -f susfs4ksu/kernel_patches/fs/* fs/
           cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
 
-          # NOTE: intentionally NOT copying susfs4ksu/kernel_patches/KernelSU/kernel/* here.
-          # SukiSU builtin branch already integrates SUSFS — overwriting sucompat.c/sulog/event.c
-          # with SUSFS upstream versions causes type errors and unterminated #ifdef blocks.
+          if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
+            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/ || true
+          fi
 
           # Inject susfs_init if ksu.c exists and susfs_init not already there
           KSU_C_FILE="KernelSU/kernel/ksu.c"
@@ -366,35 +368,6 @@ jobs:
           apply_patch "${BASE_URL}/increase_ext4_default_commit_age.patch" "increase_ext4_default_commit_age"
 
           echo "--- common patches done ---"
-
-      - name: "🐳 Setup Droidspaces kernel support"
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          set +e
-          source /tmp/apply_patch.sh
-
-          # kABI fix — required before enabling SYSVIPC/IPC_NS on GKI < 6.12.
-          # Without this patch, task_struct offsets shift and vendor modules (GPU, camera) crash on boot.
-          apply_patch \
-            "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/refs/heads/main/Documentation/resources/kernel-patches/GKI/below-kernel-6.12/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch" \
-            "droidspaces_sysvipc_kabi_fix" \
-            "1"
-
-          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
-          CONFIG_SYSVIPC=y
-          CONFIG_POSIX_MQUEUE=y
-          CONFIG_IPC_NS=y
-          CONFIG_PID_NS=y
-          CONFIG_DEVTMPFS=y
-          CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
-          CONFIG_NETFILTER_XT_TARGET_REJECT=y
-          CONFIG_NETFILTER_XT_TARGET_LOG=y
-          CONFIG_NETFILTER_XT_MATCH_RECENT=y
-          CONFIG_NETFILTER_XT_SET=y
-          EOF
-
-          echo "--- droidspaces configs done ---"
 
       - name: "⚙️ Add base kernel configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -642,7 +615,7 @@ jobs:
           if [ "$KSU_TYPE" = "wild" ]; then
             SUSFS_VER="pinned d8358055 (gki-android13-5.15)"
           elif [ "$KSU_TYPE" = "suki" ]; then
-            SUSFS_VER="HEAD (gki-android13-5.15)"
+            SUSFS_VER="pinned cc7763b9 (gki-android13-5.15)"
           else
             SUSFS_VER="—"
           fi
