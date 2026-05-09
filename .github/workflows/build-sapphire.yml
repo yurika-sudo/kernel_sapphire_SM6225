@@ -301,9 +301,9 @@ jobs:
           echo "-- SukiSU tag: $SUKI_TAG"
           cd ..
 
-          # Pin susfs to d835805 (Apr 12) — exact version ShirkNeko paired with ec9a35b
+          # Pin susfs to bf9bf009 (Apr 27) — follow the commit pin from wild dev
           git clone https://github.com/ShirkNeko/susfs4ksu.git -b gki-android13-5.15
-          cd susfs4ksu && git checkout d835805 && cd ..
+          cd susfs4ksu && git checkout bf9bf009 && cd ..
 
           # Apply base SUSFS patch with fuzz — || true to survive partial hunks
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
