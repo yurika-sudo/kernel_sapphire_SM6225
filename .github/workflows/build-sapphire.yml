@@ -289,9 +289,9 @@ jobs:
           fi
 
           cd KernelSU
-          # Pin to ec9a35b (Apr 15) — last commit used by ShirkNeko in proven working run #94
+          # Pin to d43e250 (Apr 15) — pre-adb_root, stable with susfs d835805
           git fetch --depth=100 2>/dev/null || true
-          git checkout ec9a35b
+          git checkout d43e250
           git fetch --tags 2>/dev/null || true
           SUKI_TAG=$(git describe --tags --abbrev=0 2>/dev/null || \
             curl -sf "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest" \
