@@ -289,6 +289,9 @@ jobs:
           fi
 
           cd KernelSU
+          # Pin to ec9a35b (Apr 15) — last commit used by ShirkNeko in proven working run #94
+          git fetch --depth=100 2>/dev/null || true
+          git checkout ec9a35b
           git fetch --tags 2>/dev/null || true
           SUKI_TAG=$(git describe --tags --abbrev=0 2>/dev/null || \
             curl -sf "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest" \
@@ -298,21 +301,16 @@ jobs:
           echo "-- SukiSU tag: $SUKI_TAG"
           cd ..
 
-          # Clone ShirkNeko susfs4ksu for the kernel VFS-side files only.
+          # Pin susfs to d835805 (Apr 12) — exact version ShirkNeko paired with ec9a35b
           git clone https://github.com/ShirkNeko/susfs4ksu.git -b gki-android13-5.15
+          cd susfs4ksu && git checkout d835805 && cd ..
 
-          # IMPORTANT: Do NOT apply 50_add_susfs_in_gki-android13-5.15.patch for SukiSU.
-          #
-          # The ShirkNeko 50 patch targets drivers/kernelsu/feature/sucompat.c and
-          # sulog/event.c via the drivers/kernelsu symlink.  SukiSU 'builtin' branch
-          # already ships these files with SUSFS fully integrated.  Applying the patch
-          # creates conflicting #ifdef CONFIG_KSU_SUSFS blocks with no matching #endif,
-          # producing:
-          #   sucompat.c:51:2: error: unterminated conditional directive
-          #   sulog/event.c:373:73: error: incompatible type 'struct user_arg_ptr'
-          #
-          # Fix: only pull the kernel VFS-side SUSFS files (fs/ + include/linux/).
-          # The KernelSU-side integration is already done by SukiSU builtin.
+          # Apply base SUSFS patch with fuzz — || true to survive partial hunks
+          SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
+          if [ -f "$SUSFS_PATCH" ]; then
+            patch -p1 --fuzz=3 < "$SUSFS_PATCH" || true
+          fi
+
           mkdir -p fs include/linux
           cp -f susfs4ksu/kernel_patches/fs/* fs/
           cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
@@ -647,7 +645,7 @@ jobs:
           if [ "$KSU_TYPE" = "wild" ]; then
             SUSFS_VER="pinned d8358055 (gki-android13-5.15)"
           elif [ "$KSU_TYPE" = "suki" ]; then
-            SUSFS_VER="HEAD (gki-android13-5.15)"
+            SUSFS_VER="pinned d835805 (gki-android13-5.15)"
           else
             SUSFS_VER="—"
           fi
