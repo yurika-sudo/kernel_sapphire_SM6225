@@ -234,9 +234,9 @@ jobs:
           echo "-- Wild KSU tag: $KSU_TAG"
           cd ..
 
-          # Pin to d8358055 (Apr 12) — pre-static_key, compatible with Wild KSU dev
+          # Pin to bf9bf009 (Apr 27) — following commits from wild dev
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          cd susfs4ksu && git checkout d8358055 && cd ..
+          cd susfs4ksu && git checkout bf9bf009 && cd ..
 
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
           if [ -f "$SUSFS_PATCH" ]; then
