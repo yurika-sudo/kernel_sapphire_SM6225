@@ -234,9 +234,9 @@ jobs:
           echo "-- Wild KSU tag: $KSU_TAG"
           cd ..
 
-          # Pin to bf9bf009 (Apr 27) — following commits from wild dev
+          # Pin to d8358055 (Apr 12) — pre-static_key, compatible with Wild KSU dev
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          cd susfs4ksu && git checkout bf9bf009 && cd ..
+          cd susfs4ksu && git checkout d8358055 && cd ..
 
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
           if [ -f "$SUSFS_PATCH" ]; then
@@ -301,9 +301,9 @@ jobs:
           echo "-- SukiSU tag: $SUKI_TAG"
           cd ..
 
-          # Pin susfs to bf9bf009 (Apr 27) — follow the commit pin from wild dev
+          # Pin susfs to d835805 (Apr 12) — exact version ShirkNeko paired with ec9a35b
           git clone https://github.com/ShirkNeko/susfs4ksu.git -b gki-android13-5.15
-          cd susfs4ksu && git checkout bf9bf009 && cd ..
+          cd susfs4ksu && git checkout d835805 && cd ..
 
           # Apply base SUSFS patch with fuzz — || true to survive partial hunks
           SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
