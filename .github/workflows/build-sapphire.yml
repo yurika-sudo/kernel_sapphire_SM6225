@@ -24,8 +24,7 @@ jobs:
     outputs:
       start_time: ${{ steps.ts.outputs.start_time }}
     steps:
-      - name: "Record start time"
-        id: ts
+      - id: ts
         run: echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
 
   build-kernels:
@@ -36,7 +35,6 @@ jobs:
       fail-fast: false
       matrix:
         kernel:
-          # GKI + Wild-KSU
           - name: "GKI-Wild"
             dir: "common_gki_wild"
             repo_name: "common"
@@ -48,8 +46,6 @@ jobs:
             zip_prefix: "GKI_Wild"
             ksu_type: "wild"
 
-
-          # GKI + SukiSU-Ultra
           - name: "GKI-SukiSU"
             dir: "common_gki_suki"
             repo_name: "common"
@@ -61,7 +57,6 @@ jobs:
             zip_prefix: "GKI_SukiSU"
             ksu_type: "suki"
 
-          # GKI vanilla
           - name: "GKI-NoKSU"
             dir: "common_gki_noksu"
             repo_name: "common"
@@ -82,77 +77,13 @@ jobs:
       WORK_DIR: ${{ github.workspace }}
 
     steps:
-
-      - name: "📦 Checkout repository"
+      - name: "📦 Checkout"
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: "🛠️ Setup workspace"
-        run: |
-          mkdir -p ${{ env.KERNEL_LOC_DIR }}
-          echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
-          sudo apt-get update -qq
-          sudo apt-get install -y repo rsync aria2 bc bison build-essential flex git libelf-dev libssl-dev curl jq
-
-          # Shared patch helper — sourced by every patch step
-          cat > /tmp/apply_patch.sh << 'APHELPER'
-          apply_patch() {
-            local SRC="$1"
-            local NAME="$2"
-            local STRICT="${3:-0}"
-            local TMP="/tmp/p_${NAME//[^a-zA-Z0-9]/_}"
-
-            if [[ "$SRC" == http* ]]; then
-              if ! curl -LSs --fail "$SRC" -o "$TMP" 2>/dev/null; then
-                echo "[SKIP] $NAME — download failed"
-                return 0
-              fi
-            else
-              if [ ! -f "$SRC" ]; then
-                echo "[SKIP] $NAME — file not found: $SRC"
-                return 0
-              fi
-              cp "$SRC" "$TMP"
-            fi
-
-            # Sanity check 1: verify target files exist in source tree
-            local missing=""
-            while IFS= read -r line; do
-              [[ "$line" =~ ^---\ a/(.+)$ ]] || continue
-              local t="${BASH_REMATCH[1]}"
-              [[ "$t" == "/dev/null" ]] && continue
-              [ -f "$t" ] || missing="$missing $t"
-            done < "$TMP"
-
-            if [ -n "$missing" ]; then
-              echo "[SKIP] $NAME — missing targets:$missing"
-              rm -f "$TMP"
-              return 0
-            fi
-
-            # Sanity check 2: dry-run
-            if ! patch -p1 --dry-run --forward --quiet < "$TMP" 2>/dev/null; then
-              echo "[SKIP] $NAME — dry-run failed (already applied or conflict)"
-              rm -f "$TMP"
-              return 0
-            fi
-
-            if patch -p1 --forward < "$TMP"; then
-              echo "[OK]  $NAME"
-            else
-              if [ "$STRICT" = "1" ]; then
-                echo "[FAIL] $NAME — strict mode"
-                rm -f "$TMP"
-                return 1
-              fi
-              echo "[WARN] $NAME — apply failed, skipped"
-            fi
-
-            rm -f "$TMP"
-          }
-          APHELPER
+        uses: ./.github/actions/setup-env
 
       - name: "🌟 Clone kernel source"
         working-directory: ./${{ env.KERNEL_LOC_DIR }}
@@ -160,31 +91,27 @@ jobs:
           git clone --recursive --branch ${{ env.KERNEL_BRANCH }} \
             ${{ env.KERNEL_REPO }} ${{ env.KERNEL_NAME }} --depth=1
 
-      - name: "📥 Initialize AOSP repo and toolchains"
+      - name: "📥 AOSP repo + toolchains"
         working-directory: ${{ env.WORK_DIR }}
         run: |
           repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15-lts --depth=1
           repo sync --optimized-fetch --prune --no-clone-bundle --no-tags -j$(nproc --all)
-
-          rm -rf .repo
-          rm -rf common
+          rm -rf .repo common
 
           aria2c -x 16 -s 16 -o prebuilts/clang/host/linux-x86/clang-r547379.tar.gz \
             "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
           mkdir -p prebuilts/clang/host/linux-x86/clang-r547379
           tar -xzf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz \
             -C prebuilts/clang/host/linux-x86/clang-r547379
-          rm -rf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz
-
-          rm -rf prebuilts/clang/host/linux-x86/clang-3289846
-          rm -rf prebuilts/clang/host/linux-x86/clang-r450784e
-          rm -rf prebuilts/clang/host/linux-x86/clang-stable
+          rm -rf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz \
+            prebuilts/clang/host/linux-x86/clang-3289846 \
+            prebuilts/clang/host/linux-x86/clang-r450784e \
+            prebuilts/clang/host/linux-x86/clang-stable
 
           sed -i \
             -e 's/^BRANCH=.*/BRANCH=${{ matrix.kernel.config_branch }}/' \
             -e 's/^CLANG_VERSION=.*/CLANG_VERSION=r547379/' \
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.constants
-
           sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' \
             ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki || true
 
@@ -193,337 +120,74 @@ jobs:
           git clone --depth=1 https://github.com/WildKernels/kernel_patches \
             "${{ github.workspace }}/kernel_patches-main"
 
-      - name: "🛡️ Setup Baseband-guard (BBG)"
+      - name: "🛡️ Setup BBG"
         if: matrix.kernel.ksu_type != 'suki'
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
           ln -sf ../Baseband-guard security/baseband-guard
-
           grep -q "baseband-guard" security/Makefile || \
             echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
-
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' \
             security/Kconfig
-
           grep -q "baseband-guard/Kconfig" security/Kconfig || \
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
             security/Kconfig
 
-      # KSU SETUP — Wild
-      - name: "😋 Setup Wild-KSU with SUSFS"
-        if: matrix.kernel.ksu_type == 'wild'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          set -e
+      - name: "🔑 Setup KSU + SUSFS"
+        uses: ./.github/actions/setup-ksu
+        with:
+          ksu_type: ${{ matrix.kernel.ksu_type }}
+          kernel_dir: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+          work_dir: ${{ env.WORK_DIR }}
 
-          rm -rf ./KernelSU ./drivers/kernelsu ./Wild_KSU
-
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s canary
-
-          if [ ! -d "Wild_KSU" ]; then
-            echo "ERROR: Wild_KSU directory not found!"
-            exit 1
-          fi
-
-          cd Wild_KSU
-          git fetch --tags 2>/dev/null || true
-          KSU_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
-          echo "WILD_KSU_TAG=$KSU_TAG" >> $GITHUB_ENV
-          echo "$KSU_TAG" > ${{ env.WORK_DIR }}/wild_ksu_tag.txt
-          echo "-- Wild KSU tag: $KSU_TAG"
-          cd ..
-
-          # Pin to 4ff360e3 (May 12) — Sync with the upstream
-          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-          cd susfs4ksu && git checkout 4ff360e3 && cd ..
-
-          SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-          if [ -f "$SUSFS_PATCH" ]; then
-            patch -p1 --forward < "$SUSFS_PATCH" || echo "[WARN] susfs base patch had issues, continuing..."
-          fi
-
-          mkdir -p fs include/linux
-          cp -f susfs4ksu/kernel_patches/fs/* fs/
-          cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
-
-          # NOTE: intentionally NOT copying susfs4ksu/kernel_patches/KernelSU/kernel/* here.
-          # Wild_KSU/dev has its own modified sucompat.c/hooks — overwriting with SUSFS's
-          # upstream KernelSU version causes type errors (bool, u64, KSU_FEATURE_SU_COMPAT).
-
-          KSU_C_FILE="Wild_KSU/kernel/ksu.c"
-          if ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
-            grep -q "#include <linux/susfs.h>" "$KSU_C_FILE" || \
-              sed -i '/#include <linux\/fs\.h>/a #include <linux/susfs.h>' "$KSU_C_FILE"
-            grep -q "susfs_init()" "$KSU_C_FILE" || \
-              sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C_FILE" || \
-              sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$KSU_C_FILE"
-          fi
-
-          [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
-            ln -sf ../Wild_KSU drivers/kernelsu
-
-          # Enforce Makefile/Kconfig entries
-          grep -q "obj-.*kernelsu" drivers/Makefile || \
-            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
-          grep -q "kernelsu/Kconfig" drivers/Kconfig || \
-            echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
-
-          rm -rf susfs4ksu
-
-      - name: "🌸 Setup SukiSU with SUSFS + KPM"
-        if: matrix.kernel.ksu_type == 'suki'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          set -e
-
-          rm -rf ./KernelSU ./drivers/kernelsu
-
-          # builtin branch — GKI support with optional SUSFS, creates KernelSU/ dir
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" \
-            | bash -s builtin
-
-          if [ ! -d "KernelSU" ]; then
-            echo "ERROR: KernelSU directory not found!"
-            exit 1
-          fi
-
-          cd KernelSU
-          # Pin to f96f6cd (May 10) — Revert Fix missing #endif in sucompat.c
-          git fetch --depth=100 2>/dev/null || true
-          git checkout f96f6cd
-          git fetch --tags 2>/dev/null || true
-          SUKI_TAG=$(git describe --tags --abbrev=0 2>/dev/null || \
-            curl -sf "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest" \
-            | jq -r '.tag_name' 2>/dev/null || echo "unknown")
-          echo "SUKI_TAG=$SUKI_TAG" >> $GITHUB_ENV
-          echo "$SUKI_TAG" > ${{ env.WORK_DIR }}/suki_ksu_tag.txt
-          echo "-- SukiSU tag: $SUKI_TAG"
-          cd ..
-
-          # Pin susfs to 4ff360e (May 12) — Sync with the upstream
-          git clone https://github.com/ShirkNeko/susfs4ksu.git -b gki-android13-5.15
-          cd susfs4ksu && git checkout 4ff360e && cd ..
-
-          # Apply base SUSFS patch with fuzz — || true to survive partial hunks
-          SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-          if [ -f "$SUSFS_PATCH" ]; then
-            patch -p1 --fuzz=3 < "$SUSFS_PATCH" || true
-          fi
-
-          mkdir -p fs include/linux
-          cp -f susfs4ksu/kernel_patches/fs/* fs/
-          cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
-
-          # Inject susfs_init if ksu.c exists and susfs_init not already there
-          KSU_C_FILE="KernelSU/kernel/ksu.c"
-          if [ -f "$KSU_C_FILE" ] && ! grep -q "susfs_init" "$KSU_C_FILE" 2>/dev/null; then
-            grep -q "#include <linux/susfs.h>" "$KSU_C_FILE" || \
-              sed -i '/#include <linux\/fs\.h>/a #include <linux\/susfs.h>/' "$KSU_C_FILE" || true
-            grep -q "susfs_init()" "$KSU_C_FILE" || \
-              sed -i '/ksu_core_init();/a \tsusfs_init();' "$KSU_C_FILE" || \
-              sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \tsusfs_init(); }' "$KSU_C_FILE" || true
-            echo "[OK]  susfs_init injected into ksu.c"
-          else
-            echo "[SKIP] ksu.c not found or susfs already integrated — skipping injection"
-          fi
-
-          [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
-            ln -sf ../KernelSU drivers/kernelsu
-
-          # Enforce Makefile/Kconfig entries
-          grep -q "obj-.*kernelsu" drivers/Makefile || \
-            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
-          grep -q "kernelsu/Kconfig" drivers/Kconfig || \
-            echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
-
-          rm -rf susfs4ksu
-
-      # PATCHES
-      - name: "⚡ Apply common optimization patches"
+      - name: "⚡ Apply optimization patches"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           set +e
           source /tmp/apply_patch.sh
-
-          BASE_URL="https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/common"
+          BASE="https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/common"
           KP="${{ github.workspace }}/kernel_patches-main/common"
+          apply_patch "$BASE/silence_irq_cpu_logspam.patch"          "silence_irq_cpu_logspam"
+          apply_patch "$BASE/silence_system_logspam.patch"           "silence_system_logspam"
+          apply_patch "$BASE/reduce_cache_pressure.patch"            "reduce_cache_pressure"
+          apply_patch "$BASE/minimise_wakeup_time.patch"             "minimise_wakeup_time"
+          apply_patch "$BASE/reduce_freeze_timeout.patch"            "reduce_freeze_timeout"
+          apply_patch "$BASE/avoid_extra_s2idle_wake_attempts.patch" "avoid_extra_s2idle_wake_attempts"
+          apply_patch "$BASE/adjust_cpu_scan_order.patch"            "adjust_cpu_scan_order"
+          apply_patch "$KP/disable_cache_hot_buddy.patch"            "disable_cache_hot_buddy"
+          apply_patch "$BASE/increase_ext4_default_commit_age.patch" "increase_ext4_default_commit_age"
 
-          # Logging - safe, no functional change
-          apply_patch "${BASE_URL}/silence_irq_cpu_logspam.patch"        "silence_irq_cpu_logspam"
-          apply_patch "${BASE_URL}/silence_system_logspam.patch"         "silence_system_logspam"
-
-          # Memory pressure - stable mm/ tweak
-          apply_patch "${BASE_URL}/reduce_cache_pressure.patch"          "reduce_cache_pressure"
-
-          # Power / wakeup - battery focused
-          apply_patch "${BASE_URL}/minimise_wakeup_time.patch"           "minimise_wakeup_time"
-          apply_patch "${BASE_URL}/reduce_freeze_timeout.patch"          "reduce_freeze_timeout"
-          apply_patch "${BASE_URL}/avoid_extra_s2idle_wake_attempts.patch" "avoid_extra_s2idle_wake_attempts"
-
-          # Scheduler
-          apply_patch "${BASE_URL}/adjust_cpu_scan_order.patch"          "adjust_cpu_scan_order"
-          apply_patch "$KP/disable_cache_hot_buddy.patch"                "disable_cache_hot_buddy"
-
-          # Storage
-          apply_patch "${BASE_URL}/increase_ext4_default_commit_age.patch" "increase_ext4_default_commit_age"
-
-          echo "--- common patches done ---"
-
-      - name: "🐳 Setup Droidspaces kernel support"
+      - name: "🐳 Droidspaces support"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
           set +e
           source /tmp/apply_patch.sh
+          bash ${{ github.workspace }}/scripts/droidspaces.sh \
+            "arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
 
-          # kABI fix — required before enabling SYSVIPC/IPC_NS on GKI < 6.12.
-          # Without this patch, task_struct offsets shift and vendor modules (GPU, camera) crash on boot.
-          apply_patch \
-            "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/refs/heads/main/Documentation/resources/kernel-patches/GKI/below-kernel-6.12/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch" \
-            "droidspaces_sysvipc_kabi_fix" \
-            "1"
+      - name: "⚙️ Kernel configs"
+        uses: ./.github/actions/setup-configs
+        with:
+          ksu_type: ${{ matrix.kernel.ksu_type }}
+          defconfig: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
+          kernel_dir: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
 
-          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
-          CONFIG_SYSVIPC=y
-          CONFIG_POSIX_MQUEUE=y
-          CONFIG_IPC_NS=y
-          CONFIG_PID_NS=y
-          CONFIG_DEVTMPFS=y
-          CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
-          CONFIG_NETFILTER_XT_TARGET_REJECT=y
-          CONFIG_NETFILTER_XT_TARGET_LOG=y
-          CONFIG_NETFILTER_XT_MATCH_RECENT=y
-          CONFIG_NETFILTER_XT_SET=y
-          EOF
-
-          echo "--- droidspaces configs done ---"
-
-      - name: "⚙️ Add base kernel configs"
+      - name: "🏷️ Kernel name + dirty"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
-          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          sed -i 's/ cgroup_disable=pressure//' "$CONFIG_FILE"
-          sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CONFIG_FILE"
-          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
-          CONFIG_OVERLAY_FS=y
-          CONFIG_OVERLAY_FS_REDIRECT_DIR=y
-          CONFIG_OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW=y
-          CONFIG_OVERLAY_FS_INDEX=y
-          CONFIG_OVERLAY_FS_XINO_AUTO=y
-          CONFIG_OVERLAY_FS_METACOPY=y
-          CONFIG_TMPFS_XATTR=y
-          CONFIG_TMPFS_POSIX_ACL=y
-          CONFIG_TCP_CONG_ADVANCED=y
-          CONFIG_TCP_CONG_BBR=y
-          CONFIG_TCP_CONG_WESTWOOD=y
-          CONFIG_TCP_CONG_BIC=n
-          CONFIG_TCP_CONG_HTCP=n
-          CONFIG_DEFAULT_WESTWOOD=y
-          CONFIG_IP_NF_TARGET_TTL=y
-          CONFIG_IP6_NF_TARGET_HL=y
-          CONFIG_IP6_NF_MATCH_HL=y
-          CONFIG_IP6_NF_NAT=y
-          CONFIG_IP_SET=y
-          CONFIG_IP_SET_MAX=65534
-          CONFIG_IP_SET_BITMAP_IP=y
-          CONFIG_IP_SET_BITMAP_IPMAC=y
-          CONFIG_IP_SET_BITMAP_PORT=y
-          CONFIG_IP_SET_HASH_IP=y
-          CONFIG_IP_SET_HASH_IPMARK=y
-          CONFIG_IP_SET_HASH_IPPORT=y
-          CONFIG_IP_SET_HASH_IPPORTIP=y
-          CONFIG_IP_SET_HASH_IPPORTNET=y
-          CONFIG_IP_SET_HASH_IPMAC=y
-          CONFIG_IP_SET_HASH_MAC=y
-          CONFIG_IP_SET_HASH_NETPORTNET=y
-          CONFIG_IP_SET_HASH_NET=y
-          CONFIG_IP_SET_HASH_NETNET=y
-          CONFIG_IP_SET_HASH_NETPORT=y
-          CONFIG_IP_SET_HASH_NETIFACE=y
-          CONFIG_IP_SET_LIST_SET=y
-          CONFIG_ZRAM_WRITEBACK=y
-          # CONFIG_ZRAM_MEMORY_TRACKING is not set
-          CONFIG_LRU_GEN=y
-          CONFIG_LRU_GEN_ENABLED=y
-          CONFIG_NET_SCH_FQ=y
-          CONFIG_NET_SCH_CAKE=y
-          CONFIG_TCP_CONG_VEGAS=y
-          CONFIG_TCP_CONG_YEAH=y
-          CONFIG_TCP_CONG_VENO=y
-          # CONFIG_SLUB_DEBUG_ON is not set
-          # CONFIG_SLUB_STATS is not set
-          # CONFIG_DEBUG_LIST is not set
-          # CONFIG_DEBUG_MEMORY_INIT is not set
-          # CONFIG_RCU_TRACE is not set
-          # CONFIG_PRINTK_CALLER is not set
-          # CONFIG_DEBUG_FS is not set
-          # CONFIG_F2FS_IOSTAT is not set
-          # CONFIG_NTSYNC is not set
-          CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
-          EOF
-
-      - name: "⚙️ Add Wild-KSU + SUSFS configs"
-        if: matrix.kernel.ksu_type == 'wild'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
-          CONFIG_KSU=y
-          CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_SUSFS_SUS_MAP=y
-          CONFIG_KSU_SUSFS_SUS_PATH=y
-          CONFIG_KSU_SUSFS_SUS_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_KSTAT=y
-          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-          CONFIG_KSU_SUSFS_ENABLE_LOG=y
-          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=y
-          CONFIG_BBG=y
-          EOF
-
-      - name: "⚙️ Add SukiSU-Ultra + SUSFS + KPM configs"
-        if: matrix.kernel.ksu_type == 'suki'
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          sed 's/^[[:space:]]*//' >> "$CONFIG_FILE" << 'EOF'
-          CONFIG_KSU=y
-          CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_SUSFS_SUS_MAP=y
-          CONFIG_KSU_SUSFS_SUS_PATH=y
-          CONFIG_KSU_SUSFS_SUS_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_KSTAT=y
-          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-          CONFIG_KSU_SUSFS_ENABLE_LOG=y
-          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=y
-          CONFIG_KPM=y
-          EOF
-
-      - name: "🏷️ Configure kernel name and remove dirty"
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          REPO_SHA="${{ github.sha }}"
-          SHORT_SHA="${REPO_SHA:0:9}"
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:9}"
           sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${SHORT_SHA}\"|" ./scripts/setlocalversion
           sed -i 's/-dirty//' ./scripts/setlocalversion
-
-          # Use kernel source last commit timestamp instead of CI run time.
-          # This prevents DuckDetector buildTime flags from a "too fresh" build.
           KERNEL_TIMESTAMP=$(git log -1 --format=%ct)
           echo "KBUILD_BUILD_TIMESTAMP=$(date -u -d @${KERNEL_TIMESTAMP} +'%a %b %d %T UTC %Y')" >> $GITHUB_ENV
           echo "SOURCE_DATE_EPOCH=${KERNEL_TIMESTAMP}" >> $GITHUB_ENV
-
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add . && git commit -m "clean dirty flag" || true
 
-      - name: "🔩 Fix ABI and build configs"
+      - name: "🔩 Fix ABI + build configs"
         working-directory: ${{ env.WORK_DIR }}
         run: |
           ABI_SCRIPT="build/kernel/abi/compare_to_symbol_list"
@@ -531,39 +195,30 @@ jobs:
             sed -i 's/^\s*exit 1$/    echo "ABI check bypassed"/' "$ABI_SCRIPT"
           elif [ -f "build/abi/compare_to_symbol_list" ]; then
             mv build/abi/compare_to_symbol_list build/abi/compare_to_symbol_list.disabled
-            printf '#!/bin/bash\necho "ABI checking disabled"\nexit 0\n' \
-              > build/abi/compare_to_symbol_list
+            printf '#!/bin/bash\necho "ABI checking disabled"\nexit 0\n' > build/abi/compare_to_symbol_list
             chmod +x build/abi/compare_to_symbol_list
           fi
 
-          sed -i 's/BUILD_SYSTEM_DLKM=1/BUILD_SYSTEM_DLKM=0/' \
-            ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64
-          sed -i '/MODULES_ORDER=android\/gki_aarch64_modules/d' \
-            ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64
-          sed -i '/KMI_SYMBOL_LIST_STRICT_MODE/d' \
-            ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64
+          KN="${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}"
+          sed -i 's/BUILD_SYSTEM_DLKM=1/BUILD_SYSTEM_DLKM=0/' "$KN/build.config.gki.aarch64"
+          sed -i '/MODULES_ORDER=android\/gki_aarch64_modules/d' "$KN/build.config.gki.aarch64"
+          sed -i '/KMI_SYMBOL_LIST_STRICT_MODE/d' "$KN/build.config.gki.aarch64"
 
           GLIBC_VERSION=$(ldd --version 2>/dev/null | head -n 1 | awk '{print $NF}')
           if [ "$(printf '%s\n' "2.38" "$GLIBC_VERSION" | sort -V | head -n1)" = "2.38" ]; then
-            cd ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
             sed -i '/\$(Q)\$(MAKE) -C \$(SUBCMD_SRC) OUTPUT=\$(abspath \$(dir \$@))\/ \$(abspath \$@)/s//$(Q)$(MAKE) -C $(SUBCMD_SRC) EXTRA_CFLAGS="$(CFLAGS)" OUTPUT=$(abspath $(dir $@))\/ $(abspath $@)/' \
-              tools/bpf/resolve_btfids/Makefile 2>/dev/null || true
-            cd ${{ env.WORK_DIR }}
-            echo "[OK]  glibc 2.38 compat fix (host: $GLIBC_VERSION)"
+              "$KN/tools/bpf/resolve_btfids/Makefile" 2>/dev/null || true
+            echo "[OK] glibc 2.38 compat (host: $GLIBC_VERSION)"
           fi
 
-          # Patch AOSP build/_setup_env.sh — this is what actually overrides
-          # KBUILD_BUILD_USER/HOST at build time, not scripts/mkcompile_h.
-          # Covers both syntax variants across AOSP versions.
           SETUP_ENV="build/_setup_env.sh"
           if [ -f "$SETUP_ENV" ]; then
-            sed -i 's/export KBUILD_BUILD_USER=build-user/export KBUILD_BUILD_USER=superuseryu/g' "$SETUP_ENV" || true
-            sed -i 's/${KBUILD_BUILD_USER:-build-user}/${KBUILD_BUILD_USER:-superuseryu}/g' "$SETUP_ENV" || true
-            sed -i 's/export KBUILD_BUILD_HOST=build-host/export KBUILD_BUILD_HOST=github/g' "$SETUP_ENV" || true
-            sed -i 's/${KBUILD_BUILD_HOST:-build-host}/${KBUILD_BUILD_HOST:-github}/g' "$SETUP_ENV" || true
-            echo "[OK]  Patched build/_setup_env.sh — KBUILD_BUILD_USER=superuseryu HOST=github"
-          else
-            echo "[WARN] build/_setup_env.sh not found — skipping"
+            sed -i \
+              -e 's/export KBUILD_BUILD_USER=build-user/export KBUILD_BUILD_USER=superuseryu/g' \
+              -e 's/${KBUILD_BUILD_USER:-build-user}/${KBUILD_BUILD_USER:-superuseryu}/g' \
+              -e 's/export KBUILD_BUILD_HOST=build-host/export KBUILD_BUILD_HOST=github/g' \
+              -e 's/${KBUILD_BUILD_HOST:-build-host}/${KBUILD_BUILD_HOST:-github}/g' \
+              "$SETUP_ENV"
           fi
 
       - name: "🚀 Build kernel"
@@ -572,30 +227,21 @@ jobs:
         timeout-minutes: 45
         run: |
           set -e
-          echo "🚀 Starting kernel build with $(nproc) cores..."
-
-          export LTO=thin
-          export KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
-          export SKIP_ABI_CHECKS=1
-          export SKIP_KMI_CHECK=1
+          export LTO=thin KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
+          export SKIP_ABI_CHECKS=1 SKIP_KMI_CHECK=1
           export KBUILD_BUILD_TIMESTAMP="${{ env.KBUILD_BUILD_TIMESTAMP }}"
           export SOURCE_DATE_EPOCH="${{ env.SOURCE_DATE_EPOCH }}"
-          export KBUILD_BUILD_USER="superuseryu"
-          export KBUILD_BUILD_HOST="github"
+          export KBUILD_BUILD_USER="superuseryu" KBUILD_BUILD_HOST="github"
 
-          START_BUILD=$(date +%s)
-
+          START=$(date +%s)
           if ! KCFLAGS="$KCFLAGS" LLVM_PARALLEL_LINK_JOBS=1 \
             BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
             build/build.sh -j$(nproc) 2>&1 | tee /tmp/build_${{ matrix.kernel.name }}.log; then
-            echo "=== LINKER ERRORS ==="
             grep -E "undefined symbol|error:|ld.lld" /tmp/build_${{ matrix.kernel.name }}.log | tail -30
             exit 1
           fi
-
-          END_BUILD=$(date +%s)
-          DURATION=$((END_BUILD - START_BUILD))
-          echo "✅ Build completed in $((DURATION / 60))m $((DURATION % 60))s"
+          DURATION=$(( $(date +%s) - START ))
+          echo "✅ done in $((DURATION/60))m $((DURATION%60))s"
           echo "duration=$DURATION" >> $GITHUB_OUTPUT
 
       - name: "🔍 Verify kernel version"
@@ -609,101 +255,54 @@ jobs:
           echo "KERNEL_VERSION=$VERSION_CLEAN" >> $GITHUB_ENV
           echo "$VERSION_CLEAN" > kernel_version.txt
 
-      - name: "💉 Patch Image for KPM"
+      - name: "💉 KPM patch"
         if: matrix.kernel.ksu_type == 'suki'
         working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
-          # CONFIG_KPM=y alone is not enough - Image needs a binary patch
-          # to embed the KPM loader so the manager can detect it.
-          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" \
-            -o patch_linux
-          chmod +x patch_linux
-          ./patch_linux
-          rm -f Image
-          mv oImage Image
-          echo "[OK] KPM patch applied"
+          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch_linux
+          chmod +x patch_linux && ./patch_linux
+          rm -f Image && mv oImage Image
 
       - name: "📋 Build summary"
         if: always()
         run: |
-          VARIANT="${{ matrix.kernel.name }}"
           KSU_TYPE="${{ matrix.kernel.ksu_type }}"
-
-          # Resolve KSU label and version
-          if [ "$KSU_TYPE" = "wild" ]; then
-            KSU_LABEL="Wild-KSU"
-            KSU_VER="${{ env.WILD_KSU_TAG }}"
-          elif [ "$KSU_TYPE" = "suki" ]; then
-            KSU_LABEL="SukiSU"
-            KSU_VER="${{ env.SUKI_TAG }}"
-          else
-            KSU_LABEL="None (NoKSU)"
-            KSU_VER="—"
-          fi
-
-          # Resolve SUSFS version (fetched in package stage but pin commit shown in build)
-          if [ "$KSU_TYPE" = "wild" ]; then
-            SUSFS_VER="pinned d8358055 (gki-android13-5.15)"
-          elif [ "$KSU_TYPE" = "suki" ]; then
-            SUSFS_VER="pinned d835805 (gki-android13-5.15)"
-          else
-            SUSFS_VER="—"
-          fi
-
-          # BBG presence
-          if [ "$KSU_TYPE" = "wild" ]; then
-            BBG_STATUS="✅ Included (CONFIG_BBG=y)"
-          else
-            BBG_STATUS="❌ Not included"
-          fi
-
-          # KPM presence
-          if [ "$KSU_TYPE" = "suki" ]; then
-            KPM_STATUS="✅ Included (CONFIG_KPM=y + binary patch)"
-          else
-            KPM_STATUS="❌ Not included"
-          fi
-
+          case "$KSU_TYPE" in
+            wild) KSU_LABEL="Wild-KSU"; KSU_VER="${{ env.WILD_KSU_TAG }}"
+                  SUSFS_VER="pinned d8358055"; BBG="✅"; KPM="❌" ;;
+            suki) KSU_LABEL="SukiSU"; KSU_VER="${{ env.SUKI_TAG }}"
+                  SUSFS_VER="pinned d835805"; BBG="❌"; KPM="✅ (CONFIG_KPM + binary)" ;;
+            *)    KSU_LABEL="None"; KSU_VER="—"; SUSFS_VER="—"; BBG="❌"; KPM="❌" ;;
+          esac
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  Build Summary — ${VARIANT}"
+          echo "  Build Summary — ${{ matrix.kernel.name }}"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  Kernel   : ${{ env.KERNEL_VERSION }}"
-          echo "  Repo     : ${{ env.KERNEL_REPO }}"
-          echo "  Branch   : ${{ env.KERNEL_BRANCH }}"
-          echo "  SHA      : ${{ github.sha }}"
+          echo "  Kernel : ${{ env.KERNEL_VERSION }}"
+          echo "  Branch : ${{ env.KERNEL_BRANCH }}"
+          echo "  SHA    : ${{ github.sha }}"
           echo "────────────────────────────────────────"
-          echo "  KSU      : ${KSU_LABEL} ${KSU_VER}"
-          echo "  SUSFS    : ${SUSFS_VER}"
-          echo "  BBG      : ${BBG_STATUS}"
-          echo "  KPM      : ${KPM_STATUS}"
+          echo "  KSU    : ${KSU_LABEL} ${KSU_VER}"
+          echo "  SUSFS  : ${SUSFS_VER} (gki-android13-5.15)"
+          echo "  BBG    : ${BBG}"
+          echo "  KPM    : ${KPM}"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-      - name: "📦 Create variant ZIP"
+      - name: "📦 Create ZIP"
         working-directory: ${{ env.WORK_DIR }}
         run: |
           set -e
           DATE_TAG=$(date +'%Y%m%d')
           ZIP_NAME="AnyKernel3_${{ matrix.kernel.zip_prefix }}_${DATE_TAG}.zip"
-
           git clone --depth=1 https://github.com/superuseryu/AnyKernel3 ak3_tmp
-
           cp out/dist/Image ak3_tmp/Image
-
-          cd ak3_tmp
-          zip -r9 "../$ZIP_NAME" * -x .git/*
-          cd ..
-
+          cd ak3_tmp && zip -r9 "../$ZIP_NAME" * -x .git/* && cd ..
           ZIP_SIZE_MB=$(echo "scale=2; $(stat -c%s "$ZIP_NAME") / 1024 / 1024" | bc | sed 's/^\./0./')
-          ZIP_SHA256=$(sha256sum "$ZIP_NAME" | cut -d' ' -f1)
-
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
           echo "ZIP_SIZE_MB=$ZIP_SIZE_MB" >> $GITHUB_ENV
-          echo "ZIP_SHA256=$ZIP_SHA256" >> $GITHUB_ENV
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
-
           echo "✅ $ZIP_NAME ($ZIP_SIZE_MB MB)"
 
-      - name: "📤 Upload variant artifact"
+      - name: "📤 Upload artifact"
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.kernel.artifact_name }}
@@ -719,29 +318,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: [setup, build-kernels]
     if: success()
-
     steps:
-      - name: "📥 Download all kernel artifacts"
+      - name: "📥 Download artifacts"
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts/
 
-      - name: "🔖 Get versions"
+      - name: "🔖 Resolve versions"
         run: |
           VERSION_FILE=$(find ./artifacts -name "kernel_version.txt" | head -1)
-          KERNEL_VERSION=$([ -f "$VERSION_FILE" ] && cat "$VERSION_FILE" || echo "5.15.x")
-          echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
-
+          echo "KERNEL_VERSION=$([ -f "$VERSION_FILE" ] && cat "$VERSION_FILE" || echo "5.15.x")" >> $GITHUB_ENV
           SUSFS_VERSION=$(curl -sf https://api.github.com/repos/sidex15/susfs4ksu-module/tags \
             | jq -r '.[0].name' || echo "v1.5.2+_R26")
           echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
           echo "SUSFS_MODULE_URL=https://github.com/sidex15/susfs4ksu-module/releases/latest" >> $GITHUB_ENV
-
-          WILD_TAG=$(find ./artifacts -name "wild_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || echo "unknown")
-          SUKI_TAG=$(find ./artifacts -name "suki_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || echo "unknown")
-          echo "WILD_TAG=$WILD_TAG" >> $GITHUB_ENV
-          echo "SUKI_TAG=$SUKI_TAG" >> $GITHUB_ENV
-
+          echo "WILD_TAG=$(find ./artifacts -name "wild_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || echo "unknown")" >> $GITHUB_ENV
+          echo "SUKI_TAG=$(find ./artifacts -name "suki_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || echo "unknown")" >> $GITHUB_ENV
           DATE_TAG=$(date +'%Y%m%d')
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
           if [ "${{ inputs.is_testing }}" = "true" ]; then
@@ -754,95 +346,68 @@ jobs:
             echo "IS_PRERELEASE=false" >> $GITHUB_ENV
           fi
 
-          echo "Kernel: $KERNEL_VERSION | SUSFS: $SUSFS_VERSION | KSU: $KSU_VERSION"
-
-      - name: "🗂️ Collect ZIP files"
+      - name: "🗂️ Collect ZIPs"
         run: |
           mkdir -p ./zips
           find ./artifacts -name "AnyKernel3_*.zip" -exec cp {} ./zips/ \;
-          echo "📋 ZIPs:"
           ls -lh ./zips/
 
-      - name: "📋 Download build audit logs"
+      - name: "📋 Audit logs"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p ./audit_logs
-          DATE_TAG="${{ env.DATE_TAG }}"
-
-          # Fetch all jobs for this run, filter build jobs
           gh api /repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs \
-            --jq '.jobs[] | select(.name | test("Build ")) | [.id, .name] | @tsv' \
-            > /tmp/build_jobs.tsv
-
-          echo "📋 Build jobs:"
-          cat /tmp/build_jobs.tsv
-
+            --jq '.jobs[] | select(.name | test("Build ")) | [.id, .name] | @tsv' > /tmp/build_jobs.tsv
           while IFS=$'\t' read -r JOB_ID JOB_NAME; do
-            SAFE_NAME=$(echo "$JOB_NAME" | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g')
-            echo "⬇️  $JOB_NAME ($JOB_ID)"
+            SAFE=$(echo "$JOB_NAME" | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g')
             gh api /repos/${{ github.repository }}/actions/jobs/${JOB_ID}/logs \
-              > "./audit_logs/${SAFE_NAME}.log" 2>/dev/null || \
-              echo "[WARN] Could not fetch logs for $JOB_NAME" \
-              > "./audit_logs/${SAFE_NAME}.log"
+              > "./audit_logs/${SAFE}.log" 2>/dev/null || echo "[WARN] $JOB_NAME" > "./audit_logs/${SAFE}.log"
           done < /tmp/build_jobs.tsv
-
-          # Run metadata
           cat > ./audit_logs/00_run_info.txt << EOF
-          Run      : #${{ github.run_number }}
-          Run ID   : ${{ github.run_id }}
-          Repo     : ${{ github.repository }}
-          SHA      : ${{ github.sha }}
-          Branch   : ${{ github.ref_name }}
-          Date     : $(date -u +'%Y-%m-%d %H:%M:%S UTC')
-          Actions  : https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Run    : #${{ github.run_number }}
+          Repo   : ${{ github.repository }}
+          SHA    : ${{ github.sha }}
+          Date   : $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          URL    : https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EOF
-
-          echo "📂 Log files:"
-          ls -lh ./audit_logs/
-
-          LOG_ZIP="build-audit-logs-${DATE_TAG}.zip"
+          LOG_ZIP="build-audit-logs-${{ env.DATE_TAG }}.zip"
           zip -r9 "$LOG_ZIP" audit_logs/
           LOG_SIZE_MB=$(echo "scale=2; $(stat -c%s "$LOG_ZIP") / 1024 / 1024" | bc | sed 's/^\./0./')
           echo "LOG_AUDIT_ZIP=$LOG_ZIP" >> $GITHUB_ENV
           echo "LOG_AUDIT_SIZE_MB=$LOG_SIZE_MB" >> $GITHUB_ENV
-          echo "✅ Audit log packed: $LOG_ZIP (${LOG_SIZE_MB} MB)"
 
       - name: "🧹 Cleanup old release assets"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ env.RELEASE_TAG }}"
-          gh release view "$TAG" --repo ${{ github.repository }} --json assets \
+          gh release view "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} --json assets \
             | jq -r '.assets[].name' \
             | while read asset; do
-                gh release delete-asset "$TAG" "$asset" --repo ${{ github.repository }} --yes 2>/dev/null || true
+                gh release delete-asset "${{ env.RELEASE_TAG }}" "$asset" \
+                  --repo ${{ github.repository }} --yes 2>/dev/null || true
               done
-          echo "✅ Old assets cleaned"
 
-      - name: "📝 Generate release body"
+      - name: "📝 Release body"
         run: |
-          COMMIT_URL="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
           SHORT_SHA="${{ github.sha }}"
           SHORT_SHA="${SHORT_SHA:0:9}"
-
+          COMMIT_URL="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
           BODY=""
-          if [ "${{ inputs.is_testing }}" = "true" ]; then
-            BODY="> ⚠️ **Testing build** — use at your own risk."$'\n\n'
-          fi
+          [ "${{ inputs.is_testing }}" = "true" ] && BODY="> ⚠️ **Testing build** — use at your own risk."$'\n\n'
           BODY="${BODY}**Wild-KSU:** [${{ env.WILD_TAG }}](https://github.com/WildKernels/Wild_KSU/releases/tag/${{ env.WILD_TAG }})"$'\n'
           BODY="${BODY}**SukiSU-Ultra:** [${{ env.SUKI_TAG }}](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases/tag/${{ env.SUKI_TAG }})"$'\n'
           BODY="${BODY}**SUSFS:** [${{ env.SUSFS_VERSION }}](${{ env.SUSFS_MODULE_URL }})"$'\n\n'
           BODY="${BODY}**Variants:** Wild-KSU · SukiSU · NoKSU"$'\n'
-          BODY="${BODY}**Features:** SUSFS ඞ · BBG (Wild) · KPM (SukiSU) · Thin LTO · TCP (BBR, Westwood default)"$'\n\n'
+          BODY="${BODY}**Features:** SUSFS ඞ · BBG (Wild) · KPM (SukiSU) · Thin LTO · Droidspaces · TCP BBR+Westwood"$'\n\n'
           BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
           BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"$'\n\n'
-          BODY="${BODY}> 📋 \`build-audit-logs-*.zip\` — full GitHub Actions raw log, attached for transparency."
+          BODY="${BODY}> 📋 \`build-audit-logs-*.zip\` — full build log for transparency."
           echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
           echo "$BODY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-      - name: "⬆️ Create GitHub Release"
+      - name: "⬆️ Create release"
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -855,7 +420,7 @@ jobs:
           prerelease: ${{ env.IS_PRERELEASE }}
           body: ${{ env.RELEASE_BODY }}
 
-      - name: "🎉 Send Telegram — Build success"
+      - name: "🎉 Telegram — success"
         if: success()
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
@@ -863,62 +428,40 @@ jobs:
           ENCODED_TAG=$(echo "${{ env.RELEASE_TAG }}" | sed 's/+/%2B/g')
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${ENCODED_TAG}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          COMMIT_URL="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
-          SHORT_SHA="${{ github.sha }}"
-          SHORT_SHA="${SHORT_SHA:0:9}"
-
-          BUILD_END=$(date +%s)
-          DURATION=$(( BUILD_END - ${{ needs.setup.outputs.start_time }} ))
-
-          if [ "${{ inputs.is_testing }}" = "true" ]; then
-            STATUS_ICON="🧪"
-            STATUS_TEXT="Testing Build"
-          else
-            STATUS_ICON="✅"
-            STATUS_TEXT="Build Success"
-          fi
-
-          MESSAGE="<b>${STATUS_ICON} ${STATUS_TEXT}</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>🔄</b> Run #${{ github.run_number }} · sapphire%0A"
-          MESSAGE="${MESSAGE}<b>🏷️</b> <code>${{ env.RELEASE_TAG }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>📌</b> Wild <code>${{ env.WILD_TAG }}</code> · SukiSU <code>${{ env.SUKI_TAG }}</code>%0A"
-          MESSAGE="${MESSAGE}<b>📦</b> Wild · SukiSU · NoKSU%0A"
-          MESSAGE="${MESSAGE}<b>⏱️</b> $((DURATION / 60))m $((DURATION % 60))s%0A"
-          MESSAGE="${MESSAGE}<b>🔨</b> <a href='${COMMIT_URL}'>${SHORT_SHA}</a>%0A"
-          MESSAGE="${MESSAGE}<b>🔗</b> <a href='${RELEASE_URL}'>Release</a> · <a href='${RUN_URL}'>Logs</a>"
-
+          SHORT_SHA="${{ github.sha }}"; SHORT_SHA="${SHORT_SHA:0:9}"
+          DURATION=$(( $(date +%s) - ${{ needs.setup.outputs.start_time }} ))
+          [ "${{ inputs.is_testing }}" = "true" ] && ICON="🧪" || ICON="✅"
+          [ "${{ inputs.is_testing }}" = "true" ] && TEXT="Testing Build" || TEXT="Build Success"
+          MSG="<b>${ICON} ${TEXT}</b>%0A%0A"
+          MSG="${MSG}<b>🔄</b> Run #${{ github.run_number }} · sapphire%0A"
+          MSG="${MSG}<b>🏷️</b> <code>${{ env.RELEASE_TAG }}</code>%0A"
+          MSG="${MSG}<b>📌</b> Wild <code>${{ env.WILD_TAG }}</code> · SukiSU <code>${{ env.SUKI_TAG }}</code>%0A"
+          MSG="${MSG}<b>📦</b> Wild · SukiSU · NoKSU%0A"
+          MSG="${MSG}<b>⏱️</b> $((DURATION/60))m $((DURATION%60))s%0A"
+          MSG="${MSG}<b>🔨</b> <a href='https://github.com/${{ github.repository }}/commit/${{ github.sha }}'>${SHORT_SHA}</a>%0A"
+          MSG="${MSG}<b>🔗</b> <a href='${RELEASE_URL}'>Release</a> · <a href='${RUN_URL}'>Logs</a>"
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-            -d chat_id="$CHAT_ID" \
-            -d text="$MESSAGE" \
-            -d parse_mode="HTML" \
+            -d chat_id="$CHAT_ID" -d text="$MSG" -d parse_mode="HTML" \
             -d disable_web_page_preview=true
-
           for ZIP in ./zips/*.zip; do
             [ -f "$ZIP" ] || continue
             SIZE_MB=$(echo "scale=2; $(stat -c%s "$ZIP") / 1024 / 1024" | bc | sed 's/^\./0./')
             curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendDocument" \
-              -F chat_id="$CHAT_ID" \
-              -F document=@"$ZIP" \
+              -F chat_id="$CHAT_ID" -F document=@"$ZIP" \
               -F caption="📦 $(basename $ZIP) — ${SIZE_MB} MB" || true
           done
-
-          # Send audit log — max 45MB for Telegram bot API
           LOG_ZIP="${{ env.LOG_AUDIT_ZIP }}"
           LOG_SIZE_MB="${{ env.LOG_AUDIT_SIZE_MB }}"
           if [ -f "$LOG_ZIP" ]; then
             if (( $(echo "$LOG_SIZE_MB < 45" | bc -l) )); then
               curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendDocument" \
-                -F chat_id="$CHAT_ID" \
-                -F document=@"$LOG_ZIP" \
-                -F caption="📋 Build audit log — ${LOG_SIZE_MB} MB (full GitHub Actions raw log)" || true
+                -F chat_id="$CHAT_ID" -F document=@"$LOG_ZIP" \
+                -F caption="📋 Build audit log — ${LOG_SIZE_MB} MB" || true
             else
-              ENCODED_TAG=$(echo "${{ env.RELEASE_TAG }}" | sed 's/+/%2B/g')
-              RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${ENCODED_TAG}"
               curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
                 -d chat_id="$CHAT_ID" \
-                -d text="📋 Audit log too large to send via bot (${LOG_SIZE_MB} MB) — available in the <a href='${RELEASE_URL}'>release</a>." \
-                -d parse_mode="HTML" \
-                -d disable_web_page_preview=true || true
+                -d text="📋 Log too large (${LOG_SIZE_MB} MB) — grab it from <a href='${RELEASE_URL}'>release</a>." \
+                -d parse_mode="HTML" -d disable_web_page_preview=true || true
             fi
           fi
 
@@ -928,23 +471,16 @@ jobs:
     needs: [build-kernels]
     if: always() && needs.build-kernels.result != 'success'
     steps:
-      - name: "📣 Send Telegram — Build failed"
+      - name: "📣 Telegram — failed"
         run: |
           TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          JOB_STATUS="${{ needs.build-kernels.result }}"
-
-          [ "$JOB_STATUS" = "cancelled" ] && ICON="⚠️" && TEXT="Workflow Cancelled" || \
-          [ "$JOB_STATUS" = "failure" ] && ICON="❌" && TEXT="Build Failed" || \
-          ICON="❓" && TEXT="Unknown ($JOB_STATUS)"
-
-          MESSAGE="<b>${ICON} ${TEXT}!</b>%0A%0A"
-          MESSAGE="${MESSAGE}<b>🔄</b> Run #${{ github.run_number }} · sapphire%0A"
-          MESSAGE="${MESSAGE}<b>🕐</b> $(date -u +'%Y-%m-%d %H:%M UTC')%0A"
-          MESSAGE="${MESSAGE}<b>🔗</b> <a href='${RUN_URL}'>Logs</a>"
-
+          STATUS="${{ needs.build-kernels.result }}"
+          [ "$STATUS" = "cancelled" ] && ICON="⚠️" && TEXT="Cancelled" || ICON="❌" && TEXT="Build Failed"
+          MSG="<b>${ICON} ${TEXT}</b>%0A%0A"
+          MSG="${MSG}<b>🔄</b> Run #${{ github.run_number }} · sapphire%0A"
+          MSG="${MSG}<b>🕐</b> $(date -u +'%Y-%m-%d %H:%M UTC')%0A"
+          MSG="${MSG}<b>🔗</b> <a href='${RUN_URL}'>Logs</a>"
           curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
-            -d chat_id="$CHAT_ID" \
-            -d text="$MESSAGE" \
-            -d parse_mode="HTML" || true
+            -d chat_id="$CHAT_ID" -d text="$MSG" -d parse_mode="HTML" || true
