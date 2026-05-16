@@ -14,7 +14,6 @@ runs:
   steps:
     - name: base configs
       shell: bash
-      working-directory: ${{ inputs.kernel_dir }}
       run: |
         CF="${{ inputs.defconfig }}"
         sed -i 's/ cgroup_disable=pressure//' "$CF"
@@ -80,7 +79,6 @@ runs:
     - name: wild configs
       if: inputs.ksu_type == 'wild'
       shell: bash
-      working-directory: ${{ inputs.kernel_dir }}
       run: |
         cat >> "${{ inputs.defconfig }}" << 'EOF'
         CONFIG_KSU=y
@@ -101,7 +99,6 @@ runs:
     - name: suki configs
       if: inputs.ksu_type == 'suki'
       shell: bash
-      working-directory: ${{ inputs.kernel_dir }}
       run: |
         cat >> "${{ inputs.defconfig }}" << 'EOF'
         CONFIG_KSU=y
