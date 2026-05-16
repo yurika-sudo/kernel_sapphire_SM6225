@@ -1,0 +1,14 @@
+name: setup-env
+description: install deps, write apply_patch helper, record build time
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
+        echo "BUILD_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
+        sudo apt-get update -qq
+        sudo apt-get install -y repo rsync aria2 bc bison build-essential flex \
+          git libelf-dev libssl-dev curl jq
+        cp ${{ github.workspace }}/scripts/apply_patch.sh /tmp/apply_patch.sh
