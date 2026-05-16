@@ -11,4 +11,5 @@ runs:
         sudo apt-get update -qq
         sudo apt-get install -y repo rsync aria2 bc bison build-essential flex \
           git libelf-dev libssl-dev curl jq
+        mkdir -p "${{ env.KERNEL_LOC_DIR }}"
         cp ${{ github.workspace }}/scripts/apply_patch.sh /tmp/apply_patch.sh
