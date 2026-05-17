@@ -12,14 +12,28 @@ Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — `
 | Variant | Root | Extras |
 |---------|------|--------|
 | GKI-Wild | Wild-KSU (canary) + SUSFS | BBG |
-| GKI-Suki | SukiSU-Ultra + SUSFS | KPM |
+| GKI-SukiSU | SukiSU-Ultra + SUSFS | KPM |
 | GKI-NoKSU | Vanilla | — |
 
-All variants include: **BBRv1 + Westwood TCP** · **IP_SET** · **Thin LTO** · **MGLRU**
+All variants include: **BBRv1 + Westwood TCP** · **IP_SET** · **Thin LTO** · **MGLRU** · **Droidspaces support**
 
 > Wild-KSU supports both Wild and KernelSU-Next managers natively.
 
 > **CLO dropped** — CodeLinaro `msm-5.15` has too many conflicts with clang-r547379. GKI follows AOSP LTS upstream which is more stable for automated weekly builds.
+
+---
+
+## Droidspaces Support
+
+This kernel ships with full [Droidspaces](https://github.com/ravindu644/Droidspaces-OSS) container support out of the box.
+
+Enabled configs: `SYSVIPC` · `IPC_NS` · `PID_NS` · `POSIX_MQUEUE` · `DEVTMPFS` · Netfilter extras
+
+kABI fix applied for GKI < 6.12 to prevent vendor module crashes on boot.
+
+> **SuSFS users:** disable **"HIDE SUS MOUNTS FOR ALL PROCESSES"** in SuSFS4KSU settings, otherwise containers will fail to start.
+
+Confirmed working on sapphire — see [community-supported devices](https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/community-supported-devices.md).
 
 ---
 
@@ -72,9 +86,9 @@ Actions tab → `Build Kernel - Sapphire/n` → **Run workflow**
 - [WildKernels](https://github.com/WildKernels) — Wild-KSU
 - [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) — SukiSU-Ultra
 - [simonpunk](https://gitlab.com/simonpunk/susfs4ksu) — SUSFS
+- [ravindu644](https://github.com/ravindu644/Droidspaces-OSS) — Droidspaces
 - [vc-teahouse](https://github.com/vc-teahouse/Baseband-guard) — Baseband Guard
 - [topnotchfreaks](https://github.com/topnotchfreaks) — Clang toolchain
-- [chickendrop89](https://github.com/chickendrop89) — kernel patch reference
 - Google/AOSP — kernel source
 
 ---
