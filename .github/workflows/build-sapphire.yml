@@ -35,16 +35,16 @@ jobs:
       fail-fast: false
       matrix:
         kernel:
-          - name: "GKI-Wild"
-            dir: "common_gki_wild"
+          - name: "GKI-KSUN"
+            dir: "common_gki_ksun"
             repo_name: "common"
             repo_url: "https://android.googlesource.com/kernel/common"
             branch: "android13-5.15-lts"
             config_branch: "android13-5.15"
             defconfig: "gki_defconfig"
-            artifact_name: "gki-wild-kernel"
-            zip_prefix: "GKI_Wild"
-            ksu_type: "wild"
+            artifact_name: "gki-ksun-kernel"
+            zip_prefix: "GKI_KSUN"
+            ksu_type: "ksun"
 
           - name: "GKI-SukiSU"
             dir: "common_gki_suki"
@@ -268,10 +268,10 @@ jobs:
         run: |
           KSU_TYPE="${{ matrix.kernel.ksu_type }}"
           case "$KSU_TYPE" in
-            wild) KSU_LABEL="Wild-KSU"; KSU_VER="${{ env.WILD_KSU_TAG }}"
-                  SUSFS_VER="pinned d8358055"; BBG="✅"; KPM="❌" ;;
+            ksun) KSU_LABEL="KSUN"; KSU_VER="${{ env.KSUN_TAG }}"
+                  SUSFS_VER="upstream HEAD"; BBG="✅"; KPM="❌" ;;
             suki) KSU_LABEL="SukiSU"; KSU_VER="${{ env.SUKI_TAG }}"
-                  SUSFS_VER="pinned d835805"; BBG="❌"; KPM="✅ (CONFIG_KPM + binary)" ;;
+                  SUSFS_VER="upstream HEAD"; BBG="❌"; KPM="✅ (CONFIG_KPM + binary)" ;;
             *)    KSU_LABEL="None"; KSU_VER="—"; SUSFS_VER="—"; BBG="❌"; KPM="❌" ;;
           esac
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -309,7 +309,7 @@ jobs:
           path: |
             ${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
-            ${{ env.WORK_DIR }}/wild_ksu_tag.txt
+            ${{ env.WORK_DIR }}/ksun_tag.txt
             ${{ env.WORK_DIR }}/suki_ksu_tag.txt
           retention-days: 1
 
@@ -332,7 +332,7 @@ jobs:
             | jq -r '.[0].name' || echo "v1.5.2+_R26")
           echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
           echo "SUSFS_MODULE_URL=https://github.com/sidex15/susfs4ksu-module/releases/latest" >> $GITHUB_ENV
-          echo "WILD_TAG=$(find ./artifacts -name "wild_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || echo "unknown")" >> $GITHUB_ENV
+          echo "KSUN_TAG=$(find ./artifacts -name "ksun_tag.txt" | head -1 | xargs cat 2>/dev/null || echo "unknown")" >> $GITHUB_ENV
           echo "SUKI_TAG=$(find ./artifacts -name "suki_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || echo "unknown")" >> $GITHUB_ENV
           DATE_TAG=$(date +'%Y%m%d')
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
@@ -395,11 +395,11 @@ jobs:
           COMMIT_URL="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
           BODY=""
           [ "${{ inputs.is_testing }}" = "true" ] && BODY="> ⚠️ **Testing build** — use at your own risk."$'\n\n'
-          BODY="${BODY}**Wild-KSU:** [${{ env.WILD_TAG }}](https://github.com/WildKernels/Wild_KSU/releases/tag/${{ env.WILD_TAG }})"$'\n'
+          BODY="${BODY}**KSUN:** [${{ env.KSUN_TAG }}](https://github.com/KernelSU-Next/KernelSU-Next/releases/tag/${{ env.KSUN_TAG }})"$'\n'
           BODY="${BODY}**SukiSU-Ultra:** [${{ env.SUKI_TAG }}](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases/tag/${{ env.SUKI_TAG }})"$'\n'
           BODY="${BODY}**SUSFS:** [${{ env.SUSFS_VERSION }}](${{ env.SUSFS_MODULE_URL }})"$'\n\n'
-          BODY="${BODY}**Variants:** Wild-KSU · SukiSU · NoKSU"$'\n'
-          BODY="${BODY}**Features:** SUSFS ඞ · BBG (Wild) · KPM (SukiSU) · Thin LTO · Droidspaces · TCP BBR+Westwood"$'\n\n'
+          BODY="${BODY}**Variants:** KSUN · SukiSU · NoKSU"$'\n'
+          BODY="${BODY}**Features:** SUSFS ඞ · BBG (KSUN) · KPM (SukiSU) · Thin LTO · Droidspaces · TCP BBR+Westwood"$'\n\n'
           BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
           BODY="${BODY}**Flash via OrangeFox / TWRP** · [t.me/home_yu_chat](https://t.me/home_yu_chat)"$'\n\n'
           BODY="${BODY}> 📋 \`build-audit-logs-*.zip\` — full build log for transparency."
@@ -435,8 +435,8 @@ jobs:
           MSG="<b>${ICON} ${TEXT}</b>%0A%0A"
           MSG="${MSG}<b>🔄</b> Run #${{ github.run_number }} · sapphire%0A"
           MSG="${MSG}<b>🏷️</b> <code>${{ env.RELEASE_TAG }}</code>%0A"
-          MSG="${MSG}<b>📌</b> Wild <code>${{ env.WILD_TAG }}</code> · SukiSU <code>${{ env.SUKI_TAG }}</code>%0A"
-          MSG="${MSG}<b>📦</b> Wild · SukiSU · NoKSU%0A"
+          MSG="${MSG}<b>📌</b> KSUN <code>${{ env.KSUN_TAG }}</code> · SukiSU <code>${{ env.SUKI_TAG }}</code>%0A"
+          MSG="${MSG}<b>📦</b> KSUN · SukiSU · NoKSU%0A"
           MSG="${MSG}<b>⏱️</b> $((DURATION/60))m $((DURATION%60))s%0A"
           MSG="${MSG}<b>🔨</b> <a href='https://github.com/${{ github.repository }}/commit/${{ github.sha }}'>${SHORT_SHA}</a>%0A"
           MSG="${MSG}<b>🔗</b> <a href='${RELEASE_URL}'>Release</a> · <a href='${RUN_URL}'>Logs</a>"
