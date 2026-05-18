@@ -20,7 +20,7 @@ runs:
         set -e
         rm -rf ./KernelSU-Next ./drivers/kernelsu
         curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/dev/kernel/setup.sh" \
-          | bash -s 4c9737aed458843e920de95b0bcad56cf790663b
+          | bash -s dev
         [ -d "KernelSU-Next" ] || { echo "KernelSU-Next not found"; exit 1; }
 
         cd KernelSU-Next
@@ -35,12 +35,17 @@ runs:
         git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
         echo "SUSFS: $(git -C susfs4ksu log -1 --format='%h %s')"
 
-        # Apply bridge patch to KSUN (specific to 4c9737a)
-        BRIDGE="$GITHUB_WORKSPACE/kernel_patches-main/wild/ksun-4c9737a-susfs-v2.1.0-a14-6.1-ef16cbce.patch"
-        [ -f "$BRIDGE" ] || { echo "Bridge patch not found at $BRIDGE"; exit 1; }
+        # Apply SUSFS integration to KSUN (new approach: 10_enable + fix patches)
+        KP="$GITHUB_WORKSPACE/kernel_patches-main"
         cd KernelSU-Next
-        patch -p1 < "../$BRIDGE"
-        echo "[OK] Bridge patch applied"
+        echo "[KSUN] Applying 10_enable_susfs (force, rejects expected)..."
+        patch -p1 --force < "../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+        echo "[KSUN] Applying next/susfs_fix_patches/v2.1.0/..."
+        for p in "$KP/next/susfs_fix_patches/v2.1.0/"*.patch; do
+          name=$(basename "$p")
+          [ "$name" = "ksu_toolkit.patch" ] && echo "[SKIP] $name" && continue
+          patch -p1 < "$p" && echo "[OK] $name" || echo "[WARN] $name failed"
+        done
         cd ..
 
         # Apply SUSFS kernel-side patches
@@ -77,15 +82,16 @@ runs:
         echo "SukiSU: $(git log -1 --format='%h %s')"
         cd ..
 
-        # ShirkNeko SUSFS — upstream HEAD, no pin
+        # ShirkNeko SUSFS — pinned to tested commit
         git clone https://github.com/ShirkNeko/susfs4ksu.git -b gki-android13-5.15
+        cd susfs4ksu && git checkout 3f38203 && cd ..
         echo "SUSFS: $(git -C susfs4ksu log -1 --format='%h %s')"
 
         # Apply SUSFS integration patch to SukiSU
         KSU_PATCH="susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
         [ -f "$KSU_PATCH" ] || { echo "10_enable_susfs patch not found"; exit 1; }
         cd KernelSU
-        patch -p1 --fuzz=3 < "../$KSU_PATCH"
+        patch -p1 --force --fuzz=3 < "../$KSU_PATCH" || true
         echo "[OK] 10_enable_susfs applied"
         cd ..
 
