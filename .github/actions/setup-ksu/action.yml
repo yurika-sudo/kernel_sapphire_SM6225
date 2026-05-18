@@ -36,7 +36,7 @@ runs:
         echo "SUSFS: $(git -C susfs4ksu log -1 --format='%h %s')"
 
         # Apply bridge patch to KSUN (specific to 4c9737a)
-        BRIDGE="${{ inputs.work_dir }}/kernel_patches-main/wild/ksun-4c9737a-susfs-v2.1.0-a14-6.1-ef16cbce.patch"
+        BRIDGE="$GITHUB_WORKSPACE/kernel_patches-main/wild/ksun-4c9737a-susfs-v2.1.0-a14-6.1-ef16cbce.patch"
         [ -f "$BRIDGE" ] || { echo "Bridge patch not found at $BRIDGE"; exit 1; }
         cd KernelSU-Next
         patch -p1 < "../$BRIDGE"
@@ -67,6 +67,7 @@ runs:
         [ -d "KernelSU" ] || { echo "KernelSU not found"; exit 1; }
 
         cd KernelSU
+        git checkout cf85c18 2>/dev/null || echo "Pin cf85c18 failed, using HEAD"
         git fetch --tags 2>/dev/null || true
         SUKI_TAG=$(git describe --tags --abbrev=0 2>/dev/null || \
           curl -sf "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest" \
