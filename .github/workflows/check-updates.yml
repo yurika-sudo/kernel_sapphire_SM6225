@@ -1,0 +1,32 @@
+name: "🔍 Check Source Updates"
+
+on:
+  workflow_dispatch:
+  # Optional: uncomment to run daily
+  # schedule:
+  #   - cron: '0 8 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: "🔍 Check upstream versions"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: "🔍 Fetch upstream versions"
+        id: versions
+        run: bash scripts/check-sources.sh
+
+      - name: "📣 Telegram report"
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: bash scripts/notify.sh check

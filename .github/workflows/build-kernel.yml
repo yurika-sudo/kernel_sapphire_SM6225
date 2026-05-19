@@ -1,0 +1,181 @@
+name: "Build Kernel (reusable)"
+
+on:
+  workflow_call:
+    inputs:
+      variant_name:  { type: string, required: true }
+      source_type:   { type: string, required: true }   # gki | clo
+      ksu_type:      { type: string, required: true }   # wild | suki | none
+      zip_prefix:    { type: string, required: true }
+      artifact_name: { type: string, required: true }
+      defconfig:     { type: string, required: true }
+      clo_fragment:  { type: string, required: false }  # e.g. vendor/bengal_GKI.config (CLO only)
+      build_type:    { type: string, required: true }   # stable | testing
+
+env:
+  OUT_DIR: "out"
+
+jobs:
+  build:
+    name: "${{ inputs.variant_name }}"
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Repo ────────────────────────────────────────────────────────────
+      - name: "📦 Checkout"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ── Env + deps ──────────────────────────────────────────────────────
+      - name: "🛠️ Setup env"
+        uses: ./.github/actions/setup-env
+
+      # ── Load stable/testing config overrides ────────────────────────────
+      - name: "📂 Load build config"
+        run: |
+          CF="${{ github.workspace }}/configs/${{ inputs.build_type }}.env"
+          [ -f "$CF" ] && cat "$CF" >> $GITHUB_ENV && echo "[OK] loaded ${{ inputs.build_type }}.env" || true
+          echo "KERNEL_SRC=${{ github.workspace }}/kernel_src" >> $GITHUB_ENV
+          echo "WORK_DIR=${{ github.workspace }}"              >> $GITHUB_ENV
+
+      # ── Clone kernel source (GKI or CLO) ────────────────────────────────
+      - name: "🌟 Clone kernel source"
+        env:
+          SOURCE_TYPE: ${{ inputs.source_type }}
+          KSU_TYPE:    ${{ inputs.ksu_type }}
+        run: bash scripts/clone-source.sh
+
+      # ── Toolchain (AOSP repo for GKI, standalone clang for CLO) ─────────
+      - name: "🔧 Setup toolchain"
+        env:
+          SOURCE_TYPE: ${{ inputs.source_type }}
+        run: bash scripts/setup-toolchain.sh
+
+      # ── Apply patches from patches/ ──────────────────────────────────────
+      - name: "🩹 Apply patches"
+        env:
+          SOURCE_TYPE: ${{ inputs.source_type }}
+          KSU_TYPE:    ${{ inputs.ksu_type }}
+          BUILD_TYPE:  ${{ inputs.build_type }}
+          DEFCONFIG:   ${{ inputs.defconfig }}
+        run: bash scripts/apply-patches.sh
+
+      # ── BBG (Wild only, not NoKSU, not SukiSU) ──────────────────────────
+      - name: "🛡️ Setup BBG"
+        if: inputs.ksu_type == 'wild'
+        working-directory: ${{ env.KERNEL_SRC }}
+        run: |
+          git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
+          ln -sf ../Baseband-guard security/baseband-guard
+          grep -q "baseband-guard" security/Makefile || \
+            echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
+          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' \
+            security/Kconfig
+          grep -q "baseband-guard/Kconfig" security/Kconfig || \
+            sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
+            security/Kconfig
+
+      # ── KSU + SUSFS (skip for NoKSU) ────────────────────────────────────
+      - name: "🔑 Setup KSU + SUSFS"
+        if: inputs.ksu_type != 'none'
+        uses: ./.github/actions/setup-ksu
+        with:
+          ksu_type:   ${{ inputs.ksu_type }}
+          kernel_dir: ${{ env.KERNEL_SRC }}
+          work_dir:   ${{ env.WORK_DIR }}
+
+      # ── Droidspaces support ──────────────────────────────────────────────
+      - name: "🐳 Droidspaces"
+        working-directory: ${{ env.KERNEL_SRC }}
+        run: |
+          bash ${{ github.workspace }}/scripts/droidspaces.sh \
+            "arch/arm64/configs/${{ inputs.defconfig }}"
+
+      # ── Kernel configs ───────────────────────────────────────────────────
+      - name: "⚙️ Kernel configs"
+        uses: ./.github/actions/setup-configs
+        with:
+          ksu_type:    ${{ inputs.ksu_type }}
+          source_type: ${{ inputs.source_type }}
+          defconfig:   ${{ env.KERNEL_SRC }}/arch/arm64/configs/${{ inputs.defconfig }}
+          kernel_dir:  ${{ env.KERNEL_SRC }}
+
+      # ── Localversion + dirty flag ────────────────────────────────────────
+      - name: "🏷️ Localversion"
+        working-directory: ${{ env.KERNEL_SRC }}
+        run: |
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:9}"
+          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${SHORT_SHA}\"|" ./scripts/setlocalversion
+          sed -i 's/-dirty//' ./scripts/setlocalversion
+          KERNEL_TIMESTAMP=$(git log -1 --format=%ct)
+          echo "KBUILD_BUILD_TIMESTAMP=$(date -u -d @${KERNEL_TIMESTAMP} +'%a %b %d %T UTC %Y')" >> $GITHUB_ENV
+          echo "SOURCE_DATE_EPOCH=${KERNEL_TIMESTAMP}" >> $GITHUB_ENV
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add . && git commit -m "clean dirty flag" || true
+
+      # ── GKI-only: fix ABI + build configs ───────────────────────────────
+      - name: "🔩 Fix ABI (GKI only)"
+        if: inputs.source_type == 'gki'
+        env:
+          KERNEL_SRC: ${{ env.KERNEL_SRC }}
+        run: bash scripts/fix-abi-gki.sh
+
+      # ── Build ────────────────────────────────────────────────────────────
+      - name: "🚀 Build kernel"
+        id: build
+        timeout-minutes: 50
+        env:
+          SOURCE_TYPE:  ${{ inputs.source_type }}
+          KSU_TYPE:     ${{ inputs.ksu_type }}
+          DEFCONFIG:    ${{ inputs.defconfig }}
+          CLO_FRAGMENT: ${{ inputs.clo_fragment }}
+          VARIANT:      ${{ inputs.variant_name }}
+        run: bash scripts/build.sh
+
+      # ── Verify ──────────────────────────────────────────────────────────
+      - name: "🔍 Verify kernel"
+        run: bash scripts/verify-kernel.sh
+
+      # ── KPM patch (SukiSU only) ──────────────────────────────────────────
+      - name: "💉 KPM patch"
+        if: inputs.ksu_type == 'suki'
+        working-directory: ${{ env.WORK_DIR }}/out/dist
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" \
+            -o patch_linux
+          chmod +x patch_linux && ./patch_linux
+          rm -f Image && mv oImage Image
+
+      # ── Job summary ──────────────────────────────────────────────────────
+      - name: "📋 Build summary"
+        if: always()
+        env:
+          VARIANT:     ${{ inputs.variant_name }}
+          KSU_TYPE:    ${{ inputs.ksu_type }}
+          SOURCE_TYPE: ${{ inputs.source_type }}
+          BUILD_TYPE:  ${{ inputs.build_type }}
+          RUN_URL:     "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: bash scripts/build-summary.sh
+
+      # ── Pack ZIP ─────────────────────────────────────────────────────────
+      - name: "📦 Pack ZIP"
+        env:
+          ZIP_PREFIX:  ${{ inputs.zip_prefix }}
+          BUILD_TYPE:  ${{ inputs.build_type }}
+          SOURCE_TYPE: ${{ inputs.source_type }}
+        run: bash scripts/pack-zip.sh
+
+      # ── Upload artifact ──────────────────────────────────────────────────
+      - name: "📤 Upload artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: |
+            ${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}
+            ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
+            ${{ env.WORK_DIR }}/wild_ksu_tag.txt
+            ${{ env.WORK_DIR }}/suki_ksu_tag.txt
+          retention-days: 1

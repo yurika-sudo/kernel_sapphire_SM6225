@@ -1,0 +1,125 @@
+name: "🔨 Build Kernels — AIO"
+
+on:
+  workflow_dispatch:
+    inputs:
+      zip_mode:
+        description: "ZIP packaging"
+        type: choice
+        options: [per-variant, aio]
+        default: per-variant
+      build_type:
+        description: "Build type"
+        type: choice
+        options: [stable, testing]
+        default: stable
+
+permissions:
+  contents: write
+
+jobs:
+
+  setup:
+    name: "⏱️ Setup"
+    runs-on: ubuntu-latest
+    outputs:
+      start_time: ${{ steps.ts.outputs.start_time }}
+    steps:
+      - id: ts
+        run: echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
+
+  # ─── 6 variants via matrix → reusable build-kernel.yml ───────────────────
+  build:
+    name: "🔨 ${{ matrix.variant.name }}"
+    needs: [setup]
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - name:      "GKI-Wild"
+            source:    "gki"
+            ksu:       "wild"
+            prefix:    "GKI_Wild"
+            artifact:  "gki-wild"
+            defconfig: "gki_defconfig"
+
+          - name:      "GKI-SukiSU"
+            source:    "gki"
+            ksu:       "suki"
+            prefix:    "GKI_SukiSU"
+            artifact:  "gki-suki"
+            defconfig: "gki_defconfig"
+
+          - name:      "GKI-NoKSU"
+            source:    "gki"
+            ksu:       "none"
+            prefix:    "GKI_NoKSU"
+            artifact:  "gki-noksu"
+            defconfig: "gki_defconfig"
+
+          - name:      "CLO-Wild"
+            source:    "clo"
+            ksu:       "wild"
+            prefix:    "CLO_Wild"
+            artifact:  "clo-wild"
+            defconfig: "defconfig"
+            clo_fragment: "vendor/bengal_GKI.config"
+
+          - name:      "CLO-SukiSU"
+            source:    "clo"
+            ksu:       "suki"
+            prefix:    "CLO_SukiSU"
+            artifact:  "clo-suki"
+            defconfig: "defconfig"
+            clo_fragment: "vendor/bengal_GKI.config"
+
+          - name:      "CLO-NoKSU"
+            source:    "clo"
+            ksu:       "none"
+            prefix:    "CLO_NoKSU"
+            artifact:  "clo-noksu"
+            defconfig: "defconfig"
+            clo_fragment: "vendor/bengal_GKI.config"
+
+    uses: ./.github/workflows/build-kernel.yml
+    with:
+      variant_name:  ${{ matrix.variant.name }}
+      source_type:   ${{ matrix.variant.source }}
+      ksu_type:      ${{ matrix.variant.ksu }}
+      zip_prefix:    ${{ matrix.variant.prefix }}
+      artifact_name: ${{ matrix.variant.artifact }}
+      defconfig:     ${{ matrix.variant.defconfig }}
+      clo_fragment:  ${{ matrix.variant.clo_fragment || '' }}
+      build_type:    ${{ inputs.build_type }}
+    secrets: inherit
+
+  # ─── Package + release (only if all builds passed) ───────────────────────
+  release:
+    name: "📦 Package & Release"
+    needs: [setup, build]
+    if: success()
+    uses: ./.github/workflows/release.yml
+    with:
+      zip_mode:   ${{ inputs.zip_mode }}
+      build_type: ${{ inputs.build_type }}
+      start_time: ${{ needs.setup.outputs.start_time }}
+    secrets: inherit
+
+  # ─── Failure notif ────────────────────────────────────────────────────────
+  notify-failure:
+    name: "❌ Notify Failure"
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: always() && needs.build.result != 'success'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: "📣 Telegram"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_URL:    "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_NUMBER: "${{ github.run_number }}"
+          BUILD_STATUS: "${{ needs.build.result }}"
+        run: bash scripts/notify.sh failure
