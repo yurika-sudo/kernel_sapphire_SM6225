@@ -14,13 +14,19 @@ CLANG_DIR="${WORK_DIR}/prebuilts/clang/host/linux-x86/clang-${CLANG_VER}"
 case "$SOURCE_TYPE" in
 
   gki)
-    echo "[GKI] Syncing AOSP manifest (build system + toolchains) ..."
+    # Sync AOSP manifest (build system only, we have our own kernel source)
+    echo "[GKI] Syncing AOSP build system ..."
     cd "$WORK_DIR"
     repo init \
       -u https://android.googlesource.com/kernel/manifest \
       -b common-android13-5.15-lts --depth=1
     repo sync --optimized-fetch --prune --no-clone-bundle --no-tags -j$(nproc --all)
-    rm -rf .repo common   # kernel source already in KERNEL_SRC
+    rm -rf .repo
+
+    # AOSP build.sh expects kernel at $WORK_DIR/common — symlink our source there
+    rm -rf "${WORK_DIR}/common"
+    ln -sfn "$KERNEL_SRC" "${WORK_DIR}/common"
+    echo "[GKI] Symlinked kernel_src → common/"
 
     # Replace bundled clang with r547379
     mkdir -p "$CLANG_DIR"
