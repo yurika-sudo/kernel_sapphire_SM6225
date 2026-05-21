@@ -120,7 +120,9 @@ jobs:
       # ── Swap ─────────────────────────────────────────────────────────────
       - name: "💾 Setup swap"
         run: |
-          sudo fallocate -l 8G /swapfile
+          sudo swapoff -a || true
+          sudo rm -f /swapfile /swap.img || true
+          sudo fallocate -l 12G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
