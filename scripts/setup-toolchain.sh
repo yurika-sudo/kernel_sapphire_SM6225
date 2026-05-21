@@ -54,17 +54,6 @@ case "$SOURCE_TYPE" in
     echo "CLANG_DIR=$CLANG_DIR" >> "${GITHUB_ENV:-/dev/null}"
     ;;
 
-  clo)
-    echo "[CLO] Installing standalone clang ${CLANG_VER} ..."
-    mkdir -p "$CLANG_DIR"
-    aria2c -x16 -s16 -d /tmp -o clang.tar.gz "$CLANG_URL"
-    tar -xzf /tmp/clang.tar.gz -C "$CLANG_DIR"
-    rm -f /tmp/clang.tar.gz
-
-    echo "CLANG_DIR=$CLANG_DIR"              >> "${GITHUB_ENV:-/dev/null}"
-    echo "PATH=${CLANG_DIR}/bin:$PATH"       >> "${GITHUB_ENV:-/dev/null}"
-    ;;
-
 esac
 
 echo "[OK] Toolchain ready: $CLANG_DIR"
