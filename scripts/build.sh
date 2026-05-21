@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build.sh — dispatch to GKI or CLO build
+# build.sh — GKI direct make build
 # env: SOURCE_TYPE, KSU_TYPE, DEFCONFIG, VARIANT, KERNEL_SRC, WORK_DIR, CLANG_DIR
 set -e
 
@@ -14,26 +14,43 @@ START=$(date +%s)
 
 export KBUILD_BUILD_USER="${KBUILD_BUILD_USER:-superuseryu}"
 export KBUILD_BUILD_HOST="${KBUILD_BUILD_HOST:-github}"
-export LTO=thin
-export KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
 
-# ─── GKI build via build.sh ──────────────────────────────────────────────────
+# ─── GKI direct make ─────────────────────────────────────────────────────────
 if [ "$SOURCE_TYPE" = "gki" ]; then
   set -o pipefail
 
-  BUILD_SH="${WORK_DIR}/build/build.sh"
-  [ -f "$BUILD_SH" ] || { echo "[ERROR] build/build.sh not found at $BUILD_SH"; ls "$WORK_DIR"; exit 1; }
+  export PATH="${CLANG_DIR}/bin:$PATH"
 
-  export SKIP_ABI_CHECKS=1 SKIP_KMI_CHECK=1
+  MAKE_FLAGS=(
+    -j$(nproc)
+    O="${OUT_DIR}/dist"
+    ARCH=arm64
+    SUBARCH=arm64
+    LLVM=1
+    LLVM_IAS=1
+    CC=clang
+    LD=ld.lld
+    AR=llvm-ar
+    NM=llvm-nm
+    OBJCOPY=llvm-objcopy
+    OBJDUMP=llvm-objdump
+    STRIP=llvm-strip
+    CROSS_COMPILE=aarch64-linux-gnu-
+    CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+    KBUILD_BUILD_USER="$KBUILD_BUILD_USER"
+    KBUILD_BUILD_HOST="$KBUILD_BUILD_HOST"
+    KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
+    LTO=thin
+  )
 
-  # GKI build.sh outputs to $OUT_DIR/dist/Image
-  if ! {
-    KCFLAGS="$KCFLAGS" \
-    LLVM_PARALLEL_LINK_JOBS=1 \
-    BUILD_CONFIG="${KERNEL_SRC}/build.config.gki.aarch64" \
-    OUT_DIR="${WORK_DIR}/out" \
-      "$BUILD_SH" -j$(nproc) 2>&1 | tee /tmp/build_gki.log
-  }; then
+  mkdir -p "${OUT_DIR}/dist"
+  cd "$KERNEL_SRC"
+
+  echo "[GKI] Building defconfig: $DEFCONFIG"
+  make "${MAKE_FLAGS[@]}" "$DEFCONFIG"
+
+  echo "[GKI] Building Image..."
+  if ! make "${MAKE_FLAGS[@]}" Image 2>&1 | tee /tmp/build_gki.log; then
     echo "[FAIL] GKI build failed:"
     tail -60 /tmp/build_gki.log
     exit 1
