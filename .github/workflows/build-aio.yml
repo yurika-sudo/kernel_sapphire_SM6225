@@ -57,30 +57,6 @@ jobs:
             artifact:  "gki-noksu"
             defconfig: "gki_defconfig"
 
-          - name:      "CLO-Wild"
-            source:    "clo"
-            ksu:       "wild"
-            prefix:    "CLO_Wild"
-            artifact:  "clo-wild"
-            defconfig: "defconfig"
-            clo_fragment: "vendor/bengal_GKI.config"
-
-          - name:      "CLO-SukiSU"
-            source:    "clo"
-            ksu:       "suki"
-            prefix:    "CLO_SukiSU"
-            artifact:  "clo-suki"
-            defconfig: "defconfig"
-            clo_fragment: "vendor/bengal_GKI.config"
-
-          - name:      "CLO-NoKSU"
-            source:    "clo"
-            ksu:       "none"
-            prefix:    "CLO_NoKSU"
-            artifact:  "clo-noksu"
-            defconfig: "defconfig"
-            clo_fragment: "vendor/bengal_GKI.config"
-
     uses: ./.github/workflows/build-kernel.yml
     with:
       variant_name:  ${{ matrix.variant.name }}
