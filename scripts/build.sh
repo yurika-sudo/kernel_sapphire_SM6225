@@ -41,6 +41,7 @@ if [ "$SOURCE_TYPE" = "gki" ]; then
     KBUILD_BUILD_HOST="$KBUILD_BUILD_HOST"
     KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
     LTO=thin
+    LLVM_PARALLEL_LINK_JOBS=1
   )
 
   mkdir -p "${OUT_DIR}/dist"
