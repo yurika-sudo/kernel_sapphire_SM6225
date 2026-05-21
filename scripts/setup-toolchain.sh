@@ -24,7 +24,7 @@ case "$SOURCE_TYPE" in
 
     # Replace bundled clang with r547379
     mkdir -p "$CLANG_DIR"
-    aria2c -x16 -s16 -o /tmp/clang.tar.gz "$CLANG_URL"
+    aria2c -x16 -s16 -d /tmp -o clang.tar.gz "$CLANG_URL"
     tar -xzf /tmp/clang.tar.gz -C "$CLANG_DIR"
     rm -f /tmp/clang.tar.gz
 
@@ -51,7 +51,7 @@ case "$SOURCE_TYPE" in
   clo)
     echo "[CLO] Installing standalone clang ${CLANG_VER} ..."
     mkdir -p "$CLANG_DIR"
-    aria2c -x16 -s16 -o /tmp/clang.tar.gz "$CLANG_URL"
+    aria2c -x16 -s16 -d /tmp -o clang.tar.gz "$CLANG_URL"
     tar -xzf /tmp/clang.tar.gz -C "$CLANG_DIR"
     rm -f /tmp/clang.tar.gz
 
