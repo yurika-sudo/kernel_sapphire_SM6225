@@ -17,23 +17,22 @@ echo "SukiSU-Ultra: $SUKI_TAG"
 
 # ── SUSFS latest commit (simonpunk, gki-android13-5.15) ──────────────────────
 SUSFS_RAW=$(curl -sf \
-  "https://api.github.com/repos/simonpunk/susfs4ksu/commits?sha=gki-android13-5.15&per_page=1" \
-  2>/dev/null || echo "[]")
-SUSFS_COMMIT=$(echo "$SUSFS_RAW" | jq -r '.[0].sha[:8]' 2>/dev/null || echo "unknown")
-SUSFS_DATE=$(echo "$SUSFS_RAW"   | jq -r '.[0].commit.committer.date[:10]' 2>/dev/null || echo "?")
+  "https://api.github.com/repos/simonpunk/susfs4ksu/commits?sha=gki-android13-5.15&per_page=1")
+SUSFS_COMMIT=$(echo "$SUSFS_RAW" | jq -r 'if type=="array" then .[0].sha[:8] else "unknown" end' 2>/dev/null || echo "unknown")
+SUSFS_DATE=$(echo "$SUSFS_RAW"   | jq -r 'if type=="array" then .[0].commit.committer.date[:10] else "?" end' 2>/dev/null || echo "?")
 echo "SUSFS       : $SUSFS_COMMIT ($SUSFS_DATE)"
 
-# ── GKI 5.15 latest subversion tag ───────────────────────────────────────────
+# ── GKI 5.15 latest subversion ───────────────────────────────────────────────
+# Check android kernel common repo tags via googlesource
 GKI_SUB=$(curl -sf \
-  "https://api.github.com/repos/torvalds/linux/tags?per_page=100" \
-  2>/dev/null | jq -r '[.[] | select(.name | test("^v5\\.15\\.[0-9]+$"))] | .[0].name' \
+  "https://api.github.com/repos/gregkh/linux/tags?per_page=100" \
+  | jq -r '[.[] | select(.name | test("^v5\\.15\\.[0-9]+$"))] | .[0].name // "unknown"' \
   2>/dev/null || echo "unknown")
-# Fallback: AOSP kernel tags
+# Fallback: stable kernel releases list
 if [ "$GKI_SUB" = "unknown" ] || [ -z "$GKI_SUB" ]; then
-  GKI_SUB=$(curl -sf \
-    "https://api.github.com/repos/aosp-mirror/kernel_common/tags?per_page=20" \
-    2>/dev/null | jq -r '[.[] | select(.name | test("5\\.15"))] | .[0].name' \
-    2>/dev/null || echo "unknown")
+  GKI_SUB=$(curl -sf "https://www.kernel.org/releases.json" \
+    | jq -r '.releases[] | select(.version | test("^5\\.15\\.")) | .version' \
+    | sort -V | tail -1 | sed 's/^/v/' 2>/dev/null || echo "unknown")
 fi
 echo "GKI 5.15    : $GKI_SUB"
 
