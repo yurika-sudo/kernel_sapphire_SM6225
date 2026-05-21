@@ -19,13 +19,24 @@ export KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
 
 # ─── GKI build via build.sh ──────────────────────────────────────────────────
 if [ "$SOURCE_TYPE" = "gki" ]; then
+  set -o pipefail
+
+  BUILD_SH="${WORK_DIR}/build/build.sh"
+  [ -f "$BUILD_SH" ] || { echo "[ERROR] build/build.sh not found at $BUILD_SH"; ls "$WORK_DIR"; exit 1; }
+
   export SKIP_ABI_CHECKS=1 SKIP_KMI_CHECK=1
 
-  if ! KCFLAGS="$KCFLAGS" LLVM_PARALLEL_LINK_JOBS=1 \
-    BUILD_CONFIG="${KERNEL_SRC}/build.config.gki.aarch64" \
-    "${WORK_DIR}/build/build.sh" -j$(nproc) 2>&1 | tee /tmp/build_gki.log; then
-    echo "[FAIL] GKI build errors:"
-    grep -E "undefined symbol|error:|ld.lld" /tmp/build_gki.log | tail -30
+  # GKI build.sh outputs to $OUT_DIR/dist/Image
+  KCFLAGS="$KCFLAGS" \
+  LLVM_PARALLEL_LINK_JOBS=1 \
+  BUILD_CONFIG="${KERNEL_SRC}/build.config.gki.aarch64" \
+  OUT_DIR="${WORK_DIR}/out" \
+    "$BUILD_SH" -j$(nproc) 2>&1 | tee /tmp/build_gki.log
+  BUILD_EXIT=${PIPESTATUS[0]}
+
+  if [ "$BUILD_EXIT" -ne 0 ]; then
+    echo "[FAIL] GKI build failed (exit $BUILD_EXIT):"
+    grep -E "error:|undefined symbol|ld.lld:" /tmp/build_gki.log | tail -40
     exit 1
   fi
 
