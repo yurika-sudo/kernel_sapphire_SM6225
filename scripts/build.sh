@@ -35,7 +35,7 @@ if [ "$SOURCE_TYPE" = "gki" ]; then
       "$BUILD_SH" -j$(nproc) 2>&1 | tee /tmp/build_gki.log
   }; then
     echo "[FAIL] GKI build failed:"
-    grep -E "error:|undefined symbol|ld.lld:" /tmp/build_gki.log | tail -40
+    tail -60 /tmp/build_gki.log
     exit 1
   fi
 
