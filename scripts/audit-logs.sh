@@ -8,7 +8,7 @@ set -e
 mkdir -p ./audit_logs
 
 gh api /repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs \
-  --jq '.jobs[] | select(.name | test("Build|build")) | [.id, .name] | @tsv' \
+  --jq '.jobs[] | select(.name | test("GKI|CLO")) | [.id, .name] | @tsv' \
   > /tmp/build_jobs.tsv
 
 while IFS=$'\t' read -r JOB_ID JOB_NAME; do
