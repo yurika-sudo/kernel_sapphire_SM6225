@@ -21,6 +21,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ── Maximize disk space (prevent LTO OOM / no space left) ────────────
+      - name: "🧹 Maximize Build Space"
+        uses: AdityaGarg8/remove-unwanted-software@v5
+        with:
+          remove-dotnet: 'true'         # ~2 GB
+          remove-android: 'true'        # ~9 GB
+          remove-haskell: 'true'        # ~5.2 GB
+          remove-codeql: 'true'         # ~5.4 GB
+          remove-docker-images: 'true'  # ~3.2 GB
+          remove-large-packages: 'true' # ~3.1 GB
+          remove-swapfile: 'true'       # ~4 GB
+          remove-cached-tools: 'false'
+          verbose: 'false'
+
       # ── Repo ────────────────────────────────────────────────────────────
       - name: "📦 Checkout"
         uses: actions/checkout@v4
