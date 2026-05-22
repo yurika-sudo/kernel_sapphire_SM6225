@@ -17,7 +17,7 @@ IMAGE="${WORK_DIR}/out/dist/Image"
 [ "$BUILD_TYPE" = "testing" ] && SUFFIX="-TESTING" || SUFFIX=""
 ZIP_NAME="AnyKernel3_${ZIP_PREFIX}_${BUILD_DATE}${SUFFIX}.zip"
 
-# Determine named image for AIO identification
+# Named image used by AIO pack-release.sh when extracting
 case "$KSU_TYPE" in
   wild) IMAGE_NAME="Image.gki.ksu"  ;;
   suki) IMAGE_NAME="Image.gki.suki" ;;
@@ -28,9 +28,8 @@ esac
 cd "$WORK_DIR"
 git clone --depth=1 "$AK3_REPO" ak3_tmp
 
-# Copy as both Image (for per-variant flash) and named image (for AIO)
+# Per-variant ZIP: only Image (for flashing) — no named copy to keep size lean
 cp "$IMAGE" "ak3_tmp/Image"
-cp "$IMAGE" "ak3_tmp/${IMAGE_NAME}"
 
 cd ak3_tmp
 zip -r9 "../${ZIP_NAME}" * -x .git/*
