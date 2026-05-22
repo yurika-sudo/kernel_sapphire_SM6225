@@ -21,11 +21,11 @@ DATE_TAG=$(date +'%Y%m%d')
 
 if [ "$BUILD_TYPE" = "testing" ]; then
   RELEASE_TAG="${SUSFS_VERSION}-testing"
-  RELEASE_NAME="Seiran Kernel ${SUSFS_VERSION} — Testing"
+  RELEASE_NAME="Seiran-GKI"
   IS_PRERELEASE="true"
 else
   RELEASE_TAG="${SUSFS_VERSION}"
-  RELEASE_NAME="Seiran Kernel ${SUSFS_VERSION}"
+  RELEASE_NAME="Seiran-GKI"
   IS_PRERELEASE="false"
 fi
 
