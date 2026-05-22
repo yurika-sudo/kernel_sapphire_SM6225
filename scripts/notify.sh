@@ -36,6 +36,7 @@ if [ "$MODE" = "success" ]; then
 
   # Escape + in tag so curl form-encoding doesn't turn it into a space
   DISPLAY_TAG=$(printf '%s' "${RELEASE_TAG}" | sed 's/+/%2B/g')
+  DISPLAY_SUSFS=$(printf '%s' "${SUSFS_VERSION}" | sed 's/+/%2B/g')
 
   UNAME_STR="${KERNEL_UNAME:-${KERNEL_VERSION:-unknown}}"
 
@@ -52,7 +53,7 @@ if [ "$MODE" = "success" ]; then
   MSG="${MSG}<b>📦 KSU / SUSFS</b>%0A"
   MSG="${MSG}• Wild-KSU: <code>${WILD_TAG}</code>%0A"
   MSG="${MSG}• SukiSU-Ultra: <code>${SUKI_TAG}</code>%0A"
-  MSG="${MSG}• SUSFS module: <code>${SUSFS_VERSION}</code>%0A%0A"
+  MSG="${MSG}• SUSFS module: <code>${DISPLAY_SUSFS}</code>%0A%0A"
 
   MSG="${MSG}<b>📋</b> Run #${RUN_NUMBER} · ${DATE_STR} · ${BUILD_TYPE}%0A"
   MSG="${MSG}<b>📦</b> ${ZIP_MODE:-per-variant} · GKI × Wild/SukiSU/NoKSU%0A"
