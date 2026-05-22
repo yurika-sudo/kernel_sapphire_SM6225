@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pack-release.sh — collect per-variant ZIPs or build proper AIO zip
+# pack-release.sh — collect per-variant ZIPs or build AIO zip
 # env: ZIP_MODE, BUILD_TYPE, DATE_TAG, KERNEL_VERSION
 set -e
 
@@ -18,14 +18,29 @@ if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
   echo "[AIO] Building single AK3 zip with all images..."
   git clone --depth=1 "$AK3_REPO" ak3_aio
 
-  for ARTIFACT_ZIP in ./artifacts/*/AnyKernel3_*.zip; do
+  # Extract Image from each variant and rename to named image per artifact dir
+  for ARTIFACT_DIR in ./artifacts/*/; do
+    ARTIFACT_ZIP=$(find "$ARTIFACT_DIR" -name "AnyKernel3_*.zip" | head -1)
     [ -f "$ARTIFACT_ZIP" ] || continue
-    echo "[AIO] Extracting from: $ARTIFACT_ZIP"
-    unzip -o "$ARTIFACT_ZIP" "Image.gki.*" -d ak3_aio/ 2>/dev/null || true
+
+    # Derive named image from artifact dir name
+    # artifact dirs: gki-wild, gki-suki, gki-noksu, clo-wild, clo-suki, clo-noksu
+    DIR_NAME=$(basename "$ARTIFACT_DIR")
+    case "$DIR_NAME" in
+      *wild*)  IMG_NAME="Image.gki.ksu"   ;;
+      *suki*)  IMG_NAME="Image.gki.suki"  ;;
+      *noksu*) IMG_NAME="Image.gki.noksu" ;;
+      *)       IMG_NAME="Image.$(echo $DIR_NAME | tr -d '-')" ;;
+    esac
+
+    echo "[AIO] Extracting Image from: $ARTIFACT_ZIP → $IMG_NAME"
+    unzip -o "$ARTIFACT_ZIP" "Image" -d /tmp/aio_extract/ 2>/dev/null || continue
+    cp /tmp/aio_extract/Image "ak3_aio/${IMG_NAME}"
+    rm -rf /tmp/aio_extract
   done
 
   echo "[AIO] Images collected:"
-  ls -lh ak3_aio/Image.gki.* 2>/dev/null || { echo "[ERROR] No named images found in artifacts"; exit 1; }
+  ls -lh ak3_aio/Image.gki.* 2>/dev/null || { echo "[ERROR] No named images found"; exit 1; }
 
   cd ak3_aio
   zip -r9 "../release_zips/${AIO_NAME}" * -x .git/*
