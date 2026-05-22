@@ -36,6 +36,16 @@ jobs:
           BUILD_TYPE: ${{ inputs.build_type }}
         run: bash scripts/pack-release.sh
 
+      - name: "📋 Build summary"
+        env:
+          BUILD_TYPE:      ${{ inputs.build_type }}
+          ZIP_MODE:        ${{ inputs.zip_mode }}
+          REPO:            ${{ github.repository }}
+          SHA:             ${{ github.sha }}
+          RUN_URL:         "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: bash scripts/release-summary.sh
+
       - name: "📋 Audit logs"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
