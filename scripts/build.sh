@@ -47,6 +47,12 @@ if [ "$SOURCE_TYPE" = "gki" ]; then
   mkdir -p "${OUT_DIR}/dist"
   cd "$KERNEL_SRC"
 
+  # Trim -ab commit hash from 9 to 8 hex chars (10 total with "ab" prefix)
+  # Targets only the line in setlocalversion that generates the -ab suffix
+  if [ -f scripts/setlocalversion ]; then
+    sed -i '/ab/s/--abbrev=[0-9]\+/--abbrev=8/' scripts/setlocalversion
+  fi
+
   echo "[GKI] Building defconfig: $DEFCONFIG"
   make "${MAKE_FLAGS[@]}" "$DEFCONFIG"
 
