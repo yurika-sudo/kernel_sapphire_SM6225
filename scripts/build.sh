@@ -57,6 +57,9 @@ if [ "$SOURCE_TYPE" = "gki" ]; then
     exit 1
   fi
 
+  cp "${OUT_DIR}/dist/arch/arm64/boot/Image" "${OUT_DIR}/dist/Image"
+  echo "[GKI] Image copied to ${OUT_DIR}/dist/Image"
+
 else
   echo "[ERROR] Unknown SOURCE_TYPE: $SOURCE_TYPE"
   exit 1
