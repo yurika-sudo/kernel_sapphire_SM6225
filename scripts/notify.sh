@@ -39,10 +39,20 @@ if [ "$MODE" = "success" ]; then
   MSG="<b>${ICON} ${LABEL}</b>%0A%0A"
   MSG="${MSG}<b>🔄</b> Run #${RUN_NUMBER} · sapphire%0A"
   MSG="${MSG}<b>🏷️</b> <code>${RELEASE_TAG}</code>%0A"
-  MSG="${MSG}<b>📌</b> Wild <code>${WILD_TAG}</code> · SukiSU <code>${SUKI_TAG}</code>%0A"
-  MSG="${MSG}<b>📦</b> ${ZIP_MODE:-per-variant} · GKI+CLO × Wild/SukiSU/NoKSU%0A"
+  MSG="${MSG}<b>🐧</b> <code>${KERNEL_UNAME}</code>%0A"
   MSG="${MSG}<b>⏱️</b> $((DURATION/60))m $((DURATION%60))s%0A"
-  MSG="${MSG}<b>🔨</b> <a href='https://github.com/${GITHUB_REPOSITORY}/commit/${SHA}'>${SHORT_SHA}</a>%0A"
+  MSG="${MSG}<b>🔨</b> <a href='https://github.com/${GITHUB_REPOSITORY}/commit/${SHA}'>${SHORT_SHA}</a>%0A%0A"
+
+  MSG="${MSG}<b>📦 KSU / SUSFS</b>%0A"
+  MSG="${MSG}• Wild-KSU: <code>${WILD_TAG}</code>%0A"
+  MSG="${MSG}• SukiSU-Ultra: <code>${SUKI_TAG}</code>%0A"
+  MSG="${MSG}• SUSFS module: <code>${SUSFS_VERSION}</code>%0A%0A"
+
+  MSG="${MSG}<b>✨ Features</b>%0A"
+  MSG="${MSG}SUSFS · BBG (Wild) · KPM (SukiSU)%0A"
+  MSG="${MSG}Thin LTO · Droidspaces · BBR+Westwood%0A%0A"
+
+  MSG="${MSG}<b>📦</b> ${ZIP_MODE:-per-variant} · GKI CLO × Wild/SukiSU/NoKSU%0A"
   MSG="${MSG}<b>🔗</b> <a href='${RELEASE_URL}'>Release</a> · <a href='${RUN_URL}'>Logs</a>"
   _tg_msg "$MSG"
 
