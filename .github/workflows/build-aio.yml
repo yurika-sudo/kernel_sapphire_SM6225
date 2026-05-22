@@ -6,7 +6,7 @@ on:
       zip_mode:
         description: "ZIP packaging"
         type: choice
-        options: [per-variant, aio]
+        options: [per-variant, aio, both]
         default: per-variant
       build_type:
         description: "Build type"
