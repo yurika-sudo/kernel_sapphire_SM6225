@@ -11,15 +11,15 @@ Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — `
 
 | Variant | Root | Extras |
 |---------|------|--------|
-| GKI-Wild | Wild-KSU (canary) + SUSFS | BBG |
+| GKI-Wild | Wild-KSU + SUSFS | BBG |
 | GKI-SukiSU | SukiSU-Ultra + SUSFS | KPM |
 | GKI-NoKSU | Vanilla | — |
 
-All variants include: **BBRv1 + Westwood TCP** · **IP_SET** · **Thin LTO** · **MGLRU** · **Droidspaces support**
+All variants include: **BBRv1 + Westwood TCP** · **IP_SET** · **Thin LTO** · **Droidspaces support**
 
 > Wild-KSU supports both Wild and KernelSU-Next managers natively.
 
-> **CLO dropped** — CodeLinaro `msm-5.15` has too many conflicts with clang-r547379. GKI follows AOSP LTS upstream which is more stable for automated weekly builds.
+> **CLO dropped** — CodeLinaro `msm-5.15` has too many conflicts with clang-r547379. GKI follows AOSP LTS upstream which is more stable.
 
 ---
 
@@ -45,7 +45,7 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 | Branch | `android13-5.15-lts` |
 | Toolchain | Clang r547379 (topnotchfreaks) |
 | LTO | Thin |
-| Schedule | Every Sunday 00:00 UTC |
+| Schedule | Manual dispatch |
 
 ---
 
@@ -64,7 +64,12 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 
 ### Run a Build
 
-Actions tab → `Build Kernel - Sapphire/n` → **Run workflow**
+Actions tab → `Build Kernels — AIO` → **Run workflow**
+
+Select ZIP packaging mode:
+- `per-variant` — individual ZIP per variant
+- `aio` — single ZIP with all images
+- `both` — individual ZIPs + AIO ZIP
 
 ---
 
@@ -85,7 +90,8 @@ Actions tab → `Build Kernel - Sapphire/n` → **Run workflow**
 
 - [WildKernels](https://github.com/WildKernels) — Wild-KSU
 - [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) — SukiSU-Ultra
-- [simonpunk](https://gitlab.com/simonpunk/susfs4ksu) — SUSFS
+- [simonpunk](https://gitlab.com/simonpunk/susfs4ksu) — SUSFS kernel patch
+- [sidex15](https://github.com/sidex15/susfs4ksu-module) — SUSFS module
 - [ravindu644](https://github.com/ravindu644/Droidspaces-OSS) — Droidspaces
 - [vc-teahouse](https://github.com/vc-teahouse/Baseband-guard) — Baseband Guard
 - [topnotchfreaks](https://github.com/topnotchfreaks) — Clang toolchain
