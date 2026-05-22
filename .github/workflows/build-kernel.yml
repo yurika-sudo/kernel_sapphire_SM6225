@@ -31,9 +31,9 @@ jobs:
           remove-codeql: 'true'         # ~5.4 GB
           remove-docker-images: 'true'  # ~3.2 GB
           remove-large-packages: 'true' # ~3.1 GB
-          remove-swapfile: 'true'       # ~4 GB
-          remove-cached-tools: 'false'
-          verbose: 'false'
+          remove-swapfile: 'true'       # ~4 GB (kita bikin manual swap 12G nanti)
+          remove-cached-tools: 'false'  # jangan, bisa break toolchain cache
+          verbose: 'true'
 
       # ── Repo ────────────────────────────────────────────────────────────
       - name: "📦 Checkout"
@@ -188,6 +188,15 @@ jobs:
           SOURCE_TYPE: ${{ inputs.source_type }}
         run: bash scripts/pack-zip.sh
 
+      # ── Capture uname ────────────────────────────────────────────────────
+      - name: "🏷️ Capture uname"
+        run: |
+          UNAME=$(grep UTS_RELEASE \
+            ${{ env.WORK_DIR }}/out/include/generated/utsrelease.h 2>/dev/null \
+            | cut -d'"' -f2 || echo "unknown")
+          echo "$UNAME" > ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
+          echo "Kernel uname: $UNAME"
+
       # ── Upload artifact ──────────────────────────────────────────────────
       - name: "📤 Upload artifact"
         uses: actions/upload-artifact@v4
@@ -196,6 +205,7 @@ jobs:
           path: |
             ${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
+            ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
             ${{ env.WORK_DIR }}/wild_ksu_tag.txt
             ${{ env.WORK_DIR }}/suki_ksu_tag.txt
           retention-days: 1
