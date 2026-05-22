@@ -11,18 +11,16 @@ set -e
 AK3_REPO="https://github.com/superuseryu/AnyKernel3"
 mkdir -p ./release_zips
 
-if [ "$ZIP_MODE" = "aio" ]; then
+if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
   [ "$BUILD_TYPE" = "testing" ] && SUFFIX="-TESTING" || SUFFIX=""
-  AIO_NAME="AnyKernel3_Sapphire_ALL_${DATE_TAG}${SUFFIX}.zip"
+  AIO_NAME="AnyKernel3_Seiran_ALL_${DATE_TAG}${SUFFIX}.zip"
 
   echo "[AIO] Building single AK3 zip with all images..."
   git clone --depth=1 "$AK3_REPO" ak3_aio
 
-  # Extract named images from each variant zip
   for ARTIFACT_ZIP in ./artifacts/*/AnyKernel3_*.zip; do
     [ -f "$ARTIFACT_ZIP" ] || continue
     echo "[AIO] Extracting from: $ARTIFACT_ZIP"
-    # Extract only Image.gki.* files (named images), skip plain Image
     unzip -o "$ARTIFACT_ZIP" "Image.gki.*" -d ak3_aio/ 2>/dev/null || true
   done
 
@@ -36,9 +34,9 @@ if [ "$ZIP_MODE" = "aio" ]; then
 
   SIZE_MB=$(echo "scale=2; $(stat -c%s "./release_zips/${AIO_NAME}") / 1024 / 1024" | bc | sed 's/^\./0./')
   echo "✅ AIO zip: $AIO_NAME ($SIZE_MB MB)"
+fi
 
-else
-  # per-variant: just collect each variant's zip
+if [ "$ZIP_MODE" = "per-variant" ] || [ "$ZIP_MODE" = "both" ]; then
   find ./artifacts -name "AnyKernel3_*.zip" -exec cp {} ./release_zips/ \;
   echo "Collected per-variant ZIPs:"
 fi
