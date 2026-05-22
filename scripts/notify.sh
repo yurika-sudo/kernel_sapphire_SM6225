@@ -32,14 +32,20 @@ if [ "$MODE" = "success" ]; then
 
   SHORT_SHA="${SHA:0:9}"
   DURATION=$(( $(date +%s) - START_TIME ))
+  DATE_STR=$(date -u +'%Y-%m-%d')
+
+  # Escape + in tag so curl form-encoding doesn't turn it into a space
+  DISPLAY_TAG=$(printf '%s' "${RELEASE_TAG}" | sed 's/+/%2B/g')
+
+  UNAME_STR="${KERNEL_UNAME:-${KERNEL_VERSION:-unknown}}"
 
   [ "$BUILD_TYPE" = "testing" ] && ICON="🧪" && LABEL="Testing Build" \
     || ICON="✅" && LABEL="Build Success"
 
   MSG="<b>${ICON} ${LABEL}</b>%0A%0A"
   MSG="${MSG}<b>🔄</b> Run #${RUN_NUMBER} · sapphire%0A"
-  MSG="${MSG}<b>🏷️</b> <code>${RELEASE_TAG}</code>%0A"
-  MSG="${MSG}<b>🐧</b> <code>${KERNEL_UNAME}</code>%0A"
+  MSG="${MSG}<b>🏷️</b> <code>${DISPLAY_TAG}</code>%0A"
+  MSG="${MSG}<b>🐧</b> <code>${UNAME_STR}</code>%0A"
   MSG="${MSG}<b>⏱️</b> $((DURATION/60))m $((DURATION%60))s%0A"
   MSG="${MSG}<b>🔨</b> <a href='https://github.com/${GITHUB_REPOSITORY}/commit/${SHA}'>${SHORT_SHA}</a>%0A%0A"
 
@@ -48,11 +54,8 @@ if [ "$MODE" = "success" ]; then
   MSG="${MSG}• SukiSU-Ultra: <code>${SUKI_TAG}</code>%0A"
   MSG="${MSG}• SUSFS module: <code>${SUSFS_VERSION}</code>%0A%0A"
 
-  MSG="${MSG}<b>✨ Features</b>%0A"
-  MSG="${MSG}SUSFS · BBG (Wild) · KPM (SukiSU)%0A"
-  MSG="${MSG}Thin LTO · Droidspaces · BBR+Westwood%0A%0A"
-
-  MSG="${MSG}<b>📦</b> ${ZIP_MODE:-per-variant} · GKI CLO × Wild/SukiSU/NoKSU%0A"
+  MSG="${MSG}<b>📋</b> Run #${RUN_NUMBER} · ${DATE_STR} · ${BUILD_TYPE}%0A"
+  MSG="${MSG}<b>📦</b> ${ZIP_MODE:-per-variant} · GKI × Wild/SukiSU/NoKSU%0A"
   MSG="${MSG}<b>🔗</b> <a href='${RELEASE_URL}'>Release</a> · <a href='${RUN_URL}'>Logs</a>"
   _tg_msg "$MSG"
 
@@ -62,15 +65,6 @@ if [ "$MODE" = "success" ]; then
     SIZE_MB=$(echo "scale=2; $(stat -c%s "$ZIP") / 1024 / 1024" | bc | sed 's/^\./0./')
     _tg_doc "$ZIP" "📦 $(basename "$ZIP") — ${SIZE_MB} MB"
   done
-
-  # Send audit log if small enough
-  if [ -n "$LOG_AUDIT_ZIP" ] && [ -f "$LOG_AUDIT_ZIP" ]; then
-    if (( $(echo "$LOG_AUDIT_SIZE_MB < 45" | bc -l) )); then
-      _tg_doc "$LOG_AUDIT_ZIP" "📋 Build audit log — ${LOG_AUDIT_SIZE_MB} MB"
-    else
-      _tg_msg "📋 Log too large (${LOG_AUDIT_SIZE_MB} MB) — grab from <a href='${RELEASE_URL}'>release</a>."
-    fi
-  fi
 
 # ─── Failure ─────────────────────────────────────────────────────────────────
 elif [ "$MODE" = "failure" ]; then
