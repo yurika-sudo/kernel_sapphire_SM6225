@@ -36,22 +36,4 @@ echo "  KPM      : $KPM"
 echo "  Run      : $RUN_URL"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# ── GitHub step summary (Markdown) ───────────────────────────────────────────
-SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
-cat >> "$SUMMARY" << EOF
 
-## 🔨 ${VARIANT} — ${BUILD_BADGE}
-
-| Field     | Value |
-|-----------|-------|
-| Kernel    | \`$KV\` |
-| Source    | $SOURCE_TYPE |
-| KSU       | $KSU_LABEL |
-| Wild ver  | $WILD_V |
-| Suki ver  | $SUKI_V |
-| SUSFS     | $SUSFS_NOTE |
-| BBG       | $BBG |
-| KPM       | $KPM |
-
-🔗 [Full run logs]($RUN_URL)
-EOF
