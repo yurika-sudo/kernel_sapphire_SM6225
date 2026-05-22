@@ -24,15 +24,16 @@ BODY="${BODY}**SukiSU-Ultra:** [${SUKI_TAG}](https://github.com/SukiSU-Ultra/Suk
 BODY="${BODY}**SUSFS module:** [${SUSFS_VERSION}](${SUSFS_MODULE_URL})"$'\n'
 BODY="${BODY}**Kernel base:** \`${KERNEL_VERSION}\`"$'\n\n'
 
-# Variants + features
-BODY="${BODY}**Variants:** GKI Wild · GKI SukiSU · GKI NoKSU · CLO Wild · CLO SukiSU · CLO NoKSU"$'\n'
-BODY="${BODY}**Features:** SUSFS · BBG (Wild) · KPM (SukiSU) · Thin LTO · Droidspaces · BBR+Westwood"$'\n\n'
+# Variants
+BODY="${BODY}**Variants:** GKI Wild · GKI SukiSU · GKI NoKSU · CLO Wild · CLO SukiSU · CLO NoKSU"$'\n\n'
 
-# Links
+# Support info
+BODY="${BODY}**Supported:** Android 15+"$'\n'
+BODY="${BODY}**Issues / bug reports:** [t.me/home_yu_chat](https://t.me/home_yu_chat)"$'\n'
+BODY="${BODY}**Critical issues:** PM directly"$'\n\n'
+
+# Commit + run detail
 BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
-BODY="${BODY}**Flash via** OrangeFox / TWRP · [t.me/home_yu_chat](https://t.me/home_yu_chat)"$'\n\n'
-
-# Run summary link (per-build detail)
 BODY="${BODY}📋 **Per-build details:** [Run #${GITHUB_RUN_NUMBER} summary](${RUN_URL})"$'\n'
 BODY="${BODY}> Full build logs in \`build-audit-logs-*.zip\` below."
 
