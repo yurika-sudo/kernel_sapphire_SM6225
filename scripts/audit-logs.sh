@@ -12,7 +12,8 @@ gh api /repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs \
   --jq '.jobs[] | select(.name | test("GKI|CLO")) | [.id, .name] | @tsv' \
   > /tmp/build_jobs.tsv
 
-# Patterns to strip — disk cleanup, apt/dpkg noise, docker pulls, blank floods
+# Patterns to strip — disk cleanup, apt/dpkg noise, docker pulls, blank floods,
+# and make build progress lines (CC/LD/AR/etc.) which are the bulk of compile logs
 _filter_log() {
   grep -Ev \
     '^[[:space:]]*(Removing |Selecting previously|Preparing to unpack|Unpacking |Setting up |Processing triggers|Reading package|Building dependency|Reading state|debconf:|update-alternatives:|ldconfig)' \
@@ -22,6 +23,8 @@ _filter_log() {
     '^[[:space:]]*(rm -rf|sudo rm|apt-get -y|apt -y|Do you want|[0-9]+ (upgraded|newly installed|to remove|not upgraded))' \
   | grep -Ev \
     '^[=\-]{10,}[[:space:]]*$' \
+  | grep -Ev \
+    '^[[:space:]]+(CC|LD|AR|AS|OBJCOPY|OBJDUMP|STRIP|GEN|CHK|UPD|HOSTCC|HOSTLD|HOSTSTRIP|INSTALL|LDS|SHIPPED|WRAP|DTC|DTB|DTBS|GZIP|XZ|LZ4|ZSTD|MKIMAGE|KSYM|EXPORTS|SYM|Module|modules)[[:space:]]' \
   | cat -s
 }
 
