@@ -12,10 +12,12 @@ gh api /repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs \
   > /tmp/build_jobs.tsv
 
 while IFS=$'\t' read -r JOB_ID JOB_NAME; do
-  SAFE=$(echo "$JOB_NAME" | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g')
+  SAFE=$(echo "$JOB_NAME" | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g' | sed 's/^_//')
   gh api /repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs \
-    > "./audit_logs/${SAFE}.log" 2>/dev/null || \
-    echo "[WARN] could not fetch: $JOB_NAME" > "./audit_logs/${SAFE}.log"
+    2>/dev/null \
+    | sed 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}\.[0-9]*Z //' \
+    > "./audit_logs/${SAFE}.log" \
+    || echo "[WARN] could not fetch: $JOB_NAME" > "./audit_logs/${SAFE}.log"
 done < /tmp/build_jobs.tsv
 
 cat > ./audit_logs/00_run_info.txt << EOF
