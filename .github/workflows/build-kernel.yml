@@ -169,6 +169,7 @@ jobs:
       - name: "📦 Pack ZIP"
         env:
           ZIP_PREFIX:  ${{ inputs.zip_prefix }}
+          KSU_TYPE:    ${{ inputs.ksu_type }}
           BUILD_TYPE:  ${{ inputs.build_type }}
           SOURCE_TYPE: ${{ inputs.source_type }}
         run: bash scripts/pack-zip.sh
