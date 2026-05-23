@@ -73,7 +73,6 @@ jobs:
           name:       ${{ env.RELEASE_NAME }}
           prerelease: ${{ env.IS_PRERELEASE }}
           body:       ${{ env.RELEASE_BODY }}
-          overwrite:  true
 
       - name: "🎉 Telegram — success"
         if: success()
