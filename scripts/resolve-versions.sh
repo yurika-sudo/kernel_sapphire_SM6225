@@ -11,11 +11,16 @@ KERNEL_VERSION=$([ -f "$VERSION_FILE" ] && cat "$VERSION_FILE" || echo "5.15.x")
 UNAME_FILE=$(find ./artifacts -name "kernel_uname.txt" | head -1)
 KERNEL_UNAME=$([ -f "$UNAME_FILE" ] && cat "$UNAME_FILE" || echo "$KERNEL_VERSION")
 
-SUSFS_VERSION=$(curl -sf https://api.github.com/repos/sidex15/susfs4ksu-module/tags \
-  | jq -r '.[0].name' | tr -d ' ' || echo "v1.5.2+_R27")
+# NOTE: pipeline exit code is from last cmd (tr), so jq failures are swallowed
+# without pipefail. Use two-step fetch + explicit fallback instead.
+_susfs_raw=$(curl -sf "https://api.github.com/repos/sidex15/susfs4ksu-module/tags" 2>/dev/null \
+  | jq -r '.[0].name // empty' 2>/dev/null | tr -d ' \n')
+SUSFS_VERSION="${_susfs_raw:-v1.5.2+_R27}"
 
-WILD_TAG=$(find ./artifacts -name "wild_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || echo "unknown")
-SUKI_TAG=$(find ./artifacts -name "suki_ksu_tag.txt" | head -1 | xargs cat 2>/dev/null || echo "unknown")
+_wf=$(find ./artifacts -name "wild_ksu_tag.txt" | head -1)
+WILD_TAG=$([ -f "$_wf" ] && cat "$_wf" | tr -d '[:space:]' || echo "unknown")
+_sf=$(find ./artifacts -name "suki_ksu_tag.txt" | head -1)
+SUKI_TAG=$([ -f "$_sf" ] && cat "$_sf" | tr -d '[:space:]' || echo "unknown")
 
 DATE_TAG=$(date +'%Y%m%d')
 
