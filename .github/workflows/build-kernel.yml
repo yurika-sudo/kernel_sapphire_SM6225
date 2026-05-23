@@ -33,7 +33,7 @@ jobs:
           remove-large-packages: 'true' # ~3.1 GB
           remove-swapfile: 'true'       # ~4 GB
           remove-cached-tools: 'false'
-          verbose: 'true'
+          verbose: 'false'
 
       # ── Repo ────────────────────────────────────────────────────────────
       - name: "📦 Checkout"
