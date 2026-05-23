@@ -1,0 +1,90 @@
+name: "Release (reusable)"
+
+on:
+  workflow_call:
+    inputs:
+      zip_mode:   { type: string, required: true }   # per-variant | aio
+      build_type: { type: string, required: true }   # stable | testing
+      start_time: { type: string, required: true }
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: "📦 Package & Release"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: "📥 Download all artifacts"
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts/
+
+      - name: "🔖 Resolve versions"
+        run: bash scripts/resolve-versions.sh
+        env:
+          BUILD_TYPE: ${{ inputs.build_type }}
+
+      - name: "🗂️ Collect / bundle ZIPs"
+        env:
+          ZIP_MODE:   ${{ inputs.zip_mode }}
+          BUILD_TYPE: ${{ inputs.build_type }}
+        run: bash scripts/pack-release.sh
+
+      - name: "📋 Build summary"
+        env:
+          BUILD_TYPE:      ${{ inputs.build_type }}
+          ZIP_MODE:        ${{ inputs.zip_mode }}
+          REPO:            ${{ github.repository }}
+          SHA:             ${{ github.sha }}
+          RUN_URL:         "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: bash scripts/release-summary.sh
+
+      - name: "📋 Audit logs"
+        env:
+          GH_TOKEN:    ${{ secrets.GITHUB_TOKEN }}
+          BUILD_TYPE:  ${{ inputs.build_type }}
+        run: bash scripts/audit-logs.sh
+
+      - name: "📝 Release body"
+        env:
+          BUILD_TYPE:  ${{ inputs.build_type }}
+          RUN_URL:     "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          REPO:        ${{ github.repository }}
+          SHA:         ${{ github.sha }}
+          RUN_NUMBER:  ${{ github.run_number }}
+        run: bash scripts/release-notes.sh
+
+      - name: "⬆️ Create release"
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: |
+            ./release_zips/*.zip
+            ${{ env.LOG_AUDIT_ZIP }}
+          tag_name:   ${{ env.RELEASE_TAG }}
+          name:       ${{ env.RELEASE_NAME }}
+          prerelease: ${{ env.IS_PRERELEASE }}
+          body:       ${{ env.RELEASE_BODY }}
+          overwrite:  true
+
+      - name: "🎉 Telegram — success"
+        if: success()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          BUILD_TYPE:    ${{ inputs.build_type }}
+          ZIP_MODE:      ${{ inputs.zip_mode }}
+          RUN_URL:       "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_NUMBER:    ${{ github.run_number }}
+          SHA:           ${{ github.sha }}
+          START_TIME:    ${{ inputs.start_time }}
+          KERNEL_UNAME:  ${{ env.KERNEL_UNAME }}
+        run: bash scripts/notify.sh success
