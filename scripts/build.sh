@@ -39,6 +39,8 @@ if [ "$SOURCE_TYPE" = "gki" ]; then
     CROSS_COMPILE_ARM32=arm-linux-gnueabi-
     KBUILD_BUILD_USER="$KBUILD_BUILD_USER"
     KBUILD_BUILD_HOST="$KBUILD_BUILD_HOST"
+    BRANCH=android13-5.15-lts
+    KMI_GENERATION=8
     KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
     LTO=thin
     LLVM_PARALLEL_LINK_JOBS=1
@@ -47,12 +49,7 @@ if [ "$SOURCE_TYPE" = "gki" ]; then
   mkdir -p "${OUT_DIR}/dist"
   cd "$KERNEL_SRC"
 
-  # Patch setlocalversion: strip "g" prefix from first hash, 12→13 chars
-  # Result: 5.15.207-{13hex}-{10hex}
-  if [ -f scripts/setlocalversion ]; then
-    # "Add -g and exactly 12 hex chars" → 13 chars, no g prefix
-    sed -i "s/printf '%s%s' -g \"\$(echo \$head | cut -c1-12)\"/printf '%s%s' - \"\$(echo \$head | cut -c1-13)\"/" scripts/setlocalversion
-  fi
+
 
   echo "[GKI] Building defconfig: $DEFCONFIG"
   make "${MAKE_FLAGS[@]}" "$DEFCONFIG"
