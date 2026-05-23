@@ -28,12 +28,34 @@ _filter_log() {
   | cat -s
 }
 
+_format_log() {
+  # 1. Strip ISO timestamp prefix
+  # 2. Strip ANSI escape codes (color, cursor, etc.)
+  # 3. Convert ##[group]Name → === Name === header, drop ##[endgroup]
+  # 4. Skip runner boilerplate before first real step (##[group])
+  # 5. Apply noise filters + collapse blank lines
+  sed 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}\.[0-9]*Z //' \
+  | sed 's/\x1b\[[0-9;]*[mGKHF]//g; s/\x1b(B//g' \
+  | awk '
+    /^##\[group\]/ {
+      found_first = 1
+      label = substr($0, 10)
+      print ""
+      print "=== " label " ==="
+      next
+    }
+    /^##\[endgroup\]/ { next }
+    !found_first { next }
+    { print }
+  ' \
+  | _filter_log
+}
+
 while IFS=$'\t' read -r JOB_ID JOB_NAME; do
   SAFE=$(echo "$JOB_NAME" | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g' | sed 's/^_//')
   gh api /repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs \
     2>/dev/null \
-    | sed 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}\.[0-9]*Z //' \
-    | _filter_log \
+    | _format_log \
     > "./audit_logs/${SAFE}.log" \
     || echo "[WARN] could not fetch: $JOB_NAME" > "./audit_logs/${SAFE}.log"
 done < /tmp/build_jobs.tsv
