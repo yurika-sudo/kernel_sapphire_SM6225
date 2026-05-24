@@ -71,6 +71,8 @@ CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
 # CONFIG_DEBUG_FS is not set
 # CONFIG_F2FS_IOSTAT is not set
 # CONFIG_NTSYNC is not set
+CONFIG_IP_TABLES=y
+CONFIG_BRIDGE_NETFILTER=y
 EOF
 
 # ── Wild-KSU specific ────────────────────────────────────────────────────────
