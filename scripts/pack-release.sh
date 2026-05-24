@@ -27,10 +27,13 @@ if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
     # artifact dirs: gki-wild, gki-suki, gki-noksu, clo-wild, clo-suki, clo-noksu
     DIR_NAME=$(basename "$ARTIFACT_DIR")
     case "$DIR_NAME" in
-      *wild*)  IMG_NAME="Image.gki.ksu"   ;;
-      *suki*)  IMG_NAME="Image.gki.suki"  ;;
-      *noksu*) IMG_NAME="Image.gki.noksu" ;;
-      *)       IMG_NAME="Image.$(echo $DIR_NAME | tr -d '-')" ;;
+      gki-wild)  IMG_NAME="Image.gki.ksu"   ;;
+      gki-suki)  IMG_NAME="Image.gki.suki"  ;;
+      gki-noksu) IMG_NAME="Image.gki.noksu" ;;
+      clo-wild)  IMG_NAME="Image.clo.ksu"   ;;
+      clo-suki)  IMG_NAME="Image.clo.suki"  ;;
+      clo-noksu) IMG_NAME="Image.clo.noksu" ;;
+      *)         IMG_NAME="Image.$(echo "$DIR_NAME" | tr -d '-')" ;;
     esac
 
     echo "[AIO] Extracting Image from: $ARTIFACT_ZIP → $IMG_NAME"
