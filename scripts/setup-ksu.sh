@@ -70,6 +70,22 @@ if [ "$KSU_TYPE" = "wild" ]; then
   sed -i 's/^static void susfs_run_sus_path_loop/void susfs_run_sus_path_loop/' fs/susfs.c
   echo "[OK] susfs_run_sus_path_loop exported"
 
+  # Wild KSU Kbuild excludes syscall_hook_manager.c when CONFIG_KSU_SUSFS=y,
+  # but 50_add_susfs still injects extern refs to ksu_is_init_rc_hook_enabled
+  # and ksu_is_input_hook_enabled in fs/exec.c and drivers/input/input.c.
+  # Provide stub definitions so the linker is satisfied.
+  cat > Wild_KSU/kernel/susfs_stubs.c << 'EOF'
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Stub definitions for symbols excluded when CONFIG_KSU_SUSFS=y
+// (syscall_hook_manager.c is not compiled in that config)
+#include <linux/jump_label.h>
+
+DEFINE_STATIC_KEY_TRUE(ksu_is_init_rc_hook_enabled);
+DEFINE_STATIC_KEY_TRUE(ksu_is_input_hook_enabled);
+EOF
+  echo "kernelsu-objs += susfs_stubs.o" >> Wild_KSU/kernel/Kbuild
+  echo "[OK] susfs_stubs.c injected into Wild_KSU"
+
   _inject_susfs_init "Wild_KSU/kernel/ksu.c"
   _link_ksu_driver "Wild_KSU"
   rm -rf susfs4ksu
