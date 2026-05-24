@@ -63,6 +63,7 @@ jobs:
             prefix:    "CLO_Wild"
             artifact:  "clo-wild"
             defconfig: "gki_defconfig"
+            clo_fragment: "vendor/bengal_GKI.config"
 
           - name:      "CLO-SukiSU"
             source:    "clo"
@@ -70,6 +71,7 @@ jobs:
             prefix:    "CLO_SukiSU"
             artifact:  "clo-suki"
             defconfig: "gki_defconfig"
+            clo_fragment: "vendor/bengal_GKI.config"
 
           - name:      "CLO-NoKSU"
             source:    "clo"
@@ -77,6 +79,7 @@ jobs:
             prefix:    "CLO_NoKSU"
             artifact:  "clo-noksu"
             defconfig: "gki_defconfig"
+            clo_fragment: "vendor/bengal_GKI.config"
 
     uses: ./.github/workflows/build-kernel.yml
     with:
