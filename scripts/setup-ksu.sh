@@ -46,15 +46,45 @@ if [ "$KSU_TYPE" = "wild" ]; then
   echo "$WILD_TAG"                  > "$WORK_DIR/wild_ksu_tag.txt"
   cd ..
 
-  # SUSFS — pinned d8358055 (pre-static_key, pairs clean w/ Wild canary)
-  git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-  cd susfs4ksu && git checkout d8358055 && cd ..
+  # SUSFS — always latest (API verified compatible with Wild canary)
+  git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+  SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
+  echo "[OK] SUSFS commit: $SUSFS_COMMIT"
 
   SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-  [ -f "$SUSFS_PATCH" ] && patch -p1 --forward < "$SUSFS_PATCH" || true
+  if [ -f "$SUSFS_PATCH" ]; then
+    # Wild KSU has its own SID-based selinux integration via CONFIG_KSU_SUSFS guards.
+    # Applying selinux hunks from 50_add_susfs would inject externs for symbols
+    # (fake_state, ksu_selinux_hide_running, ksu_is_init_rc_hook_enabled) that
+    # Wild KSU never defines, causing linker errors. Skip those hunks entirely.
+    awk '/^diff --git/{skip=/security\/selinux/} !skip{print}' \
+      "$SUSFS_PATCH" | patch -p1 --forward || true
+  fi
   mkdir -p fs include/linux
-  cp -f susfs4ksu/kernel_patches/fs/*           fs/
+  cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
+
+  # Wild KSU setuid_hook.c declares susfs_run_sus_path_loop as extern, but
+  # susfs.c defines it as static — remove static to fix the linker error.
+  sed -i 's/^static void susfs_run_sus_path_loop/void susfs_run_sus_path_loop/' fs/susfs.c
+  echo "[OK] susfs_run_sus_path_loop exported"
+
+  # Wild KSU Kbuild excludes syscall_hook_manager.c when CONFIG_KSU_SUSFS=y,
+  # but 50_add_susfs still injects extern refs to ksu_is_init_rc_hook_enabled
+  # and ksu_is_input_hook_enabled in fs/exec.c and drivers/input/input.c.
+  # Provide stub definitions so the linker is satisfied.
+  cat > Wild_KSU/kernel/susfs_stubs.c << 'EOF'
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Stub definitions for symbols excluded when CONFIG_KSU_SUSFS=y
+// (syscall_hook_manager.c is not compiled in that config)
+#include <linux/jump_label.h>
+
+DEFINE_STATIC_KEY_TRUE(ksu_is_init_rc_hook_enabled);
+DEFINE_STATIC_KEY_TRUE(ksu_is_input_hook_enabled);
+EOF
+  echo "kernelsu-objs += susfs_stubs.o" >> Wild_KSU/kernel/Kbuild
+  echo "[OK] susfs_stubs.c injected into Wild_KSU"
 
   _inject_susfs_init "Wild_KSU/kernel/ksu.c"
   _link_ksu_driver "Wild_KSU"
@@ -68,25 +98,32 @@ elif [ "$KSU_TYPE" = "suki" ]; then
   [ -d "KernelSU" ] || { echo "[ERROR] KernelSU dir not found"; exit 1; }
 
   cd KernelSU
-  # d43e250 — pre-adb_root, no PT_REGS_PARM errors on 5.15
-  git fetch --depth=100 2>/dev/null || true
-  git checkout d43e250
+  # always latest — PT_REGS_PARM fixed, adb_root refactored to static_key (verified)
   git fetch --tags 2>/dev/null || true
   SUKI_TAG=$(git describe --tags --abbrev=0 2>/dev/null || \
     curl -sf "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest" \
     | jq -r '.tag_name' 2>/dev/null || echo "unknown")
   echo "SUKI_TAG=$SUKI_TAG"      >> "${GITHUB_ENV:-/dev/null}"
   echo "$SUKI_TAG"                > "$WORK_DIR/suki_ksu_tag.txt"
+
+  # With CONFIG_KSU_SUSFS=y, the active overload of ksu_sulog_capture takes
+  # struct user_arg_ptr * (pointer), but ksu_sulog_capture_grant_root passes
+  # USER_ARG_NULL as a value — take its address to fix the type mismatch.
+  sed -i 's/USER_ARG_NULL, gfp)/\&(USER_ARG_NULL), gfp)/' kernel/sulog/event.c
+  echo "[OK] USER_ARG_NULL pointer fix applied to sulog/event.c"
+
   cd ..
 
-  # SUSFS — d835805 (proven pair w/ d43e250 SukiSU on 5.15)
-  git clone https://github.com/ShirkNeko/susfs4ksu.git -b gki-android13-5.15
-  cd susfs4ksu && git checkout d835805 && cd ..
+  # SUSFS — always latest (ShirkNeko fork = simonpunk mirror, API compatible)
+  git clone --depth=1 https://github.com/ShirkNeko/susfs4ksu.git -b gki-android13-5.15
+  SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
+  echo "[OK] SUSFS commit: $SUSFS_COMMIT"
 
   SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
   [ -f "$SUSFS_PATCH" ] && patch -p1 --fuzz=3 < "$SUSFS_PATCH" || true
   mkdir -p fs include/linux
-  cp -f susfs4ksu/kernel_patches/fs/*           fs/
+  cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
 
   _inject_susfs_init "KernelSU/kernel/ksu.c"
