@@ -57,6 +57,27 @@ jobs:
             artifact:  "gki-noksu"
             defconfig: "gki_defconfig"
 
+          - name:      "CLO-Wild"
+            source:    "clo"
+            ksu:       "wild"
+            prefix:    "CLO_Wild"
+            artifact:  "clo-wild"
+            defconfig: "gki_defconfig"
+
+          - name:      "CLO-SukiSU"
+            source:    "clo"
+            ksu:       "suki"
+            prefix:    "CLO_SukiSU"
+            artifact:  "clo-suki"
+            defconfig: "gki_defconfig"
+
+          - name:      "CLO-NoKSU"
+            source:    "clo"
+            ksu:       "none"
+            prefix:    "CLO_NoKSU"
+            artifact:  "clo-noksu"
+            defconfig: "gki_defconfig"
+
     uses: ./.github/workflows/build-kernel.yml
     with:
       variant_name:  ${{ matrix.variant.name }}
