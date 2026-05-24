@@ -17,6 +17,13 @@ case "$SOURCE_TYPE" in
     git clone --recursive --branch "$GKI_BRANCH" "$GKI_REPO" "$KERNEL_SRC" --depth=1
     ;;
 
+  clo)
+    CLO_REPO="https://git.codelinaro.org/clo/la/kernel/msm-5.15"
+    CLO_BRANCH="kernel.lnx.5.15.r1-rel"
+    echo "[CLO] Cloning $CLO_BRANCH ..."
+    git clone --recursive --branch "$CLO_BRANCH" "$CLO_REPO" "$KERNEL_SRC" --depth=1
+    ;;
+
   *)
     echo "[ERROR] Unknown source type: $SOURCE_TYPE"
     exit 1
