@@ -56,7 +56,7 @@ if [ "$MODE" = "success" ]; then
   MSG="${MSG}• SUSFS module: <code>${DISPLAY_SUSFS}</code>%0A%0A"
 
   MSG="${MSG}<b>📋</b> Run #${RUN_NUMBER} · ${DATE_STR} · ${BUILD_TYPE}%0A"
-  MSG="${MSG}<b>📦</b> ${ZIP_MODE:-per-variant} · GKI × Wild/SukiSU/NoKSU%0A"
+  MSG="${MSG}<b>📦</b> ${ZIP_MODE:-per-variant} · GKI/CLO × Wild/SukiSU/NoKSU%0A"
   MSG="${MSG}<b>🔗</b> <a href='${RELEASE_URL}'>Release</a> · <a href='${RUN_URL}'>Logs</a>"
   _tg_msg "$MSG"
 
