@@ -99,6 +99,14 @@ elif [ "$SOURCE_TYPE" = "clo" ]; then
   echo "[CLO] Building defconfig: $DEFCONFIG"
   make "${MAKE_FLAGS[@]}" "$DEFCONFIG"
 
+  # Merge vendor config fragment if provided (e.g. vendor/bengal_GKI.config)
+  if [ -n "$CLO_FRAGMENT" ] && [ -f "arch/arm64/configs/${CLO_FRAGMENT}" ]; then
+    echo "[CLO] Merging fragment: $CLO_FRAGMENT"
+    KCONFIG_CONFIG="${OUT_DIR}/dist/.config"       scripts/kconfig/merge_config.sh -m       "${OUT_DIR}/dist/.config"       "arch/arm64/configs/${CLO_FRAGMENT}"
+    make "${MAKE_FLAGS[@]}" olddefconfig
+    echo "[CLO] Fragment merged"
+  fi
+
   echo "[CLO] Building Image..."
   if ! make "${MAKE_FLAGS[@]}" Image 2>&1 | tee /tmp/build_clo.log; then
     echo "[FAIL] CLO build failed:"
