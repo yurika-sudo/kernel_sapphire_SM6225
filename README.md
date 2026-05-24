@@ -1,6 +1,6 @@
 # Seiran Kernel
 
-Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — `android13-5.15` GKI.
+Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — `android13-5.15`, GKI + CLO variants.
 
 > Flash at your own risk. Built and tested on sapphire/sapphiren only.
 > Support for other devices? Hit me up on [Telegram](https://t.me/home_yu_chat). You take full responsibility — bootloop/brick ain't on me.
@@ -9,17 +9,18 @@ Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — `
 
 ## Variants
 
-| Variant | Root | Extras |
-|---------|------|--------|
-| GKI-Wild | Wild-KSU + SUSFS | BBG |
-| GKI-SukiSU | SukiSU-Ultra + SUSFS | KPM |
-| GKI-NoKSU | Vanilla | — |
+| Variant | Source | Root | Extras |
+|---------|--------|------|--------|
+| GKI-Wild | AOSP LTS | Wild-KSU + SUSFS | BBG |
+| GKI-SukiSU | AOSP LTS | SukiSU-Ultra + SUSFS | KPM |
+| GKI-NoKSU | AOSP LTS | Vanilla | — |
+| CLO-Wild | CodeLinaro | Wild-KSU + SUSFS | BBG |
+| CLO-SukiSU | CodeLinaro | SukiSU-Ultra + SUSFS | KPM |
+| CLO-NoKSU | CodeLinaro | Vanilla | — |
 
 All variants include: **BBRv1 + Westwood TCP** · **IP_SET** · **Thin LTO** · **Droidspaces support**
 
 > Wild-KSU supports both Wild and KernelSU-Next managers natively.
-
-> **CLO dropped** — CodeLinaro `msm-5.15` has too many conflicts with clang-r547379. GKI follows AOSP LTS upstream which is more stable.
 
 ---
 
@@ -39,13 +40,15 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 
 ## Build Details
 
-| | |
-|--|--|
-| Source | `android.googlesource.com/kernel/common` |
-| Branch | `android13-5.15-lts` |
-| Toolchain | Clang r547379 (topnotchfreaks) |
-| LTO | Thin |
-| Schedule | Manual dispatch |
+| | GKI | CLO |
+|--|-----|-----|
+| Source | `android.googlesource.com/kernel/common` | `git.codelinaro.org/clo/la/kernel/msm-5.15` |
+| Branch | `android13-5.15-lts` | `kernel.lnx.5.15.r1-rel` |
+| Config fragment | — | `vendor/bengal_GKI.config` |
+| Toolchain | Clang r547379 (topnotchfreaks) | Clang r547379 (topnotchfreaks) |
+| LTO | Thin | Thin |
+
+Schedule: Manual dispatch
 
 ---
 
@@ -95,7 +98,8 @@ Select ZIP packaging mode:
 - [ravindu644](https://github.com/ravindu644/Droidspaces-OSS) — Droidspaces
 - [vc-teahouse](https://github.com/vc-teahouse/Baseband-guard) — Baseband Guard
 - [topnotchfreaks](https://github.com/topnotchfreaks) — Clang toolchain
-- Google/AOSP — kernel source
+- Google/AOSP — GKI kernel source
+- CodeLinaro — CLO kernel source
 
 ---
 
