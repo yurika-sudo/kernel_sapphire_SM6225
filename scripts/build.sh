@@ -64,6 +64,51 @@ if [ "$SOURCE_TYPE" = "gki" ]; then
   cp "${OUT_DIR}/dist/arch/arm64/boot/Image" "${OUT_DIR}/dist/Image"
   echo "[GKI] Image copied to ${OUT_DIR}/dist/Image"
 
+
+elif [ "$SOURCE_TYPE" = "clo" ]; then
+  set -o pipefail
+
+  export PATH="${CLANG_DIR}/bin:$PATH"
+
+  MAKE_FLAGS=(
+    -j$(nproc)
+    O="${OUT_DIR}/dist"
+    ARCH=arm64
+    SUBARCH=arm64
+    LLVM=1
+    LLVM_IAS=1
+    CC=clang
+    LD=ld.lld
+    AR=llvm-ar
+    NM=llvm-nm
+    OBJCOPY=llvm-objcopy
+    OBJDUMP=llvm-objdump
+    STRIP=llvm-strip
+    CROSS_COMPILE=aarch64-linux-gnu-
+    CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+    KBUILD_BUILD_USER="$KBUILD_BUILD_USER"
+    KBUILD_BUILD_HOST="$KBUILD_BUILD_HOST"
+    KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
+    LTO=thin
+    LLVM_PARALLEL_LINK_JOBS=1
+  )
+
+  mkdir -p "${OUT_DIR}/dist"
+  cd "$KERNEL_SRC"
+
+  echo "[CLO] Building defconfig: $DEFCONFIG"
+  make "${MAKE_FLAGS[@]}" "$DEFCONFIG"
+
+  echo "[CLO] Building Image..."
+  if ! make "${MAKE_FLAGS[@]}" Image 2>&1 | tee /tmp/build_clo.log; then
+    echo "[FAIL] CLO build failed:"
+    tail -60 /tmp/build_clo.log
+    exit 1
+  fi
+
+  cp "${OUT_DIR}/dist/arch/arm64/boot/Image" "${OUT_DIR}/dist/Image"
+  echo "[CLO] Image copied to ${OUT_DIR}/dist/Image"
+
 else
   echo "[ERROR] Unknown SOURCE_TYPE: $SOURCE_TYPE"
   exit 1
