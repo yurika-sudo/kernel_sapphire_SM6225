@@ -14,7 +14,12 @@ index 834a7757a2e5..b62457e767f8 100644
  static inline u32 tcp_skb_timestamp(const struct sk_buff *skb)
  {
  	return tcp_ns_to_ts(skb->skb_mstamp_ns);
-@@ -879,9 +884,14 @@ struct tcp_skb_cb {
+@@ -876,12 +881,16 @@ struct tcp_skb_cb {
+-			__u32 in_flight:30,/* Bytes in flight at transmit */
+-			      is_app_limited:1, /* cwnd not fully used? */
+-			      unused:1;
++			__u32 is_app_limited:1, /* cwnd not fully used? */
++			      unused:31;
  			/* pkts S/ACKed so far upon tx of skb, incl retrans: */
  			__u32 delivered;
  			/* start of send pipeline phase */
@@ -31,7 +36,7 @@ index 834a7757a2e5..b62457e767f8 100644
  		} tx;   /* only used for outgoing skbs */
  		union {
  			struct inet_skb_parm	h4;
-@@ -1026,8 +1036,13 @@ struct ack_sample {
+@@ -1026,8 +1035,13 @@ struct ack_sample {
   */
  struct rate_sample {
  	u64  prior_mstamp; /* starting timestamp for interval */
