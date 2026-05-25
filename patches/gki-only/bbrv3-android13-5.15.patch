@@ -1,5 +1,5 @@
 diff --git a/include/net/tcp.h b/include/net/tcp.h
-index 834a7757a2e5..b62457e767f8 100644
+index 834a7757a..679f3d045 100644
 --- a/include/net/tcp.h
 +++ b/include/net/tcp.h
 @@ -805,6 +805,11 @@ static inline u32 tcp_stamp_us_delta(u64 t1, u64 t0)
@@ -14,7 +14,10 @@ index 834a7757a2e5..b62457e767f8 100644
  static inline u32 tcp_skb_timestamp(const struct sk_buff *skb)
  {
  	return tcp_ns_to_ts(skb->skb_mstamp_ns);
-@@ -876,12 +881,18 @@ struct tcp_skb_cb {
+@@ -873,15 +878,21 @@ struct tcp_skb_cb {
+ 	union {
+ 		struct {
+ 			/* There is space for up to 24 bytes */
 -			__u32 in_flight:30,/* Bytes in flight at transmit */
 -			      is_app_limited:1, /* cwnd not fully used? */
 -			      unused:1;
@@ -53,7 +56,7 @@ index 834a7757a2e5..b62457e767f8 100644
  	u32 snd_interval_us;	/* snd interval for delivered packets */
  	u32 rcv_interval_us;	/* rcv interval for delivered packets */
 diff --git a/net/ipv4/tcp_bbr.c b/net/ipv4/tcp_bbr.c
-index c5ee83654db1..e522f7fe3aa2 100644
+index c5ee83654..409302b24 100644
 --- a/net/ipv4/tcp_bbr.c
 +++ b/net/ipv4/tcp_bbr.c
 @@ -1,18 +1,19 @@
@@ -89,12 +92,9 @@ index c5ee83654db1..e522f7fe3aa2 100644
   *
   * Here is a state transition diagram for BBR:
   *
-@@ -56,13 +57,22 @@
-  * otherwise TCP stack falls back to an internal pacing using one high
+@@ -57,11 +58,25 @@
   * resolution timer per TCP socket and may use more resources.
   */
-+#include <linux/btf.h>
-+#include <linux/btf_ids.h>
  #include <linux/module.h>
 +#include <linux/slab.h>
  #include <net/tcp.h>
@@ -102,17 +102,23 @@ index c5ee83654db1..e522f7fe3aa2 100644
  #include <linux/inet.h>
  #include <linux/random.h>
  #include <linux/win_minmax.h>
- 
++/* android13-5.15 compat */
++#ifndef get_random_u32_below
++#define get_random_u32_below(n) prandom_u32_max(n)
++#endif
++#ifndef GSO_LEGACY_MAX_SIZE
++#define GSO_LEGACY_MAX_SIZE GSO_MAX_SIZE
++#endif
++
 +#include "tcp_dctcp.h"
 +
 +#define BBR_VERSION		3
 +
 +#define bbr_param(sk,name)	(bbr_ ## name)
-+
+ 
  /* Scale factor for rate in pkt/uSec unit to avoid truncation in bandwidth
   * estimation. The rate unit ~= (1500 bytes / 1 usec / 2^24) ~= 715 bps.
-  * This handles bandwidths from 0.06pps (715bps) to 256Mpps (3Tbps) in a u32.
-@@ -75,6 +85,8 @@
+@@ -75,6 +90,8 @@
  #define BBR_SCALE 8	/* scaling factor for fractions in BBR (e.g. gains) */
  #define BBR_UNIT (1 << BBR_SCALE)
  
@@ -121,7 +127,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  /* BBR has the following modes for deciding how fast to send: */
  enum bbr_mode {
  	BBR_STARTUP,	/* ramp up sending rate rapidly to fill pipe */
-@@ -83,36 +95,41 @@ enum bbr_mode {
+@@ -83,36 +100,41 @@ enum bbr_mode {
  	BBR_PROBE_RTT,	/* cut inflight to min to probe min_rtt */
  };
  
@@ -177,7 +183,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  	u32	prior_cwnd;	/* prior cwnd upon entering loss recovery */
  	u32	full_bw;	/* recent bw, to estimate if pipe is full */
  
-@@ -122,291 +139,307 @@ struct bbr {
+@@ -122,291 +144,307 @@ struct bbr {
  	u32	ack_epoch_acked:20,	/* packets (S)ACKed in sampling epoch */
  		extra_acked_win_rtts:5,	/* age of extra_acked, in round trips */
  		extra_acked_win_idx:1,	/* current index in extra_acked array */
@@ -638,7 +644,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  static u32 bbr_inflight(struct sock *sk, u32 bw, int gain)
  {
  	u32 inflight;
-@@ -417,24 +450,10 @@ static u32 bbr_inflight(struct sock *sk, u32 bw, int gain)
+@@ -417,24 +455,10 @@ static u32 bbr_inflight(struct sock *sk, u32 bw, int gain)
  	return inflight;
  }
  
@@ -664,7 +670,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  	u64 now_ns, edt_ns, interval_us;
  	u32 interval_delivered, inflight_at_edt;
  
-@@ -443,22 +462,21 @@ static u32 bbr_packets_in_net_at_edt(struct sock *sk, u32 inflight_now)
+@@ -443,22 +467,21 @@ static u32 bbr_packets_in_net_at_edt(struct sock *sk, u32 inflight_now)
  	interval_us = div_u64(edt_ns - now_ns, NSEC_PER_USEC);
  	interval_delivered = (u64)bbr_bw(sk) * interval_us >> BW_SCALE;
  	inflight_at_edt = inflight_now;
@@ -691,7 +697,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  			     >> BBR_SCALE;
  		aggr_cwnd = min(aggr_cwnd, max_aggr_cwnd);
  	}
-@@ -466,366 +484,109 @@ static u32 bbr_ack_aggregation_cwnd(struct sock *sk)
+@@ -466,366 +489,109 @@ static u32 bbr_ack_aggregation_cwnd(struct sock *sk)
  	return aggr_cwnd;
  }
  
@@ -1110,7 +1116,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  			bbr->extra_acked_win_rtts = 0;
  			bbr->extra_acked_win_idx = bbr->extra_acked_win_idx ?
  						   0 : 1;
-@@ -833,15 +594,10 @@ static void bbr_update_ack_aggregation(struct sock *sk,
+@@ -833,15 +599,10 @@ static void bbr_update_ack_aggregation(struct sock *sk,
  		}
  	}
  
@@ -1126,7 +1132,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  	if (bbr->ack_epoch_acked <= expected_acked ||
  	    (bbr->ack_epoch_acked + rs->acked_sacked >=
  	     bbr_ack_epoch_acked_reset_thresh)) {
-@@ -850,7 +606,6 @@ static void bbr_update_ack_aggregation(struct sock *sk,
+@@ -850,7 +611,6 @@ static void bbr_update_ack_aggregation(struct sock *sk,
  		expected_acked = 0;
  	}
  
@@ -1134,7 +1140,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  	bbr->ack_epoch_acked = min_t(u32, 0xFFFFF,
  				     bbr->ack_epoch_acked + rs->acked_sacked);
  	extra_acked = bbr->ack_epoch_acked - expected_acked;
-@@ -859,114 +614,60 @@ static void bbr_update_ack_aggregation(struct sock *sk,
+@@ -859,114 +619,60 @@ static void bbr_update_ack_aggregation(struct sock *sk,
  		bbr->extra_acked[bbr->extra_acked_win_idx] = extra_acked;
  }
  
@@ -1276,7 +1282,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  			bbr->probe_rtt_round_done = 0;
  			bbr->next_rtt_delivered = tp->delivered;
  		} else if (bbr->probe_rtt_done_stamp) {
-@@ -976,29 +677,30 @@ static void bbr_update_min_rtt(struct sock *sk, const struct rate_sample *rs)
+@@ -976,29 +682,30 @@ static void bbr_update_min_rtt(struct sock *sk, const struct rate_sample *rs)
  				bbr_check_probe_rtt_done(sk);
  		}
  	}
@@ -1317,7 +1323,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  		break;
  	case BBR_PROBE_RTT:
  		bbr->pacing_gain = BBR_UNIT;
-@@ -1010,48 +712,788 @@ static void bbr_update_gains(struct sock *sk)
+@@ -1010,48 +717,788 @@ static void bbr_update_gains(struct sock *sk)
  	}
  }
  
@@ -2122,7 +2128,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  	bbr->has_seen_rtt = 0;
  	bbr_init_pacing_rate_from_rtt(sk);
  
-@@ -1062,7 +1504,7 @@ static void bbr_init(struct sock *sk)
+@@ -1062,7 +1509,7 @@ static void bbr_init(struct sock *sk)
  	bbr->full_bw_cnt = 0;
  	bbr->cycle_mstamp = 0;
  	bbr->cycle_idx = 0;
@@ -2131,7 +2137,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  	bbr_reset_startup_mode(sk);
  
  	bbr->ack_epoch_mstamp = tp->tcp_mstamp;
-@@ -1072,68 +1514,118 @@ static void bbr_init(struct sock *sk)
+@@ -1072,68 +1519,118 @@ static void bbr_init(struct sock *sk)
  	bbr->extra_acked[0] = 0;
  	bbr->extra_acked[1] = 0;
  
@@ -2281,7 +2287,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  	}
  }
  
-@@ -1142,6 +1634,7 @@ static struct tcp_congestion_ops tcp_bbr_cong_ops __read_mostly = {
+@@ -1142,6 +1639,7 @@ static struct tcp_congestion_ops tcp_bbr_cong_ops __read_mostly = {
  	.name		= "bbr",
  	.owner		= THIS_MODULE,
  	.init		= bbr_init,
@@ -2289,29 +2295,11 @@ index c5ee83654db1..e522f7fe3aa2 100644
  	.cong_control	= bbr_main,
  	.sndbuf_expand	= bbr_sndbuf_expand,
  	.undo_cwnd	= bbr_undo_cwnd,
-@@ -1152,9 +1645,35 @@ static struct tcp_congestion_ops tcp_bbr_cong_ops __read_mostly = {
+@@ -1152,9 +1650,16 @@ static struct tcp_congestion_ops tcp_bbr_cong_ops __read_mostly = {
  	.set_state	= bbr_set_state,
  };
  
-+BTF_SET8_START(tcp_bbr_check_kfunc_ids)
-+#ifdef CONFIG_X86
-+#ifdef CONFIG_DYNAMIC_FTRACE
-+BTF_ID_FLAGS(func, bbr_init)
-+BTF_ID_FLAGS(func, bbr_main)
-+BTF_ID_FLAGS(func, bbr_sndbuf_expand)
-+BTF_ID_FLAGS(func, bbr_undo_cwnd)
-+BTF_ID_FLAGS(func, bbr_cwnd_event)
-+BTF_ID_FLAGS(func, bbr_ssthresh)
-+BTF_ID_FLAGS(func, bbr_min_tso_segs)
-+BTF_ID_FLAGS(func, bbr_set_state)
-+#endif
-+#endif
-+BTF_SET8_END(tcp_bbr_check_kfunc_ids)
 +
-+static const struct btf_kfunc_id_set tcp_bbr_kfunc_set = {
-+	.owner = THIS_MODULE,
-+	.set   = &tcp_bbr_check_kfunc_ids,
-+};
 +
  static int __init bbr_register(void)
  {
@@ -2320,13 +2308,12 @@ index c5ee83654db1..e522f7fe3aa2 100644
 +
 +	BUILD_BUG_ON(sizeof(struct bbr *) > ICSK_CA_PRIV_SIZE);
 +
-+	ret = register_btf_kfunc_id_set(BPF_PROG_TYPE_STRUCT_OPS, &tcp_bbr_kfunc_set);
 +	if (ret < 0)
 +		return ret;
  	return tcp_register_congestion_control(&tcp_bbr_cong_ops);
  }
  
-@@ -1170,5 +1689,12 @@ MODULE_AUTHOR("Van Jacobson <vanj@google.com>");
+@@ -1170,5 +1675,12 @@ MODULE_AUTHOR("Van Jacobson <vanj@google.com>");
  MODULE_AUTHOR("Neal Cardwell <ncardwell@google.com>");
  MODULE_AUTHOR("Yuchung Cheng <ycheng@google.com>");
  MODULE_AUTHOR("Soheil Hassas Yeganeh <soheil@google.com>");
@@ -2340,7 +2327,7 @@ index c5ee83654db1..e522f7fe3aa2 100644
  MODULE_DESCRIPTION("TCP BBR (Bottleneck Bandwidth and RTT)");
 +MODULE_VERSION(__stringify(BBR_VERSION));
 diff --git a/net/ipv4/tcp_rate.c b/net/ipv4/tcp_rate.c
-index 042e27f54116..50992aec67a9 100644
+index 042e27f54..50992aec6 100644
 --- a/net/ipv4/tcp_rate.c
 +++ b/net/ipv4/tcp_rate.c
 @@ -34,6 +34,22 @@
