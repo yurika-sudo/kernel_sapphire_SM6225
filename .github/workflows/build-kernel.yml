@@ -179,6 +179,19 @@ jobs:
           RUN_URL:     "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: bash scripts/build-summary.sh
 
+      # ── Notify variant failure (fires immediately, don't wait for others) ─
+      - name: "📣 Notify variant failure"
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          VARIANT:     ${{ inputs.variant_name }}
+          SOURCE_TYPE: ${{ inputs.source_type }}
+          BUILD_TYPE:  ${{ inputs.build_type }}
+          RUN_URL:     "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_NUMBER:  ${{ github.run_number }}
+        run: bash scripts/notify.sh variant-failure
+
       # ── Pack ZIP ─────────────────────────────────────────────────────────
       - name: "📦 Pack ZIP"
         env:

@@ -102,6 +102,36 @@ elif [ "$MODE" = "check" ]; then
   MSG="${MSG}<b>🔗</b> <a href='${RUN_URL}'>Run details</a>"
   _tg_msg "$MSG"
 
+# ─── Variant failure (fires immediately per-variant) ──────────────────────────
+elif [ "$MODE" = "variant-failure" ]; then
+  : "${RUN_URL:?}" "${RUN_NUMBER:?}" "${VARIANT:?}"
+
+  # Pick log file based on source type
+  LOG_FILE="/tmp/build_${SOURCE_TYPE:-gki}.log"
+
+  # Extract last 20 unique error lines, strip long path prefix
+  ERRORS=""
+  if [ -f "$LOG_FILE" ]; then
+    ERRORS=$(grep -E " error:" "$LOG_FILE" \
+      | sed 's|.*/kernel_src/||' \
+      | awk '!seen[$0]++' \
+      | tail -20 \
+      | head -c 1800)
+  fi
+
+  [ "$BUILD_TYPE" = "testing" ] && TYPE_ICON="🧪" || TYPE_ICON="🔨"
+
+  MSG="<b>❌ Build Failed — ${VARIANT}</b>%0A%0A"
+  MSG="${MSG}<b>${TYPE_ICON}</b> ${BUILD_TYPE:-stable} · Run #${RUN_NUMBER}%0A"
+  MSG="${MSG}<b>🕐</b> $(date -u +'%H:%M UTC')%0A"
+  MSG="${MSG}<b>🔗</b> <a href='${RUN_URL}'>Logs</a>"
+
+  if [ -n "$ERRORS" ]; then
+    MSG="${MSG}%0A%0A<b>🔍 Errors:</b>%0A<pre>${ERRORS}</pre>"
+  fi
+
+  _tg_msg "$MSG"
+
 else
   echo "[ERROR] Unknown mode: $MODE"
   exit 1
