@@ -26,13 +26,13 @@ if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
     [ -f "$ARTIFACT_ZIP" ] || continue
 
     # Derive named image from artifact dir name
-    # artifact dirs: gki-wild, gki-suki, gki-noksu, clo-wild, clo-suki, clo-noksu
+    # artifact dirs: gki-ksun, gki-suki, gki-noksu, clo-ksun, clo-suki, clo-noksu
     DIR_NAME=$(basename "$ARTIFACT_DIR")
     case "$DIR_NAME" in
-      gki-wild)  IMG_NAME="Image.gki.ksu"   ;;
+      gki-ksun)  IMG_NAME="Image.gki.ksu"   ;;
       gki-suki)  IMG_NAME="Image.gki.suki"  ;;
       gki-noksu) IMG_NAME="Image.gki.noksu" ;;
-      clo-wild)  IMG_NAME="Image.clo.ksu"   ;;
+      clo-ksun)  IMG_NAME="Image.clo.ksu"   ;;
       clo-suki)  IMG_NAME="Image.clo.suki"  ;;
       clo-noksu) IMG_NAME="Image.clo.noksu" ;;
       *)         IMG_NAME="Image.$(echo "$DIR_NAME" | tr -d '-')" ;;
