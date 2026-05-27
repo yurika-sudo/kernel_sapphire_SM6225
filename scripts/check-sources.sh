@@ -7,11 +7,11 @@ _curl() { curl -s --retry 3 --retry-delay 2 "$@" || echo ""; }
 
 echo "=== Checking upstream sources ==="
 
-# ── Wild-KSU latest tag ──────────────────────────────────────────────────────
-WILD_TAG=$(_curl "https://api.github.com/repos/WildKernels/Wild_KSU/tags" \
+# ── KSU-Next latest tag ──────────────────────────────────────────────────────
+WILD_TAG=$(_curl "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/tags" \
   | jq -r '.[0].name // "unknown"' 2>/dev/null || echo "unknown")
-[ -z "$WILD_TAG" ] && WILD_TAG="unknown"
-echo "Wild-KSU    : $WILD_TAG"
+[ -z "$KSUN_TAG" ] && KSUN_TAG="unknown"
+echo "KSU-Next    : $WILD_TAG"
 
 # ── SukiSU-Ultra latest tag ──────────────────────────────────────────────────
 SUKI_TAG=$(_curl "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest" \
@@ -46,7 +46,7 @@ echo "GKI 5.15    : $GKI_SUB"
 
 # ── Write to GITHUB_ENV ──────────────────────────────────────────────────────
 {
-  echo "CHECK_WILD_TAG=$WILD_TAG"
+  echo "CHECK_KSUN_TAG=$KSUN_TAG"
   echo "CHECK_SUKI_TAG=$SUKI_TAG"
   echo "CHECK_SUSFS_TAG=$SUSFS_TAG"
   echo "CHECK_GKI_SUB=$GKI_SUB"
