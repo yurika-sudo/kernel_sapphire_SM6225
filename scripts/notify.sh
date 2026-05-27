@@ -51,7 +51,7 @@ if [ "$MODE" = "success" ]; then
   MSG="${MSG}<b>🔨</b> <a href='https://github.com/${GITHUB_REPOSITORY}/commit/${SHA}'>${SHORT_SHA}</a>%0A%0A"
 
   MSG="${MSG}<b>📦 KSU / SUSFS</b>%0A"
-  MSG="${MSG}• KSU-Next: <code>${WILD_TAG}</code>%0A"
+  MSG="${MSG}• KSU-Next: <code>${KSUN_TAG}</code>%0A"
   MSG="${MSG}• SukiSU-Ultra: <code>${SUKI_TAG}</code>%0A"
   MSG="${MSG}• SUSFS module: <code>${DISPLAY_SUSFS}</code>%0A%0A"
 
@@ -98,7 +98,7 @@ elif [ "$MODE" = "check" ]; then
   DISPLAY_SUSFS_TAG=$(printf '%s' "${CHECK_SUSFS_TAG:-?}" | sed 's/+/%2B/g')
 
   MSG="<b>🔍 Source Update Check</b>%0A%0A"
-  MSG="${MSG}<b>KSU-Next:</b> <code>${CHECK_WILD_TAG:-?}</code>%0A"
+  MSG="${MSG}<b>KSU-Next:</b> <code>${CHECK_KSUN_TAG:-?}</code>%0A"
   MSG="${MSG}<b>SukiSU-Ultra:</b> <code>${CHECK_SUKI_TAG:-?}</code>%0A"
   MSG="${MSG}<b>SUSFS:</b> <code>${DISPLAY_SUSFS_TAG}</code>%0A"
   MSG="${MSG}<b>GKI 5.15 latest:</b> <code>${CHECK_GKI_SUB:-?}</code>%0A%0A"
