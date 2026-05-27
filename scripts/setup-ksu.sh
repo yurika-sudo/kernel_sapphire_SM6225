@@ -35,8 +35,8 @@ _inject_susfs_init() {
 # ─── KernelSU-Next ─────────────────────────────────────────────────────────
 if [ "$KSU_TYPE" = "ksun" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu ./KernelSU-Next
-  curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" \
-    | bash -s dev
+  curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" \
+    | bash -s dev-susfs
   [ -d "KernelSU-Next" ] || { echo "[ERROR] KernelSU-Next not found"; exit 1; }
 
   cd KernelSU-Next
