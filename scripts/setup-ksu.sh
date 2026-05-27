@@ -59,7 +59,7 @@ if [ "$KSU_TYPE" = "wild" ]; then
     # (fake_state, ksu_selinux_hide_running, ksu_is_init_rc_hook_enabled) that
     # Wild KSU never defines, causing linker errors. Skip those hunks entirely.
     awk '/^diff --git/{skip=/security\/selinux/} !skip{print}' \
-      "$SUSFS_PATCH" | patch -p1 --forward || true
+      "$SUSFS_PATCH" | patch -p1 --forward --fuzz=3 || true
   fi
   mkdir -p fs include/linux
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
