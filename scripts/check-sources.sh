@@ -8,10 +8,10 @@ _curl() { curl -s --retry 3 --retry-delay 2 "$@" || echo ""; }
 echo "=== Checking upstream sources ==="
 
 # ── KSU-Next latest tag ──────────────────────────────────────────────────────
-WILD_TAG=$(_curl "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/tags" \
+KSUN_TAG=$(_curl "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/tags" \
   | jq -r '.[0].name // "unknown"' 2>/dev/null || echo "unknown")
 [ -z "$KSUN_TAG" ] && KSUN_TAG="unknown"
-echo "KSU-Next    : $WILD_TAG"
+echo "KSU-Next    : $KSUN_TAG"
 
 # ── SukiSU-Ultra latest tag ──────────────────────────────────────────────────
 SUKI_TAG=$(_curl "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest" \
