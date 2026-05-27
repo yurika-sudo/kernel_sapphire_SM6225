@@ -26,7 +26,7 @@ case "${SOURCE_TYPE}" in
 esac
 
 case "${KSU_TYPE}" in
-  wild) KSU_LABEL="WildKSU" ;;
+  ksun) KSU_LABEL="KSU-Next" ;;
   suki) KSU_LABEL="SukiSU"  ;;
   none) KSU_LABEL="NoKSU"   ;;
   *)    KSU_LABEL="${KSU_TYPE}" ;;
@@ -37,7 +37,7 @@ ZIP_NAME="AK3-${SRC_LABEL}-${KSU_LABEL}-${KERNEL_VERSION}-$(date +'%Y-%m')${SUFF
 
 # Named image used by AIO pack-release.sh when extracting
 case "$KSU_TYPE" in
-  wild) IMAGE_NAME="Image.gki.ksu"  ;;
+  ksun) IMAGE_NAME="Image.gki.ksu"  ;;
   suki) IMAGE_NAME="Image.gki.suki" ;;
   none) IMAGE_NAME="Image.gki.noksu";;
   *)    IMAGE_NAME="Image"          ;;
