@@ -19,25 +19,23 @@ SUKI_TAG=$(_curl "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/release
 [ -z "$SUKI_TAG" ] && SUKI_TAG="unknown"
 echo "SukiSU-Ultra: $SUKI_TAG"
 
-# ── SUSFS latest commit (simonpunk, gki-android13-5.15) ──────────────────────
+# ── SUSFS module latest tag (sidex15/susfs4ksu-module) ───────────────────────
+# NOTE: This tracks the flashable SUSFS *module* version (sidex15), not the
+# kernel patch commit (simonpunk). Kernel patch is pinned separately in build.
 SUSFS_RAW=$(_curl \
-  "https://api.github.com/repos/simonpunk/susfs4ksu/commits?sha=gki-android13-5.15&per_page=1" \
+  "https://api.github.com/repos/sidex15/susfs4ksu-module/tags" \
   || echo "[]")
-SUSFS_COMMIT=$(echo "$SUSFS_RAW" \
-  | jq -r 'if type=="array" and length>0 then .[0].sha[:8] else "unknown" end' 2>/dev/null \
+SUSFS_TAG=$(echo "$SUSFS_RAW" \
+  | jq -r 'if type=="array" and length>0 then .[0].name else "unknown" end' 2>/dev/null \
   || echo "unknown")
-SUSFS_DATE=$(echo "$SUSFS_RAW" \
-  | jq -r 'if type=="array" and length>0 then .[0].commit.committer.date[:10] else "?" end' 2>/dev/null \
-  || echo "?")
-[ -z "$SUSFS_COMMIT" ] && SUSFS_COMMIT="unknown"
-echo "SUSFS       : $SUSFS_COMMIT ($SUSFS_DATE)"
+[ -z "$SUSFS_TAG" ] && SUSFS_TAG="unknown"
+echo "SUSFS module: $SUSFS_TAG"
 
 # ── GKI 5.15 latest subversion ───────────────────────────────────────────────
 GKI_SUB=$(_curl "https://www.kernel.org/releases.json" \
-  | jq -r '[.releases[] | select(.version | test("^5\\.15\\."))] | .[0].version // "unknown"' \
+  | jq -r '[.releases[] | select((.version | test("^5\\.15\\.")) and .moniker == "longterm")] | .[0].version // "unknown"' \
   2>/dev/null || echo "unknown")
 [ -z "$GKI_SUB" ] || [ "$GKI_SUB" = "null" ] && GKI_SUB="unknown"
-# Prefix v if not already
 [[ "$GKI_SUB" != v* ]] && [[ "$GKI_SUB" != "unknown" ]] && GKI_SUB="v${GKI_SUB}"
 echo "GKI 5.15    : $GKI_SUB"
 
@@ -45,8 +43,7 @@ echo "GKI 5.15    : $GKI_SUB"
 {
   echo "CHECK_WILD_TAG=$WILD_TAG"
   echo "CHECK_SUKI_TAG=$SUKI_TAG"
-  echo "CHECK_SUSFS_COMMIT=$SUSFS_COMMIT"
-  echo "CHECK_SUSFS_DATE=$SUSFS_DATE"
+  echo "CHECK_SUSFS_TAG=$SUSFS_TAG"
   echo "CHECK_GKI_SUB=$GKI_SUB"
 } >> "${GITHUB_ENV:-/dev/null}"
 
