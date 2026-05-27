@@ -12,7 +12,7 @@ AK3_REPO="https://github.com/superuseryu/AnyKernel3"
 mkdir -p ./release_zips
 
 if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
-  [ "$BUILD_TYPE" = "testing" ] && SUFFIX="-testing" || SUFFIX=""
+  [ "$BUILD_TYPE" = "testing" ] && SUFFIX="-TESTING" || SUFFIX=""
   AIO_NAME="AK3-ALL-${KERNEL_VERSION}-$(date +'%Y-%m')${SUFFIX}.zip"
 
   echo "[AIO] Building single AK3 zip with all images..."
@@ -20,7 +20,7 @@ if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
 
   # Extract Image from each variant and rename to named image per artifact dir
   for ARTIFACT_DIR in ./artifacts/*/; do
-    ARTIFACT_ZIP=$(find "$ARTIFACT_DIR" -name "AnyKernel3_*.zip" | head -1)
+    ARTIFACT_ZIP=$(find "$ARTIFACT_DIR" -name "AK3-*.zip" | head -1)
     [ -f "$ARTIFACT_ZIP" ] || continue
 
     # Derive named image from artifact dir name
@@ -55,7 +55,7 @@ if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
 fi
 
 if [ "$ZIP_MODE" = "per-variant" ] || [ "$ZIP_MODE" = "both" ]; then
-  find ./artifacts -name "AnyKernel3_*.zip" -exec cp {} ./release_zips/ \;
+  find ./artifacts -name "AK3-*.zip" -exec cp {} ./release_zips/ \;
   echo "Collected per-variant ZIPs:"
 fi
 
