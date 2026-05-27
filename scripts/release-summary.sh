@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build-summary.sh — write detailed build summary to Runner + save to file for audit zip
 # env: BUILD_TYPE, ZIP_MODE, REPO, SHA, RELEASE_TAG, RELEASE_URL,
-#      WILD_TAG, SUKI_TAG, SUSFS_VERSION, SUSFS_MODULE_URL,
+#      KSUN_TAG, SUKI_TAG, SUSFS_VERSION, SUSFS_MODULE_URL,
 #      KERNEL_VERSION, GITHUB_RUN_NUMBER, GITHUB_STEP_SUMMARY
 set -e
 
@@ -39,14 +39,14 @@ SUMMARY="${SUMMARY}| **Pack mode** | ${ZIP_MODE:-per-variant} |"$'\n\n'
 SUMMARY="${SUMMARY}## 📦 KSU / SUSFS Versions"$'\n\n'
 SUMMARY="${SUMMARY}| Component | Version | Link |"$'\n'
 SUMMARY="${SUMMARY}|-----------|---------|------|"$'\n'
-SUMMARY="${SUMMARY}| Wild-KSU | \`${WILD_TAG}\` | [Releases](https://github.com/WildKernels/Wild_KSU/releases/tag/${WILD_TAG}) |"$'\n'
+SUMMARY="${SUMMARY}| KSU-Next | \`${KSUN_TAG}` | [Releases](https://github.com/KernelSU-Next/KernelSU-Next/releases/tag/${KSUN_TAG}) |"$'\n'
 SUMMARY="${SUMMARY}| SukiSU-Ultra | \`${SUKI_TAG}\` | [Releases](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases/tag/${SUKI_TAG}) |"$'\n'
 SUMMARY="${SUMMARY}| SUSFS module | \`${SUSFS_VERSION}\` | [Download](${SUSFS_MODULE_URL}) |"$'\n\n'
 
 SUMMARY="${SUMMARY}## ✨ Features"$'\n\n'
 SUMMARY="${SUMMARY}- SUSFS v2.1.0"$'\n'
 SUMMARY="${SUMMARY}- BBR+Westwood TCP (Westwood default)"$'\n'
-SUMMARY="${SUMMARY}- BBG (Wild variants)"$'\n'
+SUMMARY="${SUMMARY}- BBG (Ksun variants)"$'\n'
 SUMMARY="${SUMMARY}- KPM support (SukiSU variants)"$'\n'
 SUMMARY="${SUMMARY}- Thin LTO"$'\n'
 SUMMARY="${SUMMARY}- Droidspaces"$'\n\n'
