@@ -13,9 +13,10 @@ IMAGE="${WORK_DIR}/out/dist/Image"
 
 [ -f "$IMAGE" ] || { echo "[ERROR] Image not found: $IMAGE"; exit 1; }
 
-# Read kernel sublevel from build output
+# Read kernel sublevel from build output — extract X.Y.Z only, drop uname suffix
 VERSION_FILE="${WORK_DIR}/out/dist/kernel_version.txt"
-KERNEL_VERSION=$([ -f "$VERSION_FILE" ] && tr -d '[:space:]' < "$VERSION_FILE" || echo "5.15.x")
+_raw=$([ -f "$VERSION_FILE" ] && tr -d '[:space:]' < "$VERSION_FILE" || echo "5.15.x")
+KERNEL_VERSION=$(echo "$_raw" | grep -oP '^\d+\.\d+\.\d+' || echo "$_raw")
 
 # Derive labels from env
 case "${SOURCE_TYPE}" in
