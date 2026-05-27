@@ -31,12 +31,20 @@ SUSFS_TAG=$(echo "$SUSFS_RAW" \
 [ -z "$SUSFS_TAG" ] && SUSFS_TAG="unknown"
 echo "SUSFS module: $SUSFS_TAG"
 
-# ── GKI 5.15 latest subversion ───────────────────────────────────────────────
-GKI_SUB=$(_curl "https://www.kernel.org/releases.json" \
-  | jq -r '[.releases[] | select((.version | test("^5\\.15\\.")) and .moniker == "longterm")] | .[0].version // "unknown"' \
-  2>/dev/null || echo "unknown")
-[ -z "$GKI_SUB" ] || [ "$GKI_SUB" = "null" ] && GKI_SUB="unknown"
-[[ "$GKI_SUB" != v* ]] && [[ "$GKI_SUB" != "unknown" ]] && GKI_SUB="v${GKI_SUB}"
+# ── GKI android13-5.15-lts latest version ────────────────────────────────────
+# Fetch only the Makefile (not the whole tree) from AOSP — base64 encoded by gitiles
+GKI_MK=$(_curl \
+  "https://android.googlesource.com/kernel/common/+/refs/heads/android13-5.15-lts/Makefile?format=TEXT" \
+  | base64 -d 2>/dev/null || echo "")
+if [ -n "$GKI_MK" ]; then
+  _ver=$(echo "$GKI_MK"  | awk -F' *= *' '/^VERSION /    {v=$2}
+                                           /^PATCHLEVEL / {p=$2}
+                                           /^SUBLEVEL /   {s=$2}
+                                           END { if(v && p && s) print "v"v"."p"."s }')
+  GKI_SUB="${_ver:-unknown}"
+else
+  GKI_SUB="unknown"
+fi
 echo "GKI 5.15    : $GKI_SUB"
 
 # ── Write to GITHUB_ENV ──────────────────────────────────────────────────────
@@ -45,6 +53,7 @@ echo "GKI 5.15    : $GKI_SUB"
   echo "CHECK_SUKI_TAG=$SUKI_TAG"
   echo "CHECK_SUSFS_TAG=$SUSFS_TAG"
   echo "CHECK_GKI_SUB=$GKI_SUB"
+  # NOTE: GKI_SUB reflects android13-5.15-lts Makefile version, not kernel.org LTS
 } >> "${GITHUB_ENV:-/dev/null}"
 
 echo "=== Done ==="
