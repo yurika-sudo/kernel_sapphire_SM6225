@@ -40,11 +40,11 @@ jobs:
       fail-fast: false
       matrix:
         variant:
-          - name:      "GKI-Wild"
+          - name:      "GKI-Ksun"
             source:    "gki"
-            ksu:       "wild"
-            prefix:    "GKI_Wild"
-            artifact:  "gki-wild"
+            ksu:       "ksun"
+            prefix:    "GKI_Ksun"
+            artifact:  "gki-ksun"
             defconfig: "gki_defconfig"
 
           - name:      "GKI-SukiSU"
@@ -61,11 +61,11 @@ jobs:
             artifact:  "gki-noksu"
             defconfig: "gki_defconfig"
 
-          - name:      "CLO-Wild"
+          - name:      "CLO-Ksun"
             source:    "clo"
-            ksu:       "wild"
-            prefix:    "CLO_Wild"
-            artifact:  "clo-wild"
+            ksu:       "ksun"
+            prefix:    "CLO_Ksun"
+            artifact:  "clo-ksun"
             defconfig: "gki_defconfig"
             clo_fragment: "vendor/bengal_GKI.config"
 
