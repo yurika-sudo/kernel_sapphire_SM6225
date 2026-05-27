@@ -12,8 +12,8 @@ AK3_REPO="https://github.com/superuseryu/AnyKernel3"
 mkdir -p ./release_zips
 
 if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
-  [ "$BUILD_TYPE" = "testing" ] && SUFFIX="-TESTING" || SUFFIX=""
-  AIO_NAME="AnyKernel3_Seiran_ALL_${DATE_TAG}${SUFFIX}.zip"
+  [ "$BUILD_TYPE" = "testing" ] && SUFFIX="-testing" || SUFFIX=""
+  AIO_NAME="AK3-ALL-${KERNEL_VERSION}-$(date +'%Y-%m')${SUFFIX}.zip"
 
   echo "[AIO] Building single AK3 zip with all images..."
   git clone --depth=1 "$AK3_REPO" ak3_aio
