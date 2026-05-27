@@ -10,7 +10,7 @@ set -e
 cd "$KERNEL_DIR"
 
 _link_ksu_driver() {
-  local DIR="$1"   # KernelSU or Wild_KSU
+  local DIR="$1"   # KernelSU-Next or KernelSU (suki)
   [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
     ln -sf "../${DIR}" drivers/kernelsu
   grep -q "obj-.*kernelsu" drivers/Makefile || \
@@ -34,16 +34,16 @@ _inject_susfs_init() {
 
 # ─── KernelSU-Next ─────────────────────────────────────────────────────────
 if [ "$KSU_TYPE" = "ksun" ]; then
-  rm -rf ./KernelSU ./drivers/kernelsu ./Wild_KSU ./KernelSU-Next
+  rm -rf ./KernelSU ./drivers/kernelsu ./KernelSU-Next
   curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" \
     | bash -s dev
   [ -d "KernelSU-Next" ] || { echo "[ERROR] KernelSU-Next not found"; exit 1; }
 
   cd KernelSU-Next
   git fetch --tags 2>/dev/null || true
-  WILD_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
-  echo "WILD_KSU_TAG=$WILD_TAG"    >> "${GITHUB_ENV:-/dev/null}"
-  echo "$WILD_TAG"                  > "$WORK_DIR/ksun_tag.txt"
+  KSUN_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
+  echo "KSUN_TAG=$KSUN_TAG"    >> "${GITHUB_ENV:-/dev/null}"
+  echo "$KSUN_TAG"                  > "$WORK_DIR/ksun_tag.txt"
   cd ..
 
   # SUSFS — simonpunk main branch (compatible with KSU-Next)
