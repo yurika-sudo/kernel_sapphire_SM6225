@@ -183,7 +183,6 @@ CONFIG_USB_ACM=m
 # init sequence causing bootloop. Re-add only via KSU module if needed at runtime.
 
 # SDR
-CONFIG_MEDIA_SUPPORT=y
 CONFIG_MEDIA_DIGITAL_TV_SUPPORT=y
 CONFIG_MEDIA_SDR_SUPPORT=y
 CONFIG_USB_AIRSPY=m
