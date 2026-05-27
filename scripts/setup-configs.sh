@@ -75,7 +75,7 @@ EOF
 
 # ── Wild-KSU specific ────────────────────────────────────────────────────────
 if [ "$KSU_TYPE" = "wild" ]; then
-	cat >> "$CF" << 'EOF'
+  cat >> "$CF" << 'EOF'
 CONFIG_KSU=y
 CONFIG_KSU_SUSFS=y
 CONFIG_KSU_SUSFS_SUS_MAP=y
@@ -93,7 +93,7 @@ EOF
 
 # ── SukiSU specific ─────────────────────────────────────────────────────────
 elif [ "$KSU_TYPE" = "suki" ]; then
-	cat >> "$CF" << 'EOF'
+  cat >> "$CF" << 'EOF'
 CONFIG_KSU=y
 CONFIG_KSU_SUSFS=y
 CONFIG_KSU_SUSFS_SUS_MAP=y
@@ -114,20 +114,8 @@ EOF
 fi
 
 # ── NetHunter (CLO-only, opt-in via NETHUNTER=true) ─────────────────────────
-#
-# BOOTLOOP HISTORY — do not re-add without testing per-group in testing.env:
-#   USB_CONFIGFS_* (all functions)  — bootloop; Android USB HAL init fails
-#                                     when gadget functions are =m at early boot
-#   MEDIA_SUPPORT=y                 — bootloop suspect; pulls full media subsystem
-#
-# PENDING TEST (add one group at a time via testing.env EXTRA_CONFIGS):
-#   Group A — BT extra:   BT_HCIBCM203X, BT_HCIBPA10X, BT_HCIBFUSB, BT_HCIVHCI
-#   Group B — USB eth:    USB_RTL8150, USB_RTL8152, USB_ACM
-#   Group C — SDR parent: MEDIA_SUPPORT (as =m, not =y)
-#   Group D — USB gadget: USB_CONFIGFS_* (needs more investigation)
-#
 if [ "$SOURCE_TYPE" = "clo" ] && [ "$NETHUNTER" = "true" ]; then
-	cat >> "$CF" << 'EOF'
+  cat >> "$CF" << 'EOF'
 # General
 CONFIG_MODULE_FORCE_UNLOAD=y
 
@@ -135,6 +123,10 @@ CONFIG_MODULE_FORCE_UNLOAD=y
 CONFIG_BT_HCIBTUSB=m
 CONFIG_BT_HCIBTUSB_BCM=y
 CONFIG_BT_HCIBTUSB_RTL=y
+CONFIG_BT_HCIBCM203X=m
+CONFIG_BT_HCIBPA10X=m
+CONFIG_BT_HCIBFUSB=m
+CONFIG_BT_HCIVHCI=m
 
 # Wireless base
 CONFIG_CFG80211=m
@@ -182,20 +174,29 @@ CONFIG_USB_ZD1201=m
 CONFIG_ZD1211RW=m
 CONFIG_USB_NET_RNDIS_WLAN=m
 
+# USB Ethernet adapters (=m, hotplug safe)
+CONFIG_USB_RTL8150=m
+CONFIG_USB_RTL8152=m
+CONFIG_USB_ACM=m
+# NOTE: USB_CONFIGFS_* (RNDIS/OBEX/ECM/NCM/EEM/SERIAL/HID/MASS_STORAGE) intentionally
+# excluded — these are bool configs (=m == =y) and conflict with recovery USB gadget
+# init sequence causing bootloop. Re-add only via KSU module if needed at runtime.
+
 # SDR
+CONFIG_MEDIA_SUPPORT=y
 CONFIG_MEDIA_DIGITAL_TV_SUPPORT=y
 CONFIG_MEDIA_SDR_SUPPORT=y
-# CONFIG_MEDIA_SUBDRV_AUTOSELECT is not set
 CONFIG_USB_AIRSPY=m
 CONFIG_USB_HACKRF=m
 CONFIG_USB_MSI2500=m
+# CONFIG_MEDIA_SUBDRV_AUTOSELECT is not set
 CONFIG_DVB_RTL2830=m
 CONFIG_DVB_RTL2832=m
 CONFIG_DVB_RTL2832_SDR=m
 CONFIG_DVB_SI2168=m
 CONFIG_DVB_ZD1301_DEMOD=m
 EOF
-echo "[OK] NetHunter configs applied (CLO)"
+  echo "[OK] NetHunter configs applied (CLO)"
 fi
 
 echo "[OK] Configs written for KSU_TYPE=$KSU_TYPE SOURCE_TYPE=$SOURCE_TYPE"
