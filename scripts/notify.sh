@@ -97,7 +97,7 @@ elif [ "$MODE" = "check" ]; then
   MSG="<b>🔍 Source Update Check</b>%0A%0A"
   MSG="${MSG}<b>Wild-KSU:</b> <code>${CHECK_WILD_TAG:-?}</code>%0A"
   MSG="${MSG}<b>SukiSU-Ultra:</b> <code>${CHECK_SUKI_TAG:-?}</code>%0A"
-  MSG="${MSG}<b>SUSFS:</b> <code>${CHECK_SUSFS_COMMIT:-?}</code> (${CHECK_SUSFS_DATE:-?})%0A"
+  MSG="${MSG}<b>SUSFS:</b> <code>${CHECK_SUSFS_TAG:-?}</code>%0A"
   MSG="${MSG}<b>GKI 5.15 latest:</b> <code>${CHECK_GKI_SUB:-?}</code>%0A%0A"
   MSG="${MSG}<b>🔗</b> <a href='${RUN_URL}'>Run details</a>"
   _tg_msg "$MSG"
