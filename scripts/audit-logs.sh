@@ -38,7 +38,7 @@ URL    : https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
 RUNINFO
 
 [ "$BUILD_TYPE" = "testing" ] && SUFFIX="-testing" || SUFFIX=""
-LOG_ZIP="build-audit-logs-${KERNEL_VERSION:-5.15.x}-$(date +'%Y-%m')${SUFFIX}.zip"
+LOG_ZIP="build-audit-logs-$(date +'%Y-%m')${SUFFIX}.zip"
 zip -r9 "$LOG_ZIP" audit_logs/
 LOG_SIZE_MB=$(echo "scale=2; $(stat -c%s "$LOG_ZIP") / 1024 / 1024" | bc | sed 's/^\./0./')
 
