@@ -30,7 +30,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  Kernel   : $KV"
 echo "  Source   : $SOURCE_TYPE"
 echo "  KSU      : $KSU_LABEL"
-[ "$KSU_TYPE" = "ksun" ] && echo "  KSU-Next : $WILD_V"
+[ "$KSU_TYPE" = "ksun" ] && echo "  KSU-Next : $KSUN_V"
 [ "$KSU_TYPE" = "suki" ] && echo "  Suki ver : $SUKI_V"
 echo "  SUSFS    : $SUSFS_NOTE"
 echo "  BBG      : $BBG"
