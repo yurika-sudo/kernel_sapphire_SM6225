@@ -73,8 +73,8 @@ CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
 # CONFIG_NTSYNC is not set
 EOF
 
-# ── Wild-KSU specific ────────────────────────────────────────────────────────
-if [ "$KSU_TYPE" = "wild" ]; then
+# ── KSU-Next specific ────────────────────────────────────────────────────────
+if [ "$KSU_TYPE" = "ksun" ]; then
   cat >> "$CF" << 'EOF'
 CONFIG_KSU=y
 CONFIG_KSU_SUSFS=y
