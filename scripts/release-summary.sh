@@ -39,7 +39,7 @@ SUMMARY="${SUMMARY}| **Pack mode** | ${ZIP_MODE:-per-variant} |"$'\n\n'
 SUMMARY="${SUMMARY}## 📦 KSU / SUSFS Versions"$'\n\n'
 SUMMARY="${SUMMARY}| Component | Version | Link |"$'\n'
 SUMMARY="${SUMMARY}|-----------|---------|------|"$'\n'
-SUMMARY="${SUMMARY}| KSU-Next | \`${KSUN_TAG}` | [Releases](https://github.com/KernelSU-Next/KernelSU-Next/releases/tag/${KSUN_TAG}) |"$'\n'
+SUMMARY="${SUMMARY}| KSU-Next | \`${KSUN_TAG}\` | [Releases](https://github.com/KernelSU-Next/KernelSU-Next/releases/tag/${KSUN_TAG}) |"$'\n'
 SUMMARY="${SUMMARY}| SukiSU-Ultra | \`${SUKI_TAG}\` | [Releases](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases/tag/${SUKI_TAG}) |"$'\n'
 SUMMARY="${SUMMARY}| SUSFS module | \`${SUSFS_VERSION}\` | [Download](${SUSFS_MODULE_URL}) |"$'\n\n'
 
