@@ -5,7 +5,7 @@ on:
     inputs:
       variant_name:  { type: string, required: true }
       source_type:   { type: string, required: true }   # gki | clo
-      ksu_type:      { type: string, required: true }   # wild | suki | none
+      ksu_type:      { type: string, required: true }   # ksun | suki | none
       zip_prefix:    { type: string, required: true }
       artifact_name: { type: string, required: true }
       defconfig:     { type: string, required: true }
@@ -81,9 +81,9 @@ jobs:
           DEFCONFIG:   ${{ inputs.defconfig }}
         run: bash scripts/apply-patches.sh
 
-      # ── BBG (Wild only, not NoKSU, not SukiSU) ──────────────────────────
+      # ── BBG (Ksun only, not NoKSU, not SukiSU) ──────────────────────────
       - name: "🛡️ Setup BBG"
-        if: inputs.ksu_type == 'wild'
+        if: inputs.ksu_type == 'ksun'
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
@@ -224,6 +224,6 @@ jobs:
             ${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
             ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
-            ${{ env.WORK_DIR }}/wild_ksu_tag.txt
+            ${{ env.WORK_DIR }}/ksun_tag.txt
             ${{ env.WORK_DIR }}/suki_ksu_tag.txt
           retention-days: 1
