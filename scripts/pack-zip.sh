@@ -1,21 +1,38 @@
 #!/usr/bin/env bash
 # pack-zip.sh — pack AnyKernel3 zip per variant
-# env: ZIP_PREFIX, KSU_TYPE, BUILD_TYPE, WORK_DIR, BUILD_DATE
+# env: SOURCE_TYPE, KSU_TYPE, BUILD_TYPE, WORK_DIR
 set -e
 
-: "${ZIP_PREFIX:?}"
+: "${SOURCE_TYPE:?}"
 : "${KSU_TYPE:?}"
 : "${WORK_DIR:?}"
 : "${BUILD_TYPE:-stable}"
-: "${BUILD_DATE:=$(date +'%Y%m%d')}"
 
 AK3_REPO="https://github.com/superuseryu/AnyKernel3"
 IMAGE="${WORK_DIR}/out/dist/Image"
 
 [ -f "$IMAGE" ] || { echo "[ERROR] Image not found: $IMAGE"; exit 1; }
 
-[ "$BUILD_TYPE" = "testing" ] && SUFFIX="-TESTING" || SUFFIX=""
-ZIP_NAME="AnyKernel3_${ZIP_PREFIX}_${BUILD_DATE}${SUFFIX}.zip"
+# Read kernel sublevel from build output
+VERSION_FILE="${WORK_DIR}/out/dist/kernel_version.txt"
+KERNEL_VERSION=$([ -f "$VERSION_FILE" ] && tr -d '[:space:]' < "$VERSION_FILE" || echo "5.15.x")
+
+# Derive labels from env
+case "${SOURCE_TYPE}" in
+  gki) SRC_LABEL="GKI" ;;
+  clo) SRC_LABEL="CLO" ;;
+  *)   SRC_LABEL="${SOURCE_TYPE^^}" ;;
+esac
+
+case "${KSU_TYPE}" in
+  wild) KSU_LABEL="WildKSU" ;;
+  suki) KSU_LABEL="SukiSU"  ;;
+  none) KSU_LABEL="NoKSU"   ;;
+  *)    KSU_LABEL="${KSU_TYPE}" ;;
+esac
+
+[ "$BUILD_TYPE" = "testing" ] && SUFFIX="-testing" || SUFFIX=""
+ZIP_NAME="AK3-${SRC_LABEL}-${KSU_LABEL}-${KERNEL_VERSION}-$(date +'%Y-%m')${SUFFIX}.zip"
 
 # Named image used by AIO pack-release.sh when extracting
 case "$KSU_TYPE" in
