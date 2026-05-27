@@ -13,7 +13,9 @@ mkdir -p ./release_zips
 
 if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
   [ "$BUILD_TYPE" = "testing" ] && SUFFIX="-testing" || SUFFIX=""
-  AIO_NAME="AK3-ALL-${KERNEL_VERSION}-$(date +'%Y-%m')${SUFFIX}.zip"
+  # AIO bundles both GKI and CLO — use major.minor only, not per-source sublevel
+  _series=$(echo "${KERNEL_VERSION:-5.15.x}" | grep -oP '^\d+\.\d+' || echo "5.15")
+  AIO_NAME="AK3-ALL-${_series}-$(date +'%Y-%m')${SUFFIX}.zip"
 
   echo "[AIO] Building single AK3 zip with all images..."
   git clone --depth=1 "$AK3_REPO" ak3_aio
