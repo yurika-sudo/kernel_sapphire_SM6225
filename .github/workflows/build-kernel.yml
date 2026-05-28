@@ -69,6 +69,10 @@ jobs:
           KSU_TYPE:    ${{ inputs.ksu_type }}
         run: bash scripts/clone-source.sh
 
+      # ── Fix upstream source warnings ────────────────────────────────────
+      - name: "🔧 Fix source warnings"
+        run: bash scripts/fix-source-warnings.sh "${{ env.KERNEL_SRC }}"  
+        
       # ── Toolchain (AOSP repo for GKI, standalone clang for CLO) ─────────
       - name: "🔧 Setup toolchain"
         run: bash scripts/setup-toolchain.sh
