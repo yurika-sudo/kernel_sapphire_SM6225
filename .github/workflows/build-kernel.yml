@@ -1,9 +1,5 @@
 name: "Build Kernel (reusable)"
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
-
 on:
   workflow_call:
     inputs:
@@ -19,6 +15,7 @@ on:
 
 env:
   OUT_DIR: "out"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build:
