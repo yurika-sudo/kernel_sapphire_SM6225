@@ -14,6 +14,14 @@ CF="$DEFCONFIG"
 sed -i 's/ cgroup_disable=pressure//'                    "$CF"
 sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CF"
 
+# Strip symbols already in base defconfig to avoid "reassigning" warnings
+for SYM in PID_NS \
+           OVERLAY_FS OVERLAY_FS_REDIRECT_DIR OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW \
+           OVERLAY_FS_INDEX OVERLAY_FS_XINO_AUTO OVERLAY_FS_METACOPY \
+           LRU_GEN LRU_GEN_ENABLED NET_SCH_FQ DEBUG_MEMORY_INIT PRINTK_CALLER; do
+  sed -i "/^CONFIG_${SYM}[= ]/d; /^# CONFIG_${SYM} /d" "$CF"
+done
+
 # ── Common configs (all variants, both GKI + CLO) ───────────────────────────
 cat >> "$CF" << 'EOF'
 CONFIG_OVERLAY_FS=y
@@ -58,6 +66,15 @@ CONFIG_IP_SET_LIST_SET=y
 CONFIG_ZRAM_WRITEBACK=y
 # CONFIG_ZRAM_MEMORY_TRACKING is not set
 CONFIG_LRU_GEN=y
+# CONFIG_HZ_100 is not set
+# CONFIG_HZ_250 is not set
+CONFIG_HZ_300=y
+# CONFIG_HZ_1000 is not set
+CONFIG_HZ=300
+CONFIG_FRAME_WARN=0
+CONFIG_NETFILTER_XT_SET=y
+CONFIG_IP6_NF_TARGET_MASQUERADE=y
+CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
 CONFIG_LRU_GEN_ENABLED=y
 CONFIG_NET_SCH_FQ=y
 CONFIG_NET_SCH_CAKE=y
