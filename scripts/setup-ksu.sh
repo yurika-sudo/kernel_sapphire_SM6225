@@ -7,6 +7,9 @@ set -e
 : "${KERNEL_DIR:?}"
 : "${WORK_DIR:?}"
 
+git config --global init.defaultBranch main
+git config --global advice.addEmbeddedRepo false
+
 cd "$KERNEL_DIR"
 
 _link_ksu_driver() {
