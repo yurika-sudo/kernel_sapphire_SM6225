@@ -47,7 +47,8 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   cd ..
 
   # SUSFS — simonpunk main branch (compatible with KSU-Next)
-  git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+  git clone --depth=2 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+  git -C susfs4ksu checkout e4bd49f7
   SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
   echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
   echo "[OK] SUSFS commit: $SUSFS_COMMIT"
@@ -87,7 +88,8 @@ elif [ "$KSU_TYPE" = "suki" ]; then
   cd ..
 
   # SUSFS — always latest (ShirkNeko fork = simonpunk mirror, API compatible)
-  git clone --depth=1 https://github.com/ShirkNeko/susfs4ksu.git -b gki-android13-5.15
+  git clone --depth=2 https://github.com/ShirkNeko/susfs4ksu.git -b gki-android13-5.15
+  git -C susfs4ksu checkout e4bd49f7
   SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
   echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
   echo "[OK] SUSFS commit: $SUSFS_COMMIT"
