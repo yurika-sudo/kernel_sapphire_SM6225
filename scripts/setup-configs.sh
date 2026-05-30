@@ -87,6 +87,13 @@ CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
 # CONFIG_RCU_TRACE is not set
 # CONFIG_PRINTK_CALLER is not set
 # CONFIG_DEBUG_FS is not set
+# CONFIG_DEBUG_BUGVERBOSE is not set
+# CONFIG_DEBUG_MISC is not set
+# CONFIG_DEBUG_KINFO is not set
+# CONFIG_DEBUG_VM is not set
+# CONFIG_DEBUG_OBJECTS is not set
+# CONFIG_TRACE_MMIO_ACCESS is not set
+# CONFIG_UBSAN_TRAP is not set
 # CONFIG_F2FS_IOSTAT is not set
 # CONFIG_NTSYNC is not set
 EOF
@@ -128,7 +135,12 @@ CONFIG_KPM=y
 EOF
 
 # ── NoKSU — pure vanilla, no KSU/SUSFS/BBG/KPM ─────────────────────────────
-# (only common configs above apply — nothing extra here)
+else
+  cat >> "$CF" << 'EOF'
+# CONFIG_KPROBES is not set
+# CONFIG_DEBUG_FS_ALLOW_ALL is not set
+CONFIG_DEBUG_FS_ALLOW_NONE=y
+EOF
 fi
 
 # ── NetHunter (CLO-only, opt-in via NETHUNTER=true) ─────────────────────────
