@@ -105,6 +105,19 @@ elif [ "$SOURCE_TYPE" = "clo" ]; then
     KCONFIG_CONFIG="${OUT_DIR}/dist/.config"       scripts/kconfig/merge_config.sh -m       "${OUT_DIR}/dist/.config"       "arch/arm64/configs/${CLO_FRAGMENT}"
     make "${MAKE_FLAGS[@]}" olddefconfig
     echo "[CLO] Fragment merged"
+
+    # Re-apply debug overrides that fragment may have re-enabled
+    echo "[CLO] Applying post-merge config overrides..."
+    scripts/config --file "${OUT_DIR}/dist/.config" \
+      --disable DEBUG_BUGVERBOSE \
+      --disable DEBUG_MISC \
+      --disable DEBUG_KINFO \
+      --disable DEBUG_VM \
+      --disable DEBUG_OBJECTS \
+      --disable TRACE_MMIO_ACCESS \
+      --disable UBSAN_TRAP
+    make "${MAKE_FLAGS[@]}" olddefconfig
+    echo "[CLO] Post-merge overrides applied"
   fi
 
   echo "[CLO] Building Image..."
