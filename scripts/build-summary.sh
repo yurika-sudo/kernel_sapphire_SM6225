@@ -12,7 +12,7 @@
 _SUSFS_COMMIT="${SUSFS_COMMIT:-latest}"
 
 case "$KSU_TYPE" in
-  wild) KSU_LABEL="Wild-KSU";      BBG="✅"; KPM="❌";                       SUSFS_NOTE="simonpunk/susfs4ksu @ $_SUSFS_COMMIT" ;;
+  ksun) KSU_LABEL="KSU-Next";      BBG="✅"; KPM="❌";                       SUSFS_NOTE="simonpunk/susfs4ksu @ $_SUSFS_COMMIT" ;;
   suki) KSU_LABEL="SukiSU-Ultra";  BBG="❌"; KPM="✅ KPM binary + CONFIG_KPM"; SUSFS_NOTE="ShirkNeko/susfs4ksu @ $_SUSFS_COMMIT" ;;
   none) KSU_LABEL="None (vanilla)"; BBG="❌"; KPM="❌";                       SUSFS_NOTE="—" ;;
 esac
@@ -20,7 +20,7 @@ esac
 [ "$BUILD_TYPE" = "testing" ] && BUILD_BADGE="⚠️ TESTING" || BUILD_BADGE="✅ STABLE"
 
 KV="${KERNEL_VERSION:-unknown}"
-WILD_V="${WILD_KSU_TAG:-—}"
+KSUN_V="${KSUN_KSU_TAG:-—}"
 SUKI_V="${SUKI_TAG:-—}"
 
 # ── Console output ───────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  Kernel   : $KV"
 echo "  Source   : $SOURCE_TYPE"
 echo "  KSU      : $KSU_LABEL"
-[ "$KSU_TYPE" = "wild" ] && echo "  Wild ver : $WILD_V"
+[ "$KSU_TYPE" = "ksun" ] && echo "  KSU-Next : $KSUN_V"
 [ "$KSU_TYPE" = "suki" ] && echo "  Suki ver : $SUKI_V"
 echo "  SUSFS    : $SUSFS_NOTE"
 echo "  BBG      : $BBG"

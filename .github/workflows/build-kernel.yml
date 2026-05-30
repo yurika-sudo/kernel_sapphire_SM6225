@@ -5,15 +5,17 @@ on:
     inputs:
       variant_name:  { type: string, required: true }
       source_type:   { type: string, required: true }   # gki | clo
-      ksu_type:      { type: string, required: true }   # wild | suki | none
+      ksu_type:      { type: string, required: true }   # ksun | suki | none
       zip_prefix:    { type: string, required: true }
       artifact_name: { type: string, required: true }
       defconfig:     { type: string, required: true }
       clo_fragment:  { type: string, required: false }  # e.g. vendor/bengal_GKI.config (CLO only)
       build_type:    { type: string, required: true }   # stable | testing
+      nethunter:     { type: boolean, required: false }  # CLO only
 
 env:
   OUT_DIR: "out"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build:
@@ -37,7 +39,7 @@ jobs:
 
       # ── Repo ────────────────────────────────────────────────────────────
       - name: "📦 Checkout"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 1
 
@@ -56,6 +58,10 @@ jobs:
           echo "KERNEL_SRC=${{ github.workspace }}/kernel_src" >> $GITHUB_ENV
           echo "WORK_DIR=${{ github.workspace }}"              >> $GITHUB_ENV
 
+      # ── Export build flags ───────────────────────────────────────────────
+      - name: "📌 Export build flags"
+        run: echo "NETHUNTER=${{ inputs.nethunter }}" >> $GITHUB_ENV
+
       # ── Clone kernel source (GKI or CLO) ────────────────────────────────
       - name: "🌟 Clone kernel source"
         env:
@@ -63,6 +69,10 @@ jobs:
           KSU_TYPE:    ${{ inputs.ksu_type }}
         run: bash scripts/clone-source.sh
 
+      # ── Fix upstream source warnings ────────────────────────────────────
+      - name: "🔧 Fix source warnings"
+        run: bash scripts/fix-source-warnings.sh "${{ env.KERNEL_SRC }}"  
+        
       # ── Toolchain (AOSP repo for GKI, standalone clang for CLO) ─────────
       - name: "🔧 Setup toolchain"
         run: bash scripts/setup-toolchain.sh
@@ -76,9 +86,9 @@ jobs:
           DEFCONFIG:   ${{ inputs.defconfig }}
         run: bash scripts/apply-patches.sh
 
-      # ── BBG (Wild only, not NoKSU, not SukiSU) ──────────────────────────
+      # ── BBG (Ksun only, not NoKSU, not SukiSU) ──────────────────────────
       - name: "🛡️ Setup BBG"
-        if: inputs.ksu_type == 'wild'
+        if: inputs.ksu_type == 'ksun'
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
@@ -212,13 +222,13 @@ jobs:
 
       # ── Upload artifact ──────────────────────────────────────────────────
       - name: "📤 Upload artifact"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: ${{ inputs.artifact_name }}
           path: |
             ${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
             ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
-            ${{ env.WORK_DIR }}/wild_ksu_tag.txt
+            ${{ env.WORK_DIR }}/ksun_tag.txt
             ${{ env.WORK_DIR }}/suki_ksu_tag.txt
           retention-days: 1

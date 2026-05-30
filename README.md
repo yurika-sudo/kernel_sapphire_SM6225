@@ -2,8 +2,9 @@
 
 Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — `android13-5.15`, GKI + CLO variants.
 
-> Flash at your own risk. Built and tested on sapphire/sapphiren only.
-> Support for other devices? Hit me up on [Telegram](https://t.me/home_yu_chat). You take full responsibility — bootloop/brick ain't on me.
+> ⚠️ **This is a personal project.** Builds are tested on my own device (sapphire/sapphiren) only.
+> Flash at your own risk — bootloop/brick ain't on me. If you use this, you take full responsibility.
+> Support for other devices? Hit me up on [Telegram](https://t.me/home_yu_chat).
 
 ---
 
@@ -11,16 +12,14 @@ Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — `
 
 | Variant | Source | Root | Extras |
 |---------|--------|------|--------|
-| GKI-Wild | AOSP LTS | Wild-KSU + SUSFS | BBG |
+| GKI-Ksun | AOSP LTS | KernelSU-Next + SUSFS | BBG |
 | GKI-SukiSU | AOSP LTS | SukiSU-Ultra + SUSFS | KPM |
 | GKI-NoKSU | AOSP LTS | Vanilla | — |
-| CLO-Wild | CodeLinaro | Wild-KSU + SUSFS | BBG |
+| CLO-Ksun | CodeLinaro | KernelSU-Next + SUSFS | BBG |
 | CLO-SukiSU | CodeLinaro | SukiSU-Ultra + SUSFS | KPM |
 | CLO-NoKSU | CodeLinaro | Vanilla | — |
 
 All variants include: **BBRv1 + Westwood TCP** · **IP_SET** · **Thin LTO** · **Droidspaces support**
-
-> Wild-KSU supports both Wild and KernelSU-Next managers natively.
 
 ---
 
@@ -91,7 +90,7 @@ Select ZIP packaging mode:
 
 ## Credits
 
-- [WildKernels](https://github.com/WildKernels) — Wild-KSU
+- [pershoot](https://github.com/pershoot/KernelSU-Next) — KernelSU-Next
 - [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) — SukiSU-Ultra
 - [simonpunk](https://gitlab.com/simonpunk/susfs4ksu) — SUSFS kernel patch
 - [sidex15](https://github.com/sidex15/susfs4ksu-module) — SUSFS module

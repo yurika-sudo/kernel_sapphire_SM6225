@@ -40,8 +40,8 @@ if [ "$MODE" = "success" ]; then
 
   UNAME_STR="${KERNEL_UNAME:-${KERNEL_VERSION:-unknown}}"
 
-  [ "$BUILD_TYPE" = "testing" ] && ICON="🧪" && LABEL="Testing Build" \
-    || ICON="✅" && LABEL="Build Success"
+  [ "$BUILD_TYPE" = "testing" ] && { ICON="🧪"; LABEL="Testing Build"; } \
+    || { ICON="✅"; LABEL="Build Success"; }
 
   MSG="<b>${ICON} ${LABEL}</b>%0A%0A"
   MSG="${MSG}<b>🔄</b> Run #${RUN_NUMBER} · sapphire%0A"
@@ -51,12 +51,12 @@ if [ "$MODE" = "success" ]; then
   MSG="${MSG}<b>🔨</b> <a href='https://github.com/${GITHUB_REPOSITORY}/commit/${SHA}'>${SHORT_SHA}</a>%0A%0A"
 
   MSG="${MSG}<b>📦 KSU / SUSFS</b>%0A"
-  MSG="${MSG}• Wild-KSU: <code>${WILD_TAG}</code>%0A"
+  MSG="${MSG}• KSU-Next: <code>${KSUN_TAG}</code>%0A"
   MSG="${MSG}• SukiSU-Ultra: <code>${SUKI_TAG}</code>%0A"
   MSG="${MSG}• SUSFS module: <code>${DISPLAY_SUSFS}</code>%0A%0A"
 
   MSG="${MSG}<b>📋</b> Run #${RUN_NUMBER} · ${DATE_STR} · ${BUILD_TYPE}%0A"
-  MSG="${MSG}<b>📦</b> ${ZIP_MODE:-per-variant} · GKI/CLO × Wild/SukiSU/NoKSU%0A"
+  MSG="${MSG}<b>📦</b> ${ZIP_MODE:-per-variant} · GKI/CLO × Next/SukiSU/NoKSU%0A"
   MSG="${MSG}<b>🔗</b> <a href='${RELEASE_URL}'>Release</a> · <a href='${RUN_URL}'>Logs</a>"
   _tg_msg "$MSG"
 
@@ -94,10 +94,13 @@ elif [ "$MODE" = "check" ]; then
   : "${RUN_URL:?}"
 
   # These are set by check-sources.sh via GITHUB_ENV
+  # Escape + so curl form-encoding doesn't turn it into a space
+  DISPLAY_SUSFS_TAG=$(printf '%s' "${CHECK_SUSFS_TAG:-?}" | sed 's/+/%2B/g')
+
   MSG="<b>🔍 Source Update Check</b>%0A%0A"
-  MSG="${MSG}<b>Wild-KSU:</b> <code>${CHECK_WILD_TAG:-?}</code>%0A"
+  MSG="${MSG}<b>KSU-Next:</b> <code>${CHECK_KSUN_TAG:-?}</code>%0A"
   MSG="${MSG}<b>SukiSU-Ultra:</b> <code>${CHECK_SUKI_TAG:-?}</code>%0A"
-  MSG="${MSG}<b>SUSFS:</b> <code>${CHECK_SUSFS_COMMIT:-?}</code> (${CHECK_SUSFS_DATE:-?})%0A"
+  MSG="${MSG}<b>SUSFS:</b> <code>${DISPLAY_SUSFS_TAG}</code>%0A"
   MSG="${MSG}<b>GKI 5.15 latest:</b> <code>${CHECK_GKI_SUB:-?}</code>%0A%0A"
   MSG="${MSG}<b>🔗</b> <a href='${RUN_URL}'>Run details</a>"
   _tg_msg "$MSG"

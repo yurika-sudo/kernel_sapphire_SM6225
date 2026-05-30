@@ -1,5 +1,9 @@
 name: "🔨 Build Kernels — AIO"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+
 on:
   workflow_dispatch:
     inputs:
@@ -13,6 +17,10 @@ on:
         type: choice
         options: [stable, testing]
         default: stable
+      nethunter:
+        description: "NetHunter configs (CLO only)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -36,11 +44,11 @@ jobs:
       fail-fast: false
       matrix:
         variant:
-          - name:      "GKI-Wild"
+          - name:      "GKI-Ksun"
             source:    "gki"
-            ksu:       "wild"
-            prefix:    "GKI_Wild"
-            artifact:  "gki-wild"
+            ksu:       "ksun"
+            prefix:    "GKI_Ksun"
+            artifact:  "gki-ksun"
             defconfig: "gki_defconfig"
 
           - name:      "GKI-SukiSU"
@@ -57,11 +65,11 @@ jobs:
             artifact:  "gki-noksu"
             defconfig: "gki_defconfig"
 
-          - name:      "CLO-Wild"
+          - name:      "CLO-Ksun"
             source:    "clo"
-            ksu:       "wild"
-            prefix:    "CLO_Wild"
-            artifact:  "clo-wild"
+            ksu:       "ksun"
+            prefix:    "CLO_Ksun"
+            artifact:  "clo-ksun"
             defconfig: "gki_defconfig"
             clo_fragment: "vendor/bengal_GKI.config"
 
@@ -91,6 +99,7 @@ jobs:
       defconfig:     ${{ matrix.variant.defconfig }}
       clo_fragment:  ${{ matrix.variant.clo_fragment || '' }}
       build_type:    ${{ inputs.build_type }}
+      nethunter:     ${{ inputs.nethunter || false }}
     secrets: inherit
 
   # ─── Package + release (only if all builds passed) ───────────────────────
@@ -112,7 +121,7 @@ jobs:
     needs: [build]
     if: always() && needs.build.result == 'cancelled'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 1
       - name: "📣 Telegram"

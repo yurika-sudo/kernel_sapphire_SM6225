@@ -14,6 +14,15 @@ CF="$DEFCONFIG"
 sed -i 's/ cgroup_disable=pressure//'                    "$CF"
 sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CF"
 
+# Strip symbols already in base defconfig to avoid "reassigning" warnings
+for SYM in PID_NS \
+           OVERLAY_FS OVERLAY_FS_REDIRECT_DIR OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW \
+           OVERLAY_FS_INDEX OVERLAY_FS_XINO_AUTO OVERLAY_FS_METACOPY \
+           LRU_GEN LRU_GEN_ENABLED NET_SCH_FQ DEBUG_MEMORY_INIT PRINTK_CALLER \
+           NETFILTER_XT_SET NETFILTER_XT_MATCH_ADDRTYPE; do
+  sed -i "/^CONFIG_${SYM}[= ]/d; /^# CONFIG_${SYM} /d" "$CF"
+done
+
 # ── Common configs (all variants, both GKI + CLO) ───────────────────────────
 cat >> "$CF" << 'EOF'
 CONFIG_OVERLAY_FS=y
@@ -58,6 +67,15 @@ CONFIG_IP_SET_LIST_SET=y
 CONFIG_ZRAM_WRITEBACK=y
 # CONFIG_ZRAM_MEMORY_TRACKING is not set
 CONFIG_LRU_GEN=y
+# CONFIG_HZ_100 is not set
+# CONFIG_HZ_250 is not set
+CONFIG_HZ_300=y
+# CONFIG_HZ_1000 is not set
+CONFIG_HZ=300
+CONFIG_FRAME_WARN=0
+CONFIG_NETFILTER_XT_SET=y
+CONFIG_IP6_NF_TARGET_MASQUERADE=y
+CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
 CONFIG_LRU_GEN_ENABLED=y
 CONFIG_NET_SCH_FQ=y
 CONFIG_NET_SCH_CAKE=y
@@ -73,8 +91,8 @@ CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
 # CONFIG_NTSYNC is not set
 EOF
 
-# ── Wild-KSU specific ────────────────────────────────────────────────────────
-if [ "$KSU_TYPE" = "wild" ]; then
+# ── KSU-Next specific ────────────────────────────────────────────────────────
+if [ "$KSU_TYPE" = "ksun" ]; then
   cat >> "$CF" << 'EOF'
 CONFIG_KSU=y
 CONFIG_KSU_SUSFS=y
@@ -111,6 +129,91 @@ EOF
 
 # ── NoKSU — pure vanilla, no KSU/SUSFS/BBG/KPM ─────────────────────────────
 # (only common configs above apply — nothing extra here)
+fi
+
+# ── NetHunter (CLO-only, opt-in via NETHUNTER=true) ─────────────────────────
+if [ "$SOURCE_TYPE" = "clo" ] && [ "$NETHUNTER" = "true" ]; then
+  cat >> "$CF" << 'EOF'
+# General
+CONFIG_MODULE_FORCE_UNLOAD=y
+
+# Bluetooth
+CONFIG_BT_HCIBTUSB=m
+CONFIG_BT_HCIBTUSB_BCM=y
+CONFIG_BT_HCIBTUSB_RTL=y
+CONFIG_BT_HCIBCM203X=m
+CONFIG_BT_HCIBPA10X=m
+CONFIG_BT_HCIBFUSB=m
+CONFIG_BT_HCIVHCI=m
+
+# Wireless base
+CONFIG_CFG80211=m
+# CONFIG_CFG80211_WEXT is not set # Enabling this causes kernel panic when iwconfig is executed
+CONFIG_MAC80211=m
+CONFIG_MAC80211_MESH=y
+CONFIG_MAC80211_LEDS=y
+
+# Wireless LAN
+CONFIG_WLAN_VENDOR_ATH=y
+CONFIG_ATH9K_HTC=m
+CONFIG_CARL9170=m
+CONFIG_ATH6KL=m
+CONFIG_ATH6KL_USB=m
+CONFIG_WLAN_VENDOR_MEDIATEK=y
+CONFIG_MT7601U=m
+CONFIG_WLAN_VENDOR_RALINK=y
+CONFIG_RT2X00=m
+CONFIG_RT2500USB=m
+CONFIG_RT73USB=m
+CONFIG_RT2800USB=m
+CONFIG_RT2800USB_RT33XX=y
+CONFIG_RT2800USB_RT35XX=y
+CONFIG_RT2800USB_RT3573=y
+CONFIG_RT2800USB_RT53XX=y
+CONFIG_RT2800USB_RT55XX=y
+CONFIG_RT2800USB_UNKNOWN=y
+CONFIG_WLAN_VENDOR_REALTEK=y
+# CONFIG_RTL8187 is not set
+# CONFIG_RTL_CARDS is not set
+# CONFIG_RTL8192CU is not set
+# CONFIG_RTL8XXXU_UNTESTED is not set
+# CONFIG_88XXAU is not set
+CONFIG_RTW88=m
+CONFIG_RTW88_CORE=m
+CONFIG_RTW88_USB=m
+CONFIG_RTW88_88XXA=m
+CONFIG_RTW88_8821A=m
+CONFIG_RTW88_8821AU=m
+CONFIG_RTW88_LEDS=y
+# CONFIG_RTW88_DEBUG is not set
+# CONFIG_RTW88_DEBUGFS is not set
+CONFIG_WLAN_VENDOR_ZYDAS=y
+CONFIG_USB_ZD1201=m
+CONFIG_ZD1211RW=m
+CONFIG_USB_NET_RNDIS_WLAN=m
+
+# USB Ethernet adapters (=m, hotplug safe)
+CONFIG_USB_RTL8150=m
+CONFIG_USB_RTL8152=m
+CONFIG_USB_ACM=m
+# NOTE: USB_CONFIGFS_* (RNDIS/OBEX/ECM/NCM/EEM/SERIAL/HID/MASS_STORAGE) intentionally
+# excluded — these are bool configs (=m == =y) and conflict with recovery USB gadget
+# init sequence causing bootloop. Re-add only via KSU module if needed at runtime.
+
+# SDR
+CONFIG_MEDIA_DIGITAL_TV_SUPPORT=y
+CONFIG_MEDIA_SDR_SUPPORT=y
+CONFIG_USB_AIRSPY=m
+CONFIG_USB_HACKRF=m
+CONFIG_USB_MSI2500=m
+# CONFIG_MEDIA_SUBDRV_AUTOSELECT is not set
+CONFIG_DVB_RTL2830=m
+CONFIG_DVB_RTL2832=m
+CONFIG_DVB_RTL2832_SDR=m
+CONFIG_DVB_SI2168=m
+CONFIG_DVB_ZD1301_DEMOD=m
+EOF
+  echo "[OK] NetHunter configs applied (CLO)"
 fi
 
 echo "[OK] Configs written for KSU_TYPE=$KSU_TYPE SOURCE_TYPE=$SOURCE_TYPE"

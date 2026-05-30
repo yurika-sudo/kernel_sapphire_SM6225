@@ -1,5 +1,9 @@
 name: "🔍 Check Source Updates"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+
 on:
   workflow_dispatch:
   # Optional: uncomment to run daily
@@ -15,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 1
 

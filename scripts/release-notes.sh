@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # release-notes.sh — generate release body
 # env: BUILD_TYPE, RUN_URL, REPO, SHA, RUN_NUMBER
-#      WILD_TAG, SUKI_TAG, SUSFS_VERSION, SUSFS_MODULE_URL, KERNEL_VERSION
+#      KSUN_TAG, SUKI_TAG, SUSFS_VERSION, SUSFS_MODULE_URL, KERNEL_VERSION
 set -e
 
 : "${BUILD_TYPE:-stable}"
@@ -19,13 +19,13 @@ BODY=""
   BODY="> ⚠️ **Testing build** — experimental configs active, use at own risk."$'\n\n'
 
 # Versions block
-BODY="${BODY}**Wild-KSU:** [${WILD_TAG}](https://github.com/WildKernels/Wild_KSU/releases/tag/${WILD_TAG})"$'\n'
+BODY="${BODY}**KSU-Next:** [${KSUN_TAG}](https://github.com/KernelSU-Next/KernelSU-Next/releases/tag/${KSUN_TAG})"$'\n'
 BODY="${BODY}**SukiSU-Ultra:** [${SUKI_TAG}](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases/tag/${SUKI_TAG})"$'\n'
 BODY="${BODY}**SUSFS module:** [${SUSFS_VERSION}](${SUSFS_MODULE_URL})"$'\n'
 BODY="${BODY}**Kernel base:** \`${KERNEL_VERSION}\`"$'\n\n'
 
 # Variants
-BODY="${BODY}**Variants:** GKI Wild · GKI SukiSU · GKI NoKSU · CLO Wild · CLO SukiSU · CLO NoKSU"$'\n\n'
+BODY="${BODY}**Variants:** GKI Ksun · GKI SukiSU · GKI NoKSU · CLO Ksun · CLO SukiSU · CLO NoKSU"$'\n\n'
 
 # Support info
 BODY="${BODY}**Supported:** Android 15+"$'\n'

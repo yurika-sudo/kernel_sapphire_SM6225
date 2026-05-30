@@ -12,25 +12,27 @@ AK3_REPO="https://github.com/superuseryu/AnyKernel3"
 mkdir -p ./release_zips
 
 if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
-  [ "$BUILD_TYPE" = "testing" ] && SUFFIX="-TESTING" || SUFFIX=""
-  AIO_NAME="AnyKernel3_Seiran_ALL_${DATE_TAG}${SUFFIX}.zip"
+  [ "$BUILD_TYPE" = "testing" ] && SUFFIX="-testing" || SUFFIX=""
+  # AIO bundles both GKI and CLO — use major.minor only, not per-source sublevel
+  _series=$(echo "${KERNEL_VERSION:-5.15.x}" | grep -oP '^\d+\.\d+' || echo "5.15")
+  AIO_NAME="AK3-ALL-${_series}-$(date +'%Y-%m')${SUFFIX}.zip"
 
   echo "[AIO] Building single AK3 zip with all images..."
   git clone --depth=1 "$AK3_REPO" ak3_aio
 
   # Extract Image from each variant and rename to named image per artifact dir
   for ARTIFACT_DIR in ./artifacts/*/; do
-    ARTIFACT_ZIP=$(find "$ARTIFACT_DIR" -name "AnyKernel3_*.zip" | head -1)
+    ARTIFACT_ZIP=$(find "$ARTIFACT_DIR" -name "AK3-*.zip" | head -1)
     [ -f "$ARTIFACT_ZIP" ] || continue
 
     # Derive named image from artifact dir name
-    # artifact dirs: gki-wild, gki-suki, gki-noksu, clo-wild, clo-suki, clo-noksu
+    # artifact dirs: gki-ksun, gki-suki, gki-noksu, clo-ksun, clo-suki, clo-noksu
     DIR_NAME=$(basename "$ARTIFACT_DIR")
     case "$DIR_NAME" in
-      gki-wild)  IMG_NAME="Image.gki.ksu"   ;;
+      gki-ksun)  IMG_NAME="Image.gki.ksu"   ;;
       gki-suki)  IMG_NAME="Image.gki.suki"  ;;
       gki-noksu) IMG_NAME="Image.gki.noksu" ;;
-      clo-wild)  IMG_NAME="Image.clo.ksu"   ;;
+      clo-ksun)  IMG_NAME="Image.clo.ksu"   ;;
       clo-suki)  IMG_NAME="Image.clo.suki"  ;;
       clo-noksu) IMG_NAME="Image.clo.noksu" ;;
       *)         IMG_NAME="Image.$(echo "$DIR_NAME" | tr -d '-')" ;;
@@ -55,7 +57,7 @@ if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
 fi
 
 if [ "$ZIP_MODE" = "per-variant" ] || [ "$ZIP_MODE" = "both" ]; then
-  find ./artifacts -name "AnyKernel3_*.zip" -exec cp {} ./release_zips/ \;
+  find ./artifacts -name "AK3-*.zip" -exec cp {} ./release_zips/ \;
   echo "Collected per-variant ZIPs:"
 fi
 

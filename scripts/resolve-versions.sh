@@ -17,8 +17,8 @@ _susfs_raw=$(curl -sf "https://api.github.com/repos/sidex15/susfs4ksu-module/tag
   | jq -r '.[0].name // empty' 2>/dev/null | tr -d ' \n')
 SUSFS_VERSION="${_susfs_raw:-v1.5.2+_R27}"
 
-_wf=$(find ./artifacts -name "wild_ksu_tag.txt" | head -1)
-WILD_TAG=$([ -f "$_wf" ] && cat "$_wf" | tr -d '[:space:]' || echo "unknown")
+_wf=$(find ./artifacts -name "ksun_tag.txt" | head -1)
+KSUN_TAG=$([ -f "$_wf" ] && cat "$_wf" | tr -d '[:space:]' || echo "unknown")
 _sf=$(find ./artifacts -name "suki_ksu_tag.txt" | head -1)
 SUKI_TAG=$([ -f "$_sf" ] && cat "$_sf" | tr -d '[:space:]' || echo "unknown")
 
@@ -41,7 +41,7 @@ RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${ENCODED_TAG}
   echo "KERNEL_VERSION=$KERNEL_VERSION"
   echo "KERNEL_UNAME=$KERNEL_UNAME"
   echo "SUSFS_VERSION=$SUSFS_VERSION"
-  echo "WILD_TAG=$WILD_TAG"
+  echo "KSUN_TAG=$KSUN_TAG"
   echo "SUKI_TAG=$SUKI_TAG"
   echo "DATE_TAG=$DATE_TAG"
   echo "RELEASE_TAG=$RELEASE_TAG"
@@ -54,6 +54,6 @@ RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${ENCODED_TAG}
 echo "[OK] Versions resolved"
 echo "  Kernel  : $KERNEL_VERSION"
 echo "  SUSFS   : $SUSFS_VERSION"
-echo "  Wild    : $WILD_TAG"
+echo "  KSU-Next: $KSUN_TAG"
 echo "  SukiSU  : $SUKI_TAG"
 echo "  Tag     : $RELEASE_TAG"
