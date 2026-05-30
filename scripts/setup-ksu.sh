@@ -81,12 +81,9 @@ elif [ "$KSU_TYPE" = "suki" ]; then
   echo "SUKI_TAG=$SUKI_TAG"      >> "${GITHUB_ENV:-/dev/null}"
   echo "$SUKI_TAG"                > "$WORK_DIR/suki_ksu_tag.txt"
 
-  # With CONFIG_KSU_SUSFS=y, the active overload of ksu_sulog_capture takes
-  # struct user_arg_ptr * (pointer), but ksu_sulog_capture_grant_root passes
-  # USER_ARG_NULL as a value — take its address to fix the type mismatch.
-  sed -i 's/USER_ARG_NULL, gfp)/\&(USER_ARG_NULL), gfp)/' kernel/sulog/event.c
-  echo "[OK] USER_ARG_NULL pointer fix applied to sulog/event.c"
-
+  # NOTE: USER_ARG_NULL fix removed — upstream builtin branch already defines
+  # USER_ARG_NULL as user_arg_null_ptr() which returns struct user_arg_ptr *
+  # directly. Applying &(USER_ARG_NULL) on a function-call rvalue is invalid.
   cd ..
 
   # SUSFS — always latest (ShirkNeko fork = simonpunk mirror, API compatible)
