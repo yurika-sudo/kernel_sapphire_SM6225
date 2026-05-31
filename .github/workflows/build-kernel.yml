@@ -11,7 +11,6 @@ on:
       defconfig:     { type: string, required: true }
       clo_fragment:  { type: string, required: false }  # e.g. vendor/bengal_GKI.config (CLO only)
       build_type:    { type: string, required: true }   # stable | testing
-      nethunter:     { type: boolean, required: false }  # CLO only
 
 env:
   OUT_DIR: "out"
@@ -57,10 +56,6 @@ jobs:
           fi
           echo "KERNEL_SRC=${{ github.workspace }}/kernel_src" >> $GITHUB_ENV
           echo "WORK_DIR=${{ github.workspace }}"              >> $GITHUB_ENV
-
-      # ── Export build flags ───────────────────────────────────────────────
-      - name: "📌 Export build flags"
-        run: echo "NETHUNTER=${{ inputs.nethunter }}" >> $GITHUB_ENV
 
       # ── Clone kernel source (GKI or CLO) ────────────────────────────────
       - name: "🌟 Clone kernel source"
