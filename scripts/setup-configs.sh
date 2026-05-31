@@ -129,12 +129,7 @@ CONFIG_KPM=y
 EOF
 
 # ── NoKSU — pure vanilla, no KSU/SUSFS/BBG/KPM ─────────────────────────────
-else
-  cat >> "$CF" << 'EOF'
-# CONFIG_KPROBES is not set
-# CONFIG_DEBUG_FS_ALLOW_ALL is not set
-CONFIG_DEBUG_FS_ALLOW_NONE=y
-EOF
+# (only common configs above apply — nothing extra here)
 fi
 
 echo "[OK] Configs written for KSU_TYPE=$KSU_TYPE SOURCE_TYPE=$SOURCE_TYPE"
