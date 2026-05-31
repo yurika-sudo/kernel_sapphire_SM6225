@@ -68,6 +68,22 @@ jobs:
       - name: "🔧 Fix source warnings"
         run: bash scripts/fix-source-warnings.sh "${{ env.KERNEL_SRC }}"  
         
+      # ── ccache ───────────────────────────────────────────────────────────
+      - name: "⚡ Configure ccache"
+        run: |
+          sudo apt-get install -y ccache
+          ccache --max-size=2G
+          ccache --set-config=compression=true
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+
+      - name: "⚡ Restore ccache"
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-
+
       # ── Toolchain (AOSP repo for GKI, standalone clang for CLO) ─────────
       - name: "🔧 Setup toolchain"
         run: bash scripts/setup-toolchain.sh
@@ -160,6 +176,13 @@ jobs:
         run: bash scripts/build.sh
 
       # ── Verify ──────────────────────────────────────────────────────────
+      - name: "⚡ Save ccache"
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ github.sha }}
+
       - name: "🔍 Verify kernel"
         run: bash scripts/verify-kernel.sh
 
