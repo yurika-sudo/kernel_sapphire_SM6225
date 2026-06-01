@@ -68,19 +68,25 @@ jobs:
       - name: "🔧 Fix source warnings"
         run: bash scripts/fix-source-warnings.sh "${{ env.KERNEL_SRC }}"  
         
-      # ── ccache ───────────────────────────────────────────────────────────
+      # ── ccache (stable only — skip during testing/debug to avoid cache churn) ──
       - name: "⚡ Configure ccache"
+        if: inputs.build_type == 'stable'
         run: |
           sudo apt-get install -y ccache
           ccache --max-size=2G
           ccache --set-config=compression=true
-          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+          echo "CCACHE_DIR=$HOME/.ccache"                                                >> $GITHUB_ENV
+          echo "CCACHE_NOHASHDIR=true"                                                   >> $GITHUB_ENV
+          echo "CCACHE_HARDLINK=true"                                                    >> $GITHUB_ENV
+          echo "CCACHE_COMPILERCHECK=%compiler% -dumpmachine; %compiler% -dumpversion"  >> $GITHUB_ENV
+          echo "CCACHE_WEEK=$(date +%Y-W%U)"                                             >> $GITHUB_ENV
 
       - name: "⚡ Restore ccache"
-        uses: actions/cache@v4
+        if: inputs.build_type == 'stable'
+        uses: actions/cache/restore@v4
         with:
           path: ~/.ccache
-          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ github.sha }}
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ env.CCACHE_WEEK }}
           restore-keys: |
             ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-
 
@@ -177,11 +183,11 @@ jobs:
 
       # ── Verify ──────────────────────────────────────────────────────────
       - name: "⚡ Save ccache"
-        if: always()
+        if: inputs.build_type == 'stable'
         uses: actions/cache/save@v4
         with:
           path: ~/.ccache
-          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ github.sha }}
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ env.CCACHE_WEEK }}
 
       - name: "🔍 Verify kernel"
         run: bash scripts/verify-kernel.sh
