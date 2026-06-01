@@ -113,11 +113,11 @@ elif [ "$MODE" = "check" ]; then
 
   # Show what changed
   if [ "${HAS_UPDATE:-false}" = "true" ] && [ -n "${UPDATE_DETAIL:-}" ]; then
-    ESCAPED_DETAIL=$(printf '%s' "$UPDATE_DETAIL" | sed 's/+/%2B/g; s/ /\%20/g; s/→/-%3E/g')
     MSG="${MSG}%0A<b>📋 Changes:</b>%0A"
     while IFS= read -r LINE; do
       [ -z "$LINE" ] && continue
-      MSG="${MSG}▸ ${LINE}%0A"
+      LINE_ESC=$(printf '%s' "$LINE" | sed 's/+/%2B/g')
+      MSG="${MSG}▸ ${LINE_ESC}%0A"
     done <<< "$UPDATE_DETAIL"
     MSG="${MSG}%0ATrigger a stable build from Actions when ready."
   fi
