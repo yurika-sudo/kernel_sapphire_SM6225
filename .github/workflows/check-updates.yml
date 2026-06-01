@@ -3,15 +3,13 @@ name: "🔍 Check Source Updates"
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
-
 on:
   workflow_dispatch:
-  # Optional: uncomment to run daily
-  # schedule:
-  #   - cron: '0 8 * * *'
+  schedule:
+    - cron: '0 */12 * * *'   # every 12 hours
 
 permissions:
-  contents: read
+  contents: write   # needed to commit source-pins.json update
 
 jobs:
   check:
@@ -23,9 +21,32 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: "🔍 Fetch upstream versions"
+      - name: "🔍 Fetch and compare upstream versions"
         id: versions
         run: bash scripts/check-sources.sh
+
+      - name: "📌 Update source-pins.json"
+        if: env.HAS_UPDATE == 'true'
+        run: |
+          jq -n \
+            --arg gki  "$CHECK_GKI_SUB" \
+            --arg clo  "$CHECK_CLO_SUB" \
+            --arg ksun "$CHECK_KSUN_TAG" \
+            --arg suki "$CHECK_SUKI_TAG" \
+            --arg susfs "$CHECK_SUSFS_TAG" \
+            '{
+              gki_sublevel: $gki,
+              clo_sublevel: $clo,
+              ksun_tag:     $ksun,
+              suki_tag:     $suki,
+              susfs_tag:    $susfs
+            }' > configs/source-pins.json
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add configs/source-pins.json
+          git commit -m "chore: update source-pins.json [skip ci]"
+          git push
 
       - name: "📣 Telegram report"
         if: always()
