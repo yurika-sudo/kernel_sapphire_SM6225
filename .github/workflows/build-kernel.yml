@@ -11,7 +11,6 @@ on:
       defconfig:     { type: string, required: true }
       clo_fragment:  { type: string, required: false }  # e.g. vendor/bengal_GKI.config (CLO only)
       build_type:    { type: string, required: true }   # stable | testing
-      nethunter:     { type: boolean, required: false }  # CLO only
 
 env:
   OUT_DIR: "out"
@@ -58,10 +57,6 @@ jobs:
           echo "KERNEL_SRC=${{ github.workspace }}/kernel_src" >> $GITHUB_ENV
           echo "WORK_DIR=${{ github.workspace }}"              >> $GITHUB_ENV
 
-      # ── Export build flags ───────────────────────────────────────────────
-      - name: "📌 Export build flags"
-        run: echo "NETHUNTER=${{ inputs.nethunter }}" >> $GITHUB_ENV
-
       # ── Clone kernel source (GKI or CLO) ────────────────────────────────
       - name: "🌟 Clone kernel source"
         env:
@@ -73,6 +68,28 @@ jobs:
       - name: "🔧 Fix source warnings"
         run: bash scripts/fix-source-warnings.sh "${{ env.KERNEL_SRC }}"  
         
+      # ── ccache (stable only — skip during testing/debug to avoid cache churn) ──
+      - name: "⚡ Configure ccache"
+        if: inputs.build_type == 'stable'
+        run: |
+          sudo apt-get install -y ccache
+          ccache --max-size=2G
+          ccache --set-config=compression=true
+          echo "CCACHE_DIR=$HOME/.ccache"                                                >> $GITHUB_ENV
+          echo "CCACHE_NOHASHDIR=true"                                                   >> $GITHUB_ENV
+          echo "CCACHE_HARDLINK=true"                                                    >> $GITHUB_ENV
+          echo "CCACHE_COMPILERCHECK=%compiler% -dumpmachine; %compiler% -dumpversion"  >> $GITHUB_ENV
+          echo "CCACHE_WEEK=$(date +%Y-W%U)"                                             >> $GITHUB_ENV
+
+      - name: "⚡ Restore ccache"
+        if: inputs.build_type == 'stable'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ env.CCACHE_WEEK }}
+          restore-keys: |
+            ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-
+
       # ── Toolchain (AOSP repo for GKI, standalone clang for CLO) ─────────
       - name: "🔧 Setup toolchain"
         run: bash scripts/setup-toolchain.sh
@@ -165,6 +182,13 @@ jobs:
         run: bash scripts/build.sh
 
       # ── Verify ──────────────────────────────────────────────────────────
+      - name: "⚡ Save ccache"
+        if: inputs.build_type == 'stable'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ env.CCACHE_WEEK }}
+
       - name: "🔍 Verify kernel"
         run: bash scripts/verify-kernel.sh
 

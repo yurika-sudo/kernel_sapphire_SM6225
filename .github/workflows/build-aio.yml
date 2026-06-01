@@ -17,10 +17,6 @@ on:
         type: choice
         options: [stable, testing]
         default: stable
-      nethunter:
-        description: "NetHunter configs (CLO only)"
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -99,7 +95,6 @@ jobs:
       defconfig:     ${{ matrix.variant.defconfig }}
       clo_fragment:  ${{ matrix.variant.clo_fragment || '' }}
       build_type:    ${{ inputs.build_type }}
-      nethunter:     ${{ inputs.nethunter || false }}
     secrets: inherit
 
   # ─── Package + release (only if all builds passed) ───────────────────────

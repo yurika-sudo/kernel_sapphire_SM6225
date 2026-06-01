@@ -93,16 +93,36 @@ elif [ "$MODE" = "failure" ]; then
 elif [ "$MODE" = "check" ]; then
   : "${RUN_URL:?}"
 
-  # These are set by check-sources.sh via GITHUB_ENV
   # Escape + so curl form-encoding doesn't turn it into a space
   DISPLAY_SUSFS_TAG=$(printf '%s' "${CHECK_SUSFS_TAG:-?}" | sed 's/+/%2B/g')
 
+  # Status header
+  if [ "${HAS_UPDATE:-false}" = "true" ]; then
+    STATUS_LINE="<b>🆕 Updates available</b>"
+  else
+    STATUS_LINE="<b>✅ All sources up to date</b>"
+  fi
+
   MSG="<b>🔍 Source Update Check</b>%0A%0A"
-  MSG="${MSG}<b>KSU-Next:</b> <code>${CHECK_KSUN_TAG:-?}</code>%0A"
+  MSG="${MSG}${STATUS_LINE}%0A%0A"
+  MSG="${MSG}<b>GKI 5.15:</b>    <code>${CHECK_GKI_SUB:-?}</code>%0A"
+  MSG="${MSG}<b>CLO 5.15:</b>    <code>${CHECK_CLO_SUB:-?}</code>%0A"
+  MSG="${MSG}<b>KSU-Next:</b>    <code>${CHECK_KSUN_TAG:-?}</code>%0A"
   MSG="${MSG}<b>SukiSU-Ultra:</b> <code>${CHECK_SUKI_TAG:-?}</code>%0A"
-  MSG="${MSG}<b>SUSFS:</b> <code>${DISPLAY_SUSFS_TAG}</code>%0A"
-  MSG="${MSG}<b>GKI 5.15 latest:</b> <code>${CHECK_GKI_SUB:-?}</code>%0A%0A"
-  MSG="${MSG}<b>🔗</b> <a href='${RUN_URL}'>Run details</a>"
+  MSG="${MSG}<b>SUSFS:</b>       <code>${DISPLAY_SUSFS_TAG}</code>%0A"
+
+  # Show what changed
+  if [ "${HAS_UPDATE:-false}" = "true" ] && [ -n "${UPDATE_DETAIL:-}" ]; then
+    MSG="${MSG}%0A<b>📋 Changes:</b>%0A"
+    while IFS= read -r LINE; do
+      [ -z "$LINE" ] && continue
+      LINE_ESC=$(printf '%s' "$LINE" | sed 's/+/%2B/g')
+      MSG="${MSG}▸ ${LINE_ESC}%0A"
+    done <<< "$UPDATE_DETAIL"
+    MSG="${MSG}%0ATrigger a stable build from Actions when ready."
+  fi
+
+  MSG="${MSG}%0A%0A<b>🔗</b> <a href='${RUN_URL}'>Run details</a>"
   _tg_msg "$MSG"
 
 # ─── Variant failure (fires immediately per-variant) ──────────────────────────

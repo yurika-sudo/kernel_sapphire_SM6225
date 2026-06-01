@@ -29,6 +29,16 @@ apply_patch "$BASE/avoid_extra_s2idle_wake_attempts.patch" "avoid_extra_s2idle_w
 apply_patch "$BASE/adjust_cpu_scan_order.patch"            "adjust_cpu_scan_order"
 apply_patch "$KP/disable_cache_hot_buddy.patch"            "disable_cache_hot_buddy"
 apply_patch "$BASE/increase_ext4_default_commit_age.patch" "increase_ext4_default_commit_age"
+apply_patch "$BASE/add_timeout_wakelocks_globally.patch"  "add_timeout_wakelocks_globally"
+apply_patch "$BASE/clear_page_16bytes_align.patch"        "clear_page_16bytes_align"
+apply_patch "$BASE/f2fs_enlarge_min_fsync_blocks.patch"   "f2fs_enlarge_min_fsync_blocks"
+apply_patch "$BASE/f2fs_reduce_congestion.patch"          "f2fs_reduce_congestion"
+apply_patch "$BASE/file_struct_8bytes_align.patch"        "file_struct_8bytes_align"
+apply_patch "$BASE/int_sqrt.patch"                        "int_sqrt"
+apply_patch "$BASE/IPv6_NAT_FIX.patch"                    "IPv6_NAT_FIX"
+apply_patch "$BASE/mem_opt_prefetch.patch"                "mem_opt_prefetch"
+apply_patch "$BASE/optimized_mem_operations.patch"        "optimized_mem_operations"
+apply_patch "$BASE/unicode_bypass_fix_6.1-.patch"         "unicode_bypass_fix_6.1-"
 
 # ── 2. Local patches/common/ (applies to all variants) ──────────────────────
 echo "=== Applying local common patches ==="
