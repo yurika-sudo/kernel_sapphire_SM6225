@@ -16,6 +16,7 @@ sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
 for SYM in PID_NS \
+           DEBUG_KINFO \
            OVERLAY_FS OVERLAY_FS_REDIRECT_DIR OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW \
            OVERLAY_FS_INDEX OVERLAY_FS_XINO_AUTO OVERLAY_FS_METACOPY \
            LRU_GEN LRU_GEN_ENABLED NET_SCH_FQ DEBUG_MEMORY_INIT PRINTK_CALLER \
