@@ -103,7 +103,7 @@ elif [ "$SOURCE_TYPE" = "clo" ]; then
   if [ -n "$CLO_FRAGMENT" ] && [ -f "arch/arm64/configs/${CLO_FRAGMENT}" ]; then
     echo "[CLO] Merging fragment: $CLO_FRAGMENT"
     KCONFIG_CONFIG="${OUT_DIR}/dist/.config" \
-      scripts/kconfig/merge_config.sh -m -q \
+      scripts/kconfig/merge_config.sh -m \
       "${OUT_DIR}/dist/.config" \
       "arch/arm64/configs/${CLO_FRAGMENT}"
     make "${MAKE_FLAGS[@]}" olddefconfig
