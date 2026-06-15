@@ -102,9 +102,22 @@ elif [ "$SOURCE_TYPE" = "clo" ]; then
   # Merge vendor config fragment if provided (e.g. vendor/bengal_GKI.config)
   if [ -n "$CLO_FRAGMENT" ] && [ -f "arch/arm64/configs/${CLO_FRAGMENT}" ]; then
     echo "[CLO] Merging fragment: $CLO_FRAGMENT"
-    KCONFIG_CONFIG="${OUT_DIR}/dist/.config"       scripts/kconfig/merge_config.sh -m       "${OUT_DIR}/dist/.config"       "arch/arm64/configs/${CLO_FRAGMENT}"
+    KCONFIG_CONFIG="${OUT_DIR}/dist/.config" \
+      scripts/kconfig/merge_config.sh -m -q \
+      "${OUT_DIR}/dist/.config" \
+      "arch/arm64/configs/${CLO_FRAGMENT}"
     make "${MAKE_FLAGS[@]}" olddefconfig
     echo "[CLO] Fragment merged"
+
+    # Re-enforce ZRAM LZ4 — CLO fragment may override it back to lzo-rle
+    echo "[CLO] Re-enforcing ZRAM_DEF_COMP=lz4 after fragment merge"
+    ./scripts/config --file "${OUT_DIR}/dist/.config" \
+      -d ZRAM_DEF_COMP_LZORLE \
+      -d ZRAM_DEF_COMP_ZSTD \
+      -e ZRAM_DEF_COMP_LZ4 \
+      -d ZRAM_DEF_COMP_LZO \
+      --set-str ZRAM_DEF_COMP "lz4"
+    make "${MAKE_FLAGS[@]}" olddefconfig
   fi
 
   echo "[CLO] Building Image..."
