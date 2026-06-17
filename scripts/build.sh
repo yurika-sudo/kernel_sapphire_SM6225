@@ -21,6 +21,8 @@ if [ "$SOURCE_TYPE" = "gki" ]; then
 
   export PATH="${CLANG_DIR}/bin:$PATH"
 
+  if command -v ccache &>/dev/null; then _CC="ccache clang"; else _CC="clang"; fi
+
   MAKE_FLAGS=(
     -j$(nproc)
     O="${OUT_DIR}/dist"
@@ -28,7 +30,7 @@ if [ "$SOURCE_TYPE" = "gki" ]; then
     SUBARCH=arm64
     LLVM=1
     LLVM_IAS=1
-    CC="ccache clang"
+    CC="$_CC"
     LD=ld.lld
     AR=llvm-ar
     NM=llvm-nm
@@ -70,6 +72,8 @@ elif [ "$SOURCE_TYPE" = "clo" ]; then
 
   export PATH="${CLANG_DIR}/bin:$PATH"
 
+  if command -v ccache &>/dev/null; then _CC="ccache clang"; else _CC="clang"; fi
+
   MAKE_FLAGS=(
     -j$(nproc)
     O="${OUT_DIR}/dist"
@@ -77,7 +81,7 @@ elif [ "$SOURCE_TYPE" = "clo" ]; then
     SUBARCH=arm64
     LLVM=1
     LLVM_IAS=1
-    CC="ccache clang"
+    CC="$_CC"
     LD=ld.lld
     AR=llvm-ar
     NM=llvm-nm
