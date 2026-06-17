@@ -77,16 +77,14 @@ jobs:
           ccache --set-config=compression=true
           echo "CCACHE_DIR=$HOME/.ccache"                                                >> $GITHUB_ENV
           echo "CCACHE_NOHASHDIR=true"                                                   >> $GITHUB_ENV
-          echo "CCACHE_HARDLINK=true"                                                    >> $GITHUB_ENV
           echo "CCACHE_COMPILERCHECK=%compiler% -dumpmachine; %compiler% -dumpversion"  >> $GITHUB_ENV
-          echo "CCACHE_WEEK=$(date +%Y-W%U)"                                             >> $GITHUB_ENV
 
       - name: "⚡ Restore ccache"
         if: inputs.build_type == 'stable'
         uses: actions/cache/restore@v4
         with:
           path: ~/.ccache
-          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ env.CCACHE_WEEK }}
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ github.run_id }}
           restore-keys: |
             ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-
 
@@ -187,7 +185,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.ccache
-          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ env.CCACHE_WEEK }}
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ github.run_id }}
 
       - name: "🔍 Verify kernel"
         run: bash scripts/verify-kernel.sh
