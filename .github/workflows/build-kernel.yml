@@ -57,12 +57,37 @@ jobs:
           echo "KERNEL_SRC=${{ github.workspace }}/kernel_src" >> $GITHUB_ENV
           echo "WORK_DIR=${{ github.workspace }}"              >> $GITHUB_ENV
 
+      # ── CLO source cache (CLO only) ──────────────────────────────────────
+      - name: "📌 Read CLO source pin"
+        if: inputs.source_type == 'clo'
+        id: clo-pin
+        run: |
+          echo "hash=$(jq -r .clo_sublevel configs/source-pins.json)" >> $GITHUB_OUTPUT
+
+      - name: "📦 Restore CLO source cache"
+        if: inputs.source_type == 'clo'
+        id: clo-src-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.KERNEL_SRC }}
+          key: clo-source-${{ steps.clo-pin.outputs.hash }}
+          restore-keys: clo-source-
+
       # ── Clone kernel source (GKI or CLO) ────────────────────────────────
       - name: "🌟 Clone kernel source"
         env:
-          SOURCE_TYPE: ${{ inputs.source_type }}
-          KSU_TYPE:    ${{ inputs.ksu_type }}
+          SOURCE_TYPE:   ${{ inputs.source_type }}
+          KSU_TYPE:      ${{ inputs.ksu_type }}
+          CLO_CACHE_HIT: ${{ steps.clo-src-cache.outputs.cache-hit }}
         run: bash scripts/clone-source.sh
+
+      # ── Save CLO source cache ─────────────────────────────────────────────
+      - name: "💾 Save CLO source cache"
+        if: inputs.source_type == 'clo'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.KERNEL_SRC }}
+          key: clo-source-${{ steps.clo-pin.outputs.hash }}
 
       # ── Fix upstream source warnings ────────────────────────────────────
       - name: "🔧 Fix source warnings"
@@ -73,7 +98,7 @@ jobs:
         if: inputs.build_type == 'stable'
         run: |
           sudo apt-get install -y ccache
-          ccache --max-size=2G
+          ccache --max-size=1.5G
           ccache --set-config=compression=true
           echo "CCACHE_DIR=$HOME/.ccache"                                                >> $GITHUB_ENV
           echo "CCACHE_NOHASHDIR=true"                                                   >> $GITHUB_ENV
