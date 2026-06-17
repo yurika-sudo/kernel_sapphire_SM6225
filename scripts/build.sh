@@ -44,17 +44,20 @@ if [ "$SOURCE_TYPE" = "gki" ]; then
     BRANCH=android13-5.15-lts
     KMI_GENERATION=8
     KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
-    LTO=thin
-    LLVM_PARALLEL_LINK_JOBS=1
+    LLVM_PARALLEL_LINK_JOBS=2
   )
 
   mkdir -p "${OUT_DIR}/dist"
   cd "$KERNEL_SRC"
 
-
-
   echo "[GKI] Building defconfig: $DEFCONFIG"
   make "${MAKE_FLAGS[@]}" "$DEFCONFIG"
+
+  echo "[GKI] Switching to ThinLTO..."
+  ./scripts/config --file "${OUT_DIR}/dist/.config" \
+    --disable LTO_CLANG_FULL \
+    --enable  LTO_CLANG_THIN
+  make "${MAKE_FLAGS[@]}" olddefconfig
 
   echo "[GKI] Building Image..."
   if ! make "${MAKE_FLAGS[@]}" Image 2>&1 | tee /tmp/build_gki.log; then
@@ -93,8 +96,7 @@ elif [ "$SOURCE_TYPE" = "clo" ]; then
     KBUILD_BUILD_USER="$KBUILD_BUILD_USER"
     KBUILD_BUILD_HOST="$KBUILD_BUILD_HOST"
     KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
-    LTO=thin
-    LLVM_PARALLEL_LINK_JOBS=1
+    LLVM_PARALLEL_LINK_JOBS=2
   )
 
   mkdir -p "${OUT_DIR}/dist"
@@ -102,6 +104,12 @@ elif [ "$SOURCE_TYPE" = "clo" ]; then
 
   echo "[CLO] Building defconfig: $DEFCONFIG"
   make "${MAKE_FLAGS[@]}" "$DEFCONFIG"
+
+  echo "[CLO] Switching to ThinLTO..."
+  ./scripts/config --file "${OUT_DIR}/dist/.config" \
+    --disable LTO_CLANG_FULL \
+    --enable  LTO_CLANG_THIN
+  make "${MAKE_FLAGS[@]}" olddefconfig
 
   # Merge vendor config fragment if provided (e.g. vendor/bengal_GKI.config)
   if [ -n "$CLO_FRAGMENT" ] && [ -f "arch/arm64/configs/${CLO_FRAGMENT}" ]; then
