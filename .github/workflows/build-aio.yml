@@ -5,6 +5,8 @@ env:
 
 
 on:
+  schedule:
+    - cron: '0 0 */5 * *'   # every 5 days — keeps GHA cache alive (evicts at 7d)
   workflow_dispatch:
     inputs:
       zip_mode:
@@ -94,18 +96,18 @@ jobs:
       artifact_name: ${{ matrix.variant.artifact }}
       defconfig:     ${{ matrix.variant.defconfig }}
       clo_fragment:  ${{ matrix.variant.clo_fragment || '' }}
-      build_type:    ${{ inputs.build_type }}
+      build_type:    ${{ inputs.build_type || 'stable' }}
     secrets: inherit
 
   # ─── Package + release (only if all builds passed) ───────────────────────
   release:
     name: "📦 Package & Release"
     needs: [setup, build]
-    if: success()
+    if: success() && github.event_name != 'schedule'
     uses: ./.github/workflows/release.yml
     with:
-      zip_mode:   ${{ inputs.zip_mode }}
-      build_type: ${{ inputs.build_type }}
+      zip_mode:   ${{ inputs.zip_mode || 'per-variant' }}
+      build_type: ${{ inputs.build_type || 'stable' }}
       start_time: ${{ needs.setup.outputs.start_time }}
     secrets: inherit
 
@@ -114,7 +116,7 @@ jobs:
     name: "❌ Notify Failure"
     runs-on: ubuntu-latest
     needs: [build]
-    if: always() && needs.build.result == 'cancelled'
+    if: always() && needs.build.result == 'cancelled' && github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4.2.2
         with:
