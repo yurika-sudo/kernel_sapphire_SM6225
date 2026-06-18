@@ -27,8 +27,13 @@ case "$SOURCE_TYPE" in
     CLO_BRANCH="kernel.lnx.5.15.r1-rel"
     if [ "${CLO_CACHE_HIT}" = "true" ] && [ -d "$KERNEL_SRC/.git" ]; then
       echo "[CLO] Cache hit — fetching delta only..."
-      git -C "$KERNEL_SRC" fetch origin --depth=1 "$CLO_BRANCH"
-      git -C "$KERNEL_SRC" reset --hard FETCH_HEAD
+      # same retry as fresh clone — CodeLinaro TLS drops are frequent
+      for attempt in 1 2 3; do
+        git -C "$KERNEL_SRC" fetch origin --depth=1 "$CLO_BRANCH" && \
+          git -C "$KERNEL_SRC" reset --hard FETCH_HEAD && break
+        echo "⚠️ Fetch attempt $attempt failed, retrying in 30s..."
+        sleep 30
+      done
     else
       echo "[CLO] Cloning $CLO_BRANCH ..."
       for attempt in 1 2 3; do
