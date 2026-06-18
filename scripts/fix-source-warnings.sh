@@ -25,12 +25,10 @@ if [ -f "$EXT4_INLINE" ]; then
     echo "[OK] fixed $EXT4_INLINE"
 fi
 
-# Suppress trace_printk warning banner (caused by vendor modules)
+# Suppress hardcoded trace_printk warning banner
 TRACE_C="$KERNEL_SRC/kernel/trace/trace.c"
 if [ -f "$TRACE_C" ]; then
-    sed -i 's/pr_warn("\\*\\* .*NOTICE.*\\*\\*\\\\n");//g' "$TRACE_C"
-    sed -i '/NOTICE NOTICE NOTICE/d' "$TRACE_C"
-    sed -i '/trace_printk.*debug use only/d' "$TRACE_C"
-    sed -i '/unsafe for production/d' "$TRACE_C"
-    echo "[OK] suppressed trace_printk warning in $TRACE_C"
+    sed -i '/trace_printk() is for debug use only/d' "$TRACE_C"
+    sed -i '/pr_warn(".*\*\*/d' "$TRACE_C"
+    echo "[OK] fixed $TRACE_C"
 fi
