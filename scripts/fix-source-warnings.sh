@@ -32,3 +32,10 @@ if [ -f "$TRACE_C" ]; then
     sed -i '/pr_warn(".*\*\*/d' "$TRACE_C"
     echo "[OK] fixed $TRACE_C"
 fi
+
+# Force-mute verbose printk logging globally
+PRINTK_H="$KERNEL_SRC/include/linux/printk.h"
+if [ -f "$PRINTK_H" ]; then
+    sed -i 's/#define CONSOLE_LOGLEVEL_DEFAULT CONFIG_CONSOLE_LOGLEVEL_DEFAULT/#define CONSOLE_LOGLEVEL_DEFAULT 3/g' "$PRINTK_H"
+    echo "[OK] fixed $PRINTK_H"
+fi
