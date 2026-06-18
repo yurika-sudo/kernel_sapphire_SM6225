@@ -12,7 +12,7 @@ CF="$DEFCONFIG"
 
 # ── Base cleanup ────────────────────────────────────────────────────────────
 sed -i 's/ cgroup_disable=pressure//'                    "$CF"
-sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off loglevel=3 /' "$CF"
+sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
 for SYM in PID_NS \
