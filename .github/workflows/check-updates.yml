@@ -40,11 +40,11 @@ jobs:
               ksun_tag:     $ksun,
               suki_tag:     $suki,
               susfs_tag:    $susfs
-            }' > configs/source-pins.json
+            }' > sources/source-pins.json
 
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add configs/source-pins.json
+          git add sources/source-pins.json
           git commit -m "chore: update source-pins.json [skip ci]"
           git push
 
