@@ -20,6 +20,8 @@ jobs:
   build:
     name: "${{ inputs.variant_name }}"
     runs-on: ubuntu-latest
+    env:
+      WORK_DIR: ${{ github.workspace }}
 
     steps:
       # ── Repo ────────────────────────────────────────────────────────────
@@ -31,8 +33,6 @@ jobs:
       # ── Env + deps ──────────────────────────────────────────────────────
       - name: "🛠️ Setup env"
         uses: ./.github/actions/setup-env
-
-          echo "WORK_DIR=${{ github.workspace }}"              >> $GITHUB_ENV
 
       # ── CLO source cache (CLO only) ──────────────────────────────────────
       - name: "📌 Read CLO source pin"
