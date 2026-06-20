@@ -1,0 +1,96 @@
+name: "🔨 Build GKI-Compat (5.15.123)"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Build type"
+        type: choice
+        options: [stable, testing]
+        default: testing
+
+permissions:
+  contents: write
+
+jobs:
+
+  setup:
+    name: "⏱️ Setup"
+    runs-on: ubuntu-latest
+    outputs:
+      start_time: ${{ steps.ts.outputs.start_time }}
+    steps:
+      - id: ts
+        run: echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
+
+  build:
+    name: "🔨 ${{ matrix.variant.name }}"
+    needs: [setup]
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - name:      "GKI-Compat-Ksun"
+            source:    "gki-compat"
+            ksu:       "ksun"
+            prefix:    "GKIC_Ksun"
+            artifact:  "gkicompat-ksun"
+            defconfig: "gki_defconfig"
+
+          - name:      "GKI-Compat-SukiSU"
+            source:    "gki-compat"
+            ksu:       "suki"
+            prefix:    "GKIC_SukiSU"
+            artifact:  "gkicompat-suki"
+            defconfig: "gki_defconfig"
+
+          - name:      "GKI-Compat-NoKSU"
+            source:    "gki-compat"
+            ksu:       "none"
+            prefix:    "GKIC_NoKSU"
+            artifact:  "gkicompat-noksu"
+            defconfig: "gki_defconfig"
+
+    uses: ./.github/workflows/build-kernel.yml
+    with:
+      variant_name:  ${{ matrix.variant.name }}
+      source_type:   ${{ matrix.variant.source }}
+      ksu_type:      ${{ matrix.variant.ksu }}
+      zip_prefix:    ${{ matrix.variant.prefix }}
+      artifact_name: ${{ matrix.variant.artifact }}
+      defconfig:     ${{ matrix.variant.defconfig }}
+      clo_fragment:  ""
+      build_type:    ${{ inputs.build_type || 'stable' }}
+    secrets: inherit
+
+  release:
+    name: "📦 Package & Release"
+    needs: [setup, build]
+    if: success()
+    uses: ./.github/workflows/release.yml
+    with:
+      zip_mode:   per-variant
+      build_type: ${{ inputs.build_type || 'stable' }}
+      start_time: ${{ needs.setup.outputs.start_time }}
+    secrets: inherit
+
+  notify-failure:
+    name: "❌ Notify Failure"
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: always() && needs.build.result == 'cancelled'
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 1
+      - name: "📣 Telegram"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_URL:    "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_NUMBER: "${{ github.run_number }}"
+          BUILD_STATUS: "${{ needs.build.result }}"
+        run: bash scripts/notify.sh failure
