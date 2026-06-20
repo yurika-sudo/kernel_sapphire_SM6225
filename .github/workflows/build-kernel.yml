@@ -32,15 +32,6 @@ jobs:
       - name: "🛠️ Setup env"
         uses: ./.github/actions/setup-env
 
-      # ── Load stable/testing config overrides ────────────────────────────
-      - name: "📂 Load build config"
-        run: |
-          CF="${{ github.workspace }}/configs/${{ inputs.build_type }}.env"
-          if [ -f "$CF" ]; then
-            grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$CF" >> $GITHUB_ENV || true
-            echo "[OK] loaded ${{ inputs.build_type }}.env"
-          fi
-          echo "KERNEL_SRC=${{ github.workspace }}/kernel_src" >> $GITHUB_ENV
           echo "WORK_DIR=${{ github.workspace }}"              >> $GITHUB_ENV
 
       # ── CLO source cache (CLO only) ──────────────────────────────────────
@@ -48,7 +39,7 @@ jobs:
         if: inputs.source_type == 'clo'
         id: clo-pin
         run: |
-          echo "hash=$(jq -r .clo_sublevel configs/source-pins.json)" >> $GITHUB_OUTPUT
+          echo "hash=$(jq -r .clo_sublevel sources/source-pins.json)" >> $GITHUB_OUTPUT
 
       - name: "📦 Restore CLO source cache"
         if: inputs.source_type == 'clo'
@@ -101,7 +92,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.ccache
-          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ hashFiles('configs/source-pins.json') }}
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ hashFiles('sources/source-pins.json') }}
           restore-keys: |
             ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-
 
@@ -191,7 +182,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.ccache
-          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ hashFiles('configs/source-pins.json') }}
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ hashFiles('sources/source-pins.json') }}
 
       - name: "🔍 Verify kernel"
         run: bash scripts/verify-kernel.sh
