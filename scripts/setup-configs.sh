@@ -12,7 +12,7 @@ CF="$DEFCONFIG"
 
 # ── Base cleanup ────────────────────────────────────────────────────────────
 sed -i 's/ cgroup_disable=pressure//'                    "$CF"
-sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CF"
+sed -i 's/CONFIG_CMDLINE="/&slub_debug=- /' "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
 for SYM in PID_NS \
@@ -96,6 +96,9 @@ CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
 # CONFIG_PRINTK_CALLER is not set
 # CONFIG_DEBUG_FS is not set
 # CONFIG_DEBUG_MISC is not set
+# CONFIG_UBSAN is not set
+# CONFIG_PAGE_OWNER is not set
+# CONFIG_DEBUG_BUGVERBOSE is not set
 # CONFIG_F2FS_IOSTAT is not set
 # CONFIG_NTSYNC is not set
 EOF
