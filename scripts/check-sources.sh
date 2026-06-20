@@ -2,7 +2,7 @@
 # check-sources.sh — fetch latest upstream versions and compare against source-pins.json
 set -e
 
-PINS_FILE="configs/source-pins.json"
+PINS_FILE="sources/source-pins.json"
 
 # Safe curl wrapper — never fails the script
 _curl() { curl -s --retry 3 --retry-delay 2 "$@" || echo ""; }
