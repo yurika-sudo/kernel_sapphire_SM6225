@@ -24,13 +24,21 @@ SUKI_TAG=$([ -f "$_sf" ] && cat "$_sf" | tr -d '[:space:]' || echo "unknown")
 
 DATE_TAG=$(date +'%Y%m%d')
 
-if [ "$BUILD_TYPE" = "testing" ]; then
-  RELEASE_TAG="${SUSFS_VERSION}-testing"
+: "${WORKFLOW_TYPE:-aio}"
+
+if [ "$WORKFLOW_TYPE" = "compat" ]; then
+  _tag_prefix="compat-"
+  RELEASE_NAME="Seiran-GKI-Compat"
+else
+  _tag_prefix=""
   RELEASE_NAME="Seiran-GKI"
+fi
+
+if [ "$BUILD_TYPE" = "testing" ]; then
+  RELEASE_TAG="${_tag_prefix}${SUSFS_VERSION}-testing"
   IS_PRERELEASE="true"
 else
-  RELEASE_TAG="${SUSFS_VERSION}"
-  RELEASE_NAME="Seiran-GKI"
+  RELEASE_TAG="${_tag_prefix}${SUSFS_VERSION}"
   IS_PRERELEASE="false"
 fi
 
