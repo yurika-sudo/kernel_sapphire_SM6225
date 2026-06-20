@@ -40,7 +40,7 @@ MAKE_FLAGS=(
   KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
   LLVM_PARALLEL_LINK_JOBS=2
 )
-[ "$SOURCE_TYPE" = "gki" ] && MAKE_FLAGS+=(BRANCH=android13-5.15-lts KMI_GENERATION=8)
+[[ "$SOURCE_TYPE" == gki* ]] && MAKE_FLAGS+=(BRANCH=android13-5.15-lts KMI_GENERATION=8)
 
 set -o pipefail
 mkdir -p "${OUT_DIR}/dist"
