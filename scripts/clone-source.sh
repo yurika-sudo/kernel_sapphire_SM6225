@@ -56,8 +56,6 @@ case "$SOURCE_TYPE" in
       rm -rf "$KERNEL_SRC" && mkdir -p "$KERNEL_SRC"
       sleep 30
     done
-    # Normalize so downstream scripts (build, configs, pack-zip) treat this as gki
-    echo "SOURCE_TYPE=gki" >> "${GITHUB_ENV:-/dev/null}"
     ;;
 
   *)
