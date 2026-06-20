@@ -84,18 +84,24 @@ jobs:
         if: inputs.build_type == 'stable'
         run: |
           sudo apt-get install -y ccache
-          ccache --max-size=1.5G
-          ccache --set-config=compression=true
-          echo "CCACHE_DIR=$HOME/.ccache"                                                >> $GITHUB_ENV
-          echo "CCACHE_NOHASHDIR=true"                                                   >> $GITHUB_ENV
-          echo "CCACHE_COMPILERCHECK=%compiler% -dumpmachine; %compiler% -dumpversion"  >> $GITHUB_ENV
+          echo "CCACHE_DIR=$HOME/.ccache"                                                                          >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=1G"                                                                                 >> $GITHUB_ENV
+          echo "CCACHE_COMPILERCHECK=content"                                                                      >> $GITHUB_ENV
+          echo "CCACHE_DIRECT=true"                                                                                >> $GITHUB_ENV
+          echo "CCACHE_NOHASHDIR=true"                                                                             >> $GITHUB_ENV
+          echo "CCACHE_BASEDIR=${{ github.workspace }}"                                                            >> $GITHUB_ENV
+          echo "CCACHE_IGNOREOPTIONS=--sysroot*"                                                                   >> $GITHUB_ENV
+          echo "CCACHE_COMPRESSION=true"                                                                           >> $GITHUB_ENV
+          echo "CCACHE_COMPRESSLEVEL=3"                                                                            >> $GITHUB_ENV
+          echo "CCACHE_SLOPPINESS=file_macro,time_macros,include_file_mtime,include_file_ctime,pch_defines,system_headers,locale" >> $GITHUB_ENV
 
       - name: "⚡ Restore ccache"
         if: inputs.build_type == 'stable'
+        id: ccache-restore
         uses: actions/cache/restore@v4
         with:
           path: ~/.ccache
-          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ github.run_id }}
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ hashFiles('configs/source-pins.json') }}
           restore-keys: |
             ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-
 
@@ -181,11 +187,11 @@ jobs:
 
       # ── ccache save (stable only) ────────────────────────────────────────
       - name: "⚡ Save ccache"
-        if: inputs.build_type == 'stable'
+        if: inputs.build_type == 'stable' && steps.ccache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ~/.ccache
-          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ github.run_id }}
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ hashFiles('configs/source-pins.json') }}
 
       - name: "🔍 Verify kernel"
         run: bash scripts/verify-kernel.sh
