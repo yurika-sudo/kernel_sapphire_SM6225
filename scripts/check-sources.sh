@@ -12,26 +12,22 @@ _pin() { jq -r ".${1} // \"unknown\"" "$PINS_FILE" 2>/dev/null || echo "unknown"
 
 echo "=== Fetching upstream sources ==="
 
-# ── KSU-Next latest tag ───────────────────────────────────────────────────────
 KSUN_TAG=$(_curl "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/tags" \
   | jq -r '.[0].name // "unknown"' 2>/dev/null || echo "unknown")
 [ -z "$KSUN_TAG" ] && KSUN_TAG="unknown"
 echo "KSU-Next     : $KSUN_TAG"
 
-# ── SukiSU-Ultra latest tag ───────────────────────────────────────────────────
 SUKI_TAG=$(_curl "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest" \
   | jq -r '.tag_name // "unknown"' 2>/dev/null || echo "unknown")
 [ -z "$SUKI_TAG" ] && SUKI_TAG="unknown"
 echo "SukiSU-Ultra : $SUKI_TAG"
 
-# ── SUSFS module latest tag ───────────────────────────────────────────────────
 SUSFS_TAG=$(_curl "https://api.github.com/repos/sidex15/susfs4ksu-module/tags" \
   | jq -r 'if type=="array" and length>0 then .[0].name else "unknown" end' 2>/dev/null \
   || echo "unknown")
 [ -z "$SUSFS_TAG" ] && SUSFS_TAG="unknown"
 echo "SUSFS module : $SUSFS_TAG"
 
-# ── GKI android13-5.15-lts — sublevel from Makefile ──────────────────────────
 GKI_RAW=$(_curl \
   "https://android.googlesource.com/kernel/common/+/refs/heads/android13-5.15-lts/Makefile?format=TEXT")
 GKI_MK=$(echo "$GKI_RAW" | base64 -d 2>/dev/null || true)
@@ -43,7 +39,6 @@ GKI_SUB=$(echo "$GKI_MK" | awk -F' *= *' \
 GKI_SUB="${GKI_SUB:-unknown}"
 echo "GKI 5.15     : $GKI_SUB"
 
-# ── CLO kernel.lnx.5.15.r1-rel — sublevel from Makefile ──────────────────────
 CLO_RAW=$(_curl \
   "https://git.codelinaro.org/clo/la/kernel/msm-5.15/-/raw/kernel.lnx.5.15.r1-rel/Makefile")
 CLO_SUB=$(echo "$CLO_RAW" | awk -F' *= *' \
@@ -81,7 +76,6 @@ else
   UPDATE_DETAIL=""
 fi
 
-# ── Write to GITHUB_ENV ───────────────────────────────────────────────────────
 {
   echo "CHECK_KSUN_TAG=$KSUN_TAG"
   echo "CHECK_SUKI_TAG=$SUKI_TAG"
