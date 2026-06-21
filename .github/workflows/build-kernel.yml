@@ -21,7 +21,8 @@ jobs:
     name: "${{ inputs.variant_name }}"
     runs-on: ubuntu-latest
     env:
-      WORK_DIR: ${{ github.workspace }}
+      WORK_DIR:   ${{ github.workspace }}
+      KERNEL_SRC: ${{ github.workspace }}/kernel_src
 
     steps:
       # ── Repo ────────────────────────────────────────────────────────────
