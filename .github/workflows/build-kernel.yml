@@ -20,49 +20,24 @@ jobs:
   build:
     name: "${{ inputs.variant_name }}"
     runs-on: ubuntu-latest
+    env:
+      WORK_DIR:   ${{ github.workspace }}
+      KERNEL_SRC: ${{ github.workspace }}/kernel_src
 
     steps:
-      # ── Maximize disk space (prevent LTO OOM / no space left) ────────────
-      - name: "🧹 Maximize Build Space"
-        uses: AdityaGarg8/remove-unwanted-software@v5
-        with:
-          remove-dotnet: 'true'         # ~2 GB
-          remove-android: 'true'        # ~9 GB
-          remove-haskell: 'true'        # ~5.2 GB
-          remove-codeql: 'true'         # ~5.4 GB
-          remove-docker-images: 'true'  # ~3.2 GB
-          remove-large-packages: 'true' # ~3.1 GB
-          remove-swapfile: 'true'       # ~4 GB
-          remove-cached-tools: 'false'
-          verbose: 'false'
-
-      # ── Repo ────────────────────────────────────────────────────────────
       - name: "📦 Checkout"
         uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 1
 
-      # ── Env + deps ──────────────────────────────────────────────────────
       - name: "🛠️ Setup env"
         uses: ./.github/actions/setup-env
 
-      # ── Load stable/testing config overrides ────────────────────────────
-      - name: "📂 Load build config"
-        run: |
-          CF="${{ github.workspace }}/configs/${{ inputs.build_type }}.env"
-          if [ -f "$CF" ]; then
-            grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$CF" >> $GITHUB_ENV || true
-            echo "[OK] loaded ${{ inputs.build_type }}.env"
-          fi
-          echo "KERNEL_SRC=${{ github.workspace }}/kernel_src" >> $GITHUB_ENV
-          echo "WORK_DIR=${{ github.workspace }}"              >> $GITHUB_ENV
-
-      # ── CLO source cache (CLO only) ──────────────────────────────────────
       - name: "📌 Read CLO source pin"
         if: inputs.source_type == 'clo'
         id: clo-pin
         run: |
-          echo "hash=$(jq -r .clo_sublevel configs/source-pins.json)" >> $GITHUB_OUTPUT
+          echo "hash=$(jq -r .clo_sublevel sources/source-pins.json)" >> $GITHUB_OUTPUT
 
       - name: "📦 Restore CLO source cache"
         if: inputs.source_type == 'clo'
@@ -73,7 +48,6 @@ jobs:
           key: clo-source-${{ steps.clo-pin.outputs.hash }}
           restore-keys: clo-source-
 
-      # ── Clone kernel source (GKI or CLO) ────────────────────────────────
       - name: "🌟 Clone kernel source"
         env:
           SOURCE_TYPE:   ${{ inputs.source_type }}
@@ -81,7 +55,6 @@ jobs:
           CLO_CACHE_HIT: ${{ steps.clo-src-cache.outputs.cache-hit }}
         run: bash scripts/clone-source.sh
 
-      # ── Save CLO source cache ─────────────────────────────────────────────
       - name: "💾 Save CLO source cache"
         if: inputs.source_type == 'clo'
         uses: actions/cache/save@v4
@@ -89,35 +62,37 @@ jobs:
           path: ${{ env.KERNEL_SRC }}
           key: clo-source-${{ steps.clo-pin.outputs.hash }}
 
-      # ── Fix upstream source warnings ────────────────────────────────────
       - name: "🔧 Fix source warnings"
-        run: bash scripts/fix-source-warnings.sh "${{ env.KERNEL_SRC }}"  
-        
-      # ── ccache (stable only — skip during testing/debug to avoid cache churn) ──
+        run: bash scripts/fix-source-warnings.sh "${{ env.KERNEL_SRC }}"
+
       - name: "⚡ Configure ccache"
         if: inputs.build_type == 'stable'
         run: |
           sudo apt-get install -y ccache
-          ccache --max-size=1.5G
-          ccache --set-config=compression=true
-          echo "CCACHE_DIR=$HOME/.ccache"                                                >> $GITHUB_ENV
-          echo "CCACHE_NOHASHDIR=true"                                                   >> $GITHUB_ENV
-          echo "CCACHE_COMPILERCHECK=%compiler% -dumpmachine; %compiler% -dumpversion"  >> $GITHUB_ENV
+          echo "CCACHE_DIR=$HOME/.ccache"                                                                          >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=1G"                                                                                 >> $GITHUB_ENV
+          echo "CCACHE_COMPILERCHECK=content"                                                                      >> $GITHUB_ENV
+          echo "CCACHE_DIRECT=true"                                                                                >> $GITHUB_ENV
+          echo "CCACHE_NOHASHDIR=true"                                                                             >> $GITHUB_ENV
+          echo "CCACHE_BASEDIR=${{ github.workspace }}"                                                            >> $GITHUB_ENV
+          echo "CCACHE_IGNOREOPTIONS=--sysroot*"                                                                   >> $GITHUB_ENV
+          echo "CCACHE_COMPRESSION=true"                                                                           >> $GITHUB_ENV
+          echo "CCACHE_COMPRESSLEVEL=3"                                                                            >> $GITHUB_ENV
+          echo "CCACHE_SLOPPINESS=file_macro,time_macros,include_file_mtime,include_file_ctime,pch_defines,system_headers,locale" >> $GITHUB_ENV
 
       - name: "⚡ Restore ccache"
         if: inputs.build_type == 'stable'
+        id: ccache-restore
         uses: actions/cache/restore@v4
         with:
           path: ~/.ccache
-          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ github.run_id }}
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ hashFiles('sources/source-pins.json') }}
           restore-keys: |
             ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-
 
-      # ── Toolchain (AOSP repo for GKI, standalone clang for CLO) ─────────
       - name: "🔧 Setup toolchain"
         run: bash scripts/setup-toolchain.sh
 
-      # ── Apply patches from patches/ ──────────────────────────────────────
       - name: "🩹 Apply patches"
         env:
           SOURCE_TYPE: ${{ inputs.source_type }}
@@ -126,7 +101,6 @@ jobs:
           DEFCONFIG:   ${{ inputs.defconfig }}
         run: bash scripts/apply-patches.sh
 
-      # ── BBG (Ksun only, not NoKSU, not SukiSU) ──────────────────────────
       - name: "🛡️ Setup BBG"
         if: inputs.ksu_type == 'ksun'
         working-directory: ${{ env.KERNEL_SRC }}
@@ -141,7 +115,6 @@ jobs:
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
             security/Kconfig
 
-      # ── KSU + SUSFS (skip for NoKSU) ────────────────────────────────────
       - name: "🔑 Setup KSU + SUSFS"
         if: inputs.ksu_type != 'none'
         uses: ./.github/actions/setup-ksu
@@ -150,14 +123,12 @@ jobs:
           kernel_dir: ${{ env.KERNEL_SRC }}
           work_dir:   ${{ env.WORK_DIR }}
 
-      # ── Droidspaces support ──────────────────────────────────────────────
       - name: "🐳 Droidspaces"
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           bash ${{ github.workspace }}/scripts/droidspaces.sh \
             "arch/arm64/configs/${{ inputs.defconfig }}"
 
-      # ── Kernel configs ───────────────────────────────────────────────────
       - name: "⚙️ Kernel configs"
         uses: ./.github/actions/setup-configs
         with:
@@ -166,7 +137,6 @@ jobs:
           defconfig:   ${{ env.KERNEL_SRC }}/arch/arm64/configs/${{ inputs.defconfig }}
           kernel_dir:  ${{ env.KERNEL_SRC }}
 
-      # ── Localversion + dirty flag ────────────────────────────────────────
       - name: "🏷️ Localversion"
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
@@ -181,18 +151,6 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add . && git commit -m "clean dirty flag" || true
 
-      # ── Swap ─────────────────────────────────────────────────────────────
-      - name: "💾 Setup swap"
-        run: |
-          sudo swapoff -a || true
-          sudo rm -f /swapfile /swap.img || true
-          sudo fallocate -l 12G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          free -h
-
-      # ── Build ────────────────────────────────────────────────────────────
       - name: "🚀 Build kernel"
         id: build
         timeout-minutes: 50
@@ -204,18 +162,16 @@ jobs:
           VARIANT:      ${{ inputs.variant_name }}
         run: bash scripts/build.sh
 
-      # ── Verify ──────────────────────────────────────────────────────────
       - name: "⚡ Save ccache"
-        if: inputs.build_type == 'stable'
+        if: inputs.build_type == 'stable' && steps.ccache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ~/.ccache
-          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ github.run_id }}
+          key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ hashFiles('sources/source-pins.json') }}
 
       - name: "🔍 Verify kernel"
         run: bash scripts/verify-kernel.sh
 
-      # ── KPM patch (SukiSU only) ──────────────────────────────────────────
       - name: "💉 KPM patch"
         if: inputs.ksu_type == 'suki'
         working-directory: ${{ env.WORK_DIR }}/out/dist
@@ -225,7 +181,6 @@ jobs:
           chmod +x patch_linux && ./patch_linux
           rm -f Image && mv oImage Image
 
-      # ── Job summary ──────────────────────────────────────────────────────
       - name: "📋 Build summary"
         if: always()
         env:
@@ -236,7 +191,6 @@ jobs:
           RUN_URL:     "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: bash scripts/build-summary.sh
 
-      # ── Notify variant failure (fires immediately, don't wait for others) ─
       - name: "📣 Notify variant failure"
         if: failure()
         env:
@@ -249,7 +203,6 @@ jobs:
           RUN_NUMBER:  ${{ github.run_number }}
         run: bash scripts/notify.sh variant-failure
 
-      # ── Pack ZIP ─────────────────────────────────────────────────────────
       - name: "📦 Pack ZIP"
         env:
           ZIP_PREFIX:  ${{ inputs.zip_prefix }}
@@ -258,7 +211,6 @@ jobs:
           SOURCE_TYPE: ${{ inputs.source_type }}
         run: bash scripts/pack-zip.sh
 
-      # ── Capture uname ────────────────────────────────────────────────────
       - name: "🏷️ Capture uname"
         run: |
           UNAME=$(grep UTS_RELEASE \
@@ -267,7 +219,6 @@ jobs:
           echo "$UNAME" > ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
           echo "Kernel uname: $UNAME"
 
-      # ── Upload artifact ──────────────────────────────────────────────────
       - name: "📤 Upload artifact"
         uses: actions/upload-artifact@v4.6.2
         with:

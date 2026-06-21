@@ -10,7 +10,7 @@ set -e
 
 CF="$DEFCONFIG"
 
-# ── Base cleanup ────────────────────────────────────────────────────────────
+# Base cleanup
 sed -i 's/ cgroup_disable=pressure//'                    "$CF"
 sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CF"
 
@@ -25,7 +25,7 @@ for SYM in PID_NS \
   sed -i "/^CONFIG_${SYM}[= ]/d; /^# CONFIG_${SYM} /d" "$CF"
 done
 
-# ── Common configs (all variants, both GKI + CLO) ───────────────────────────
+# Common configs (all variants)
 cat >> "$CF" << 'EOF'
 CONFIG_OVERLAY_FS=y
 CONFIG_OVERLAY_FS_REDIRECT_DIR=y
@@ -96,11 +96,12 @@ CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
 # CONFIG_PRINTK_CALLER is not set
 # CONFIG_DEBUG_FS is not set
 # CONFIG_DEBUG_MISC is not set
+# CONFIG_UBSAN is not set
 # CONFIG_F2FS_IOSTAT is not set
 # CONFIG_NTSYNC is not set
 EOF
 
-# ── KSU-Next specific ────────────────────────────────────────────────────────
+# KSU-Next
 if [ "$KSU_TYPE" = "ksun" ]; then
   cat >> "$CF" << 'EOF'
 CONFIG_KSU=y
@@ -118,7 +119,7 @@ CONFIG_KSU_SUSFS_SUS_SU=y
 CONFIG_BBG=y
 EOF
 
-# ── SukiSU specific ─────────────────────────────────────────────────────────
+# SukiSU
 elif [ "$KSU_TYPE" = "suki" ]; then
   cat >> "$CF" << 'EOF'
 CONFIG_KSU=y
@@ -136,7 +137,7 @@ CONFIG_KSU_SUSFS_SUS_SU=y
 CONFIG_KPM=y
 EOF
 
-# ── NoKSU — pure vanilla, no KSU/SUSFS/BBG/KPM ─────────────────────────────
+# NoKSU — no extras, common configs above apply
 # (only common configs above apply — nothing extra here)
 fi
 

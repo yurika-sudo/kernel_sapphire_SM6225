@@ -10,6 +10,7 @@ on:
       zip_mode:   { type: string, required: true }   # per-variant | aio
       build_type: { type: string, required: true }   # stable | testing
       start_time: { type: string, required: true }
+      workflow_type: { type: string, default: aio }
 
 permissions:
   contents: write
@@ -33,6 +34,7 @@ jobs:
         run: bash scripts/resolve-versions.sh
         env:
           BUILD_TYPE: ${{ inputs.build_type }}
+          WORKFLOW_TYPE: ${{ inputs.workflow_type }}
 
       - name: "🗂️ Collect / bundle ZIPs"
         env:
@@ -59,17 +61,29 @@ jobs:
       - name: "📝 Release body"
         env:
           BUILD_TYPE:  ${{ inputs.build_type }}
+          WORKFLOW_TYPE: ${{ inputs.workflow_type }}
           RUN_URL:     "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           REPO:        ${{ github.repository }}
           SHA:         ${{ github.sha }}
           RUN_NUMBER:  ${{ github.run_number }}
         run: bash scripts/release-notes.sh
 
+      - name: "🧹 Purge old AK3 assets"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$RELEASE_TAG" --json assets \
+            -q '.assets[].name' 2>/dev/null \
+            | grep '^AK3-' \
+            | xargs -r -I{} gh release delete-asset \
+                "$RELEASE_TAG" {} --yes 2>/dev/null || true        
+        
       - name: "⬆️ Create release"
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          overwrite: true  
           files: |
             ./release_zips/*.zip
             ${{ env.LOG_AUDIT_ZIP }}

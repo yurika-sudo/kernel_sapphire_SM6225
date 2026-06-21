@@ -35,7 +35,7 @@ _inject_susfs_init() {
   echo "[OK] susfs_init injected into $KSU_C"
 }
 
-# ─── KernelSU-Next ─────────────────────────────────────────────────────────
+# KernelSU-Next
 if [ "$KSU_TYPE" = "ksun" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu ./KernelSU-Next
   curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" \
@@ -65,7 +65,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   _link_ksu_driver "KernelSU-Next"
   rm -rf susfs4ksu
 
-# ─── SukiSU-Ultra ──────────────────────────────────────────────────────────
+# SukiSU-Ultra
 elif [ "$KSU_TYPE" = "suki" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu
   curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" \
@@ -93,7 +93,7 @@ elif [ "$KSU_TYPE" = "suki" ]; then
   echo "[OK] SUSFS commit: $SUSFS_COMMIT"
 
   SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-  [ -f "$SUSFS_PATCH" ] && patch -p1 --fuzz=3 < "$SUSFS_PATCH" || true
+  [ -f "$SUSFS_PATCH" ] && patch -p1 --forward --fuzz=3 < "$SUSFS_PATCH" || true
   mkdir -p fs include/linux
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/

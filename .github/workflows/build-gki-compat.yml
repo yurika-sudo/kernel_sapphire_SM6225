@@ -1,24 +1,16 @@
-name: "🔨 Build Kernels — AIO"
+name: "🔨 Build GKI-Compat (5.15.123)"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
-
 on:
-  schedule:
-    - cron: '0 0 */5 * *'   # every 5 days — keeps GHA cache alive (evicts at 7d)
   workflow_dispatch:
     inputs:
-      zip_mode:
-        description: "ZIP packaging"
-        type: choice
-        options: [per-variant, aio, both]
-        default: per-variant
       build_type:
         description: "Build type"
         type: choice
         options: [stable, testing]
-        default: stable
+        default: testing
 
 permissions:
   contents: write
@@ -41,50 +33,26 @@ jobs:
       fail-fast: false
       matrix:
         variant:
-          - name:      "GKI-Ksun"
-            source:    "gki"
+          - name:      "GKI-Compat-Ksun"
+            source:    "gki-compat"
             ksu:       "ksun"
-            prefix:    "GKI_Ksun"
-            artifact:  "gki-ksun"
+            prefix:    "GKIC_Ksun"
+            artifact:  "gkicompat-ksun"
             defconfig: "gki_defconfig"
 
-          - name:      "GKI-SukiSU"
-            source:    "gki"
+          - name:      "GKI-Compat-SukiSU"
+            source:    "gki-compat"
             ksu:       "suki"
-            prefix:    "GKI_SukiSU"
-            artifact:  "gki-suki"
+            prefix:    "GKIC_SukiSU"
+            artifact:  "gkicompat-suki"
             defconfig: "gki_defconfig"
 
-          - name:      "GKI-NoKSU"
-            source:    "gki"
+          - name:      "GKI-Compat-NoKSU"
+            source:    "gki-compat"
             ksu:       "none"
-            prefix:    "GKI_NoKSU"
-            artifact:  "gki-noksu"
+            prefix:    "GKIC_NoKSU"
+            artifact:  "gkicompat-noksu"
             defconfig: "gki_defconfig"
-
-          - name:      "CLO-Ksun"
-            source:    "clo"
-            ksu:       "ksun"
-            prefix:    "CLO_Ksun"
-            artifact:  "clo-ksun"
-            defconfig: "gki_defconfig"
-            clo_fragment: "vendor/bengal_GKI.config"
-
-          - name:      "CLO-SukiSU"
-            source:    "clo"
-            ksu:       "suki"
-            prefix:    "CLO_SukiSU"
-            artifact:  "clo-suki"
-            defconfig: "gki_defconfig"
-            clo_fragment: "vendor/bengal_GKI.config"
-
-          - name:      "CLO-NoKSU"
-            source:    "clo"
-            ksu:       "none"
-            prefix:    "CLO_NoKSU"
-            artifact:  "clo-noksu"
-            defconfig: "gki_defconfig"
-            clo_fragment: "vendor/bengal_GKI.config"
 
     uses: ./.github/workflows/build-kernel.yml
     with:
@@ -94,27 +62,27 @@ jobs:
       zip_prefix:    ${{ matrix.variant.prefix }}
       artifact_name: ${{ matrix.variant.artifact }}
       defconfig:     ${{ matrix.variant.defconfig }}
-      clo_fragment:  ${{ matrix.variant.clo_fragment || '' }}
+      clo_fragment:  ""
       build_type:    ${{ inputs.build_type || 'stable' }}
     secrets: inherit
 
   release:
     name: "📦 Package & Release"
     needs: [setup, build]
-    if: success() && github.event_name != 'schedule'
+    if: success()
     uses: ./.github/workflows/release.yml
     with:
-      zip_mode:   ${{ inputs.zip_mode || 'per-variant' }}
+      zip_mode:   per-variant
       build_type: ${{ inputs.build_type || 'stable' }}
       start_time: ${{ needs.setup.outputs.start_time }}
-      workflow_type: aio
+      workflow_type: compat
     secrets: inherit
 
   notify-failure:
     name: "❌ Notify Failure"
     runs-on: ubuntu-latest
     needs: [build]
-    if: always() && needs.build.result == 'cancelled' && github.event_name != 'schedule'
+    if: always() && needs.build.result == 'cancelled'
     steps:
       - uses: actions/checkout@v4.2.2
         with:
