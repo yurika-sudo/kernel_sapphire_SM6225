@@ -34,7 +34,6 @@ jobs:
       - id: ts
         run: echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
 
-  # ─── 6 variants via matrix → reusable build-kernel.yml ───────────────────
   build:
     name: "🔨 ${{ matrix.variant.name }}"
     needs: [setup]
@@ -99,7 +98,6 @@ jobs:
       build_type:    ${{ inputs.build_type || 'stable' }}
     secrets: inherit
 
-  # ─── Package + release (only if all builds passed) ───────────────────────
   release:
     name: "📦 Package & Release"
     needs: [setup, build]
@@ -109,9 +107,9 @@ jobs:
       zip_mode:   ${{ inputs.zip_mode || 'per-variant' }}
       build_type: ${{ inputs.build_type || 'stable' }}
       start_time: ${{ needs.setup.outputs.start_time }}
+      workflow_type: aio
     secrets: inherit
 
-  # ─── Failure notif ────────────────────────────────────────────────────────
   notify-failure:
     name: "❌ Notify Failure"
     runs-on: ubuntu-latest
