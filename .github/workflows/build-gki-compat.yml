@@ -75,6 +75,7 @@ jobs:
       zip_mode:   per-variant
       build_type: ${{ inputs.build_type || 'stable' }}
       start_time: ${{ needs.setup.outputs.start_time }}
+      workflow_type: compat
     secrets: inherit
 
   notify-failure:
