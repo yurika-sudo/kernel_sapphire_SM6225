@@ -12,7 +12,7 @@ set -e
 source /tmp/apply_patch.sh
 cd "$KERNEL_SRC"
 
-# ── 1. WildKernels upstream optimization patches ─────────────────────────────
+# WildKernels patches
 echo "=== Applying upstream optimization patches ==="
 BASE="https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/common"
 
@@ -36,7 +36,7 @@ apply_patch "$BASE/mem_opt_prefetch.patch"                 "mem_opt_prefetch"
 apply_patch "$BASE/optimized_mem_operations.patch"         "optimized_mem_operations"
 apply_patch "$BASE/unicode_bypass_fix_6.1-.patch"          "unicode_bypass_fix_6.1-"
 
-# ── 2. Local patches/common/ (applies to all variants) ──────────────────────
+# Local common patches
 echo "=== Applying local common patches ==="
 PATCHES_DIR="$WORK_DIR/patches"
 if [ -d "$PATCHES_DIR/common" ]; then
@@ -46,7 +46,7 @@ if [ -d "$PATCHES_DIR/common" ]; then
   done
 fi
 
-# ── 3. Source-type specific patches ─────────────────────────────────────────
+# Source-type patches
 echo "=== Applying $SOURCE_TYPE-specific patches ==="
 if [ -d "$PATCHES_DIR/${SOURCE_TYPE}-only" ]; then
   for PATCH in "$PATCHES_DIR/${SOURCE_TYPE}-only"/*.patch; do
@@ -55,7 +55,7 @@ if [ -d "$PATCHES_DIR/${SOURCE_TYPE}-only" ]; then
   done
 fi
 
-# ── 4. Testing patches (only if build_type=testing) ──────────────────────────
+# Testing patches
 if [ "$BUILD_TYPE" = "testing" ]; then
   echo "=== Applying testing patches ==="
   if [ -d "$PATCHES_DIR/testing" ]; then
