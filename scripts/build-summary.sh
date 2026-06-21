@@ -23,7 +23,6 @@ KV="${KERNEL_VERSION:-unknown}"
 KSUN_V="${KSUN_KSU_TAG:-—}"
 SUKI_V="${SUKI_TAG:-—}"
 
-# ── Console output ───────────────────────────────────────────────────────────
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Build Summary — ${VARIANT}  ${BUILD_BADGE}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
