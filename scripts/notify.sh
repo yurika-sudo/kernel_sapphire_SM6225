@@ -25,7 +25,6 @@ _tg_doc() {
     -F caption="$CAPTION"
 }
 
-# ─── Success ──────────────────────────────────────────────────────────────────
 if [ "$MODE" = "success" ]; then
   : "${RUN_URL:?}" "${RUN_NUMBER:?}" "${START_TIME:?}"
   : "${RELEASE_URL:-}" "${BUILD_TYPE:-stable}"
@@ -76,7 +75,6 @@ if [ "$MODE" = "success" ]; then
     fi
   fi
 
-# ─── Failure ─────────────────────────────────────────────────────────────────
 elif [ "$MODE" = "failure" ]; then
   : "${RUN_URL:?}" "${RUN_NUMBER:?}"
   STATUS="${BUILD_STATUS:-failed}"
@@ -89,7 +87,6 @@ elif [ "$MODE" = "failure" ]; then
   MSG="${MSG}<b>🔗</b> <a href='${RUN_URL}'>Logs</a>"
   _tg_msg "$MSG"
 
-# ─── Source check ─────────────────────────────────────────────────────────────
 elif [ "$MODE" = "check" ]; then
   : "${RUN_URL:?}"
 
@@ -125,7 +122,6 @@ elif [ "$MODE" = "check" ]; then
   MSG="${MSG}%0A%0A<b>🔗</b> <a href='${RUN_URL}'>Run details</a>"
   _tg_msg "$MSG"
 
-# ─── Variant failure (fires immediately per-variant) ──────────────────────────
 elif [ "$MODE" = "variant-failure" ]; then
   : "${RUN_URL:?}" "${RUN_NUMBER:?}" "${VARIANT:?}"
 
