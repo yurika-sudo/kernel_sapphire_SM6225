@@ -229,4 +229,6 @@ jobs:
             ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
             ${{ env.WORK_DIR }}/ksun_tag.txt
             ${{ env.WORK_DIR }}/suki_ksu_tag.txt
+            ${{ env.WORK_DIR }}/ksun_version.txt
+            ${{ env.WORK_DIR }}/suki_version.txt
           retention-days: 1
