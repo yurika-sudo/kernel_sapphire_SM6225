@@ -13,7 +13,7 @@ git config --global advice.addEmbeddedRepo false
 cd "$KERNEL_DIR"
 
 _link_ksu_driver() {
-  local DIR="$1"   # KernelSU-Next or KernelSU (suki)
+  local DIR="$1"   # KernelSU-Next or SukiSU-Ultra
   [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
     ln -sf "../${DIR}" drivers/kernelsu
   grep -q "obj-.*kernelsu" drivers/Makefile || \
@@ -47,6 +47,9 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   KSUN_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
   echo "KSUN_TAG=$KSUN_TAG"    >> "${GITHUB_ENV:-/dev/null}"
   echo "$KSUN_TAG"                  > "$WORK_DIR/ksun_tag.txt"
+  _ksun_ver=$(grep -rh "^#define KSU_VERSION\b" KernelSU-Next/kernel/ 2>/dev/null \
+  | awk 'NR==1{print $NF}' | tr -d '[:space:]')
+  echo "${_ksun_ver:-}" > "$WORK_DIR/ksun_version.txt"
   cd ..
 
   # SUSFS — simonpunk main branch (compatible with KSU-Next)
@@ -73,20 +76,18 @@ elif [ "$KSU_TYPE" = "suki" ]; then
   [ -d "KernelSU" ] || { echo "[ERROR] KernelSU dir not found"; exit 1; }
 
   cd KernelSU
-  # always latest — PT_REGS_PARM fixed, adb_root refactored to static_key (verified)
   git fetch --tags 2>/dev/null || true
   SUKI_TAG=$(git describe --tags --abbrev=0 2>/dev/null || \
     curl -sf "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest" \
     | jq -r '.tag_name' 2>/dev/null || echo "unknown")
   echo "SUKI_TAG=$SUKI_TAG"      >> "${GITHUB_ENV:-/dev/null}"
   echo "$SUKI_TAG"                > "$WORK_DIR/suki_ksu_tag.txt"
-
-  # NOTE: USER_ARG_NULL fix removed — upstream builtin branch already defines
-  # USER_ARG_NULL as user_arg_null_ptr() which returns struct user_arg_ptr *
-  # directly. Applying &(USER_ARG_NULL) on a function-call rvalue is invalid.
+  _suki_ver=$(grep -rh "^#define KSU_VERSION\b" KernelSU/kernel/ 2>/dev/null \
+  | awk 'NR==1{print $NF}' | tr -d '[:space:]')
+  echo "${_suki_ver:-}" > "$WORK_DIR/suki_version.txt"
   cd ..
 
-  # SUSFS — always latest (ShirkNeko fork = simonpunk mirror, API compatible)
+  # SUSFS — (ShirkNeko fork from simonpunk main branch)
   git clone --depth=1 https://github.com/ShirkNeko/susfs4ksu.git -b gki-android13-5.15
   SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
   echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
