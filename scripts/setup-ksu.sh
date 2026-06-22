@@ -60,6 +60,8 @@ if [ "$KSU_TYPE" = "ksun" ]; then
 
   SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
   [ -f "$SUSFS_PATCH" ] && patch -p1 --forward --fuzz=3 < "$SUSFS_PATCH" || true
+  grep -q "#include <linux/susfs.h>" fs/namespace.c || \
+    sed -i '/#include <linux\/fs\.h>/a #include <linux\/susfs.h>/' fs/namespace.c
   mkdir -p fs include/linux
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
@@ -95,6 +97,8 @@ elif [ "$KSU_TYPE" = "suki" ]; then
 
   SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
   [ -f "$SUSFS_PATCH" ] && patch -p1 --forward --fuzz=3 < "$SUSFS_PATCH" || true
+  grep -q "#include <linux/susfs.h>" fs/namespace.c || \
+    sed -i '/#include <linux\/fs\.h>/a #include <linux\/susfs.h>/' fs/namespace.c
   mkdir -p fs include/linux
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
