@@ -36,6 +36,17 @@ _inject_susfs_init() {
 }
 
 # KernelSU-Next
+_patch_susfs_def_h() {
+  # Latest susfs_def.h calls current_uid() without <linux/cred.h>.
+  # Breaks compile mid-file — everything declared after call site is unseen.
+  local DEF_H="include/linux/susfs_def.h"
+  [ -f "$DEF_H" ] || return 0
+  grep -q "linux/cred.h" "$DEF_H" && return 0
+  sed -i '1i #include <linux/cred.h>' "$DEF_H"
+  echo "[OK] susfs_def.h: added linux/cred.h"
+}
+
+
 if [ "$KSU_TYPE" = "ksun" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu ./KernelSU-Next
   curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" \
@@ -65,6 +76,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   mkdir -p fs include/linux
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
+  _patch_susfs_def_h
 
   _inject_susfs_init "KernelSU-Next/kernel/ksu.c"
   _link_ksu_driver "KernelSU-Next"
@@ -102,6 +114,7 @@ elif [ "$KSU_TYPE" = "suki" ]; then
   mkdir -p fs include/linux
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
+  _patch_susfs_def_h
 
   _inject_susfs_init "KernelSU/kernel/ksu.c"
   _link_ksu_driver "KernelSU"
