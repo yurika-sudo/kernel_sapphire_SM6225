@@ -24,8 +24,10 @@ if [ "$BUILD_TYPE" = "testing" ]; then
   BODY="${BODY}> Testing build — debug stripped, perf/sched configs non-default. Expect rough edges."$'\n\n'
 fi
 
-BODY="${BODY}**KSU-Next:** [${KSUN_TAG}](https://github.com/KernelSU-Next/KernelSU-Next/releases/tag/${KSUN_TAG})"$'\n'
-BODY="${BODY}**SukiSU-Ultra:** [${SUKI_TAG}](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases/tag/${SUKI_TAG})"$'\n'
+_kv="${KSUN_VERSION:+ (\`${KSUN_VERSION}\`)}"
+_sv="${SUKI_VERSION:+ (\`${SUKI_VERSION}\`)}"
+BODY="${BODY}**KSU-Next Manager${_kv}:** [CI Build ↗](${KSUN_MANAGER_URL})"$'\n'
+BODY="${BODY}**SukiSU Manager${_sv}:** [CI Build ↗](${SUKI_MANAGER_URL})"$'\n'
 BODY="${BODY}**SUSFS module:** [${SUSFS_VERSION}](${SUSFS_MODULE_URL})"$'\n'
 BODY="${BODY}**Kernel base:** \`${KERNEL_VERSION}\`"$'\n\n'
 
@@ -40,9 +42,13 @@ BODY="${BODY}**ROM:** AOSP-based recommended — stock MIUI/HyperOS may have iss
 BODY="${BODY}**Issues:** [t.me/home_yu_chat](https://t.me/home_yu_chat) · Critical → PM directly"$'\n\n'
 
 # Compat manager known issue
-if [ "$WORKFLOW_TYPE" = "compat" ]; then
+_show_manager_note=false
+[ "$BUILD_TYPE" = "testing" ]       && _show_manager_note=true
+[ "$WORKFLOW_TYPE" = "compat" ]     && _show_manager_note=true
+[ -n "$KSUN_VERSION" ]              && _show_manager_note=true
+if [ "$_show_manager_note" = "true" ]; then
   BODY="${BODY}> [!IMPORTANT]"$'\n'
-  BODY="${BODY}> Manager shows \"Failed to update App Profile\"? Update to latest CI manager → [get it here](https://t.me/tmplogchat/310)"$'\n\n'
+  BODY="${BODY}> Manager version **must match** the kernel KSU version. Use the **CI Build** links above — not stable releases. Mismatch = can't grant root."$'\n\n'
 fi
 
 BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
