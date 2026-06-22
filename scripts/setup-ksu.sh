@@ -47,6 +47,35 @@ _patch_susfs_def_h() {
 }
 
 
+_patch_namespace_gki_hunk1() {
+  # susfs patch hunk#1 fails on GKI: trace/hooks/blk.h shifts context lines.
+  # Manually applies the rejected include + extern decls + CL_COPY_MNT_NS define.
+  grep -q "susfs_def.h" fs/namespace.c && return 0
+  python3 - <<'EOF'
+txt = open("fs/namespace.c").read()
+txt = txt.replace(
+    "#include <linux/mnt_idmapping.h>",
+    "#include <linux/mnt_idmapping.h>\n\n"
+    "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n"
+    "#include <linux/susfs_def.h>\n"
+    "#endif",
+    1
+)
+txt = txt.replace(
+    '#include "internal.h"',
+    '#include "internal.h"\n\n'
+    "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n"
+    "extern bool susfs_is_current_ksu_domain(void);\n"
+    "extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;\n\n"
+    "#define CL_COPY_MNT_NS BIT(25)\n\n"
+    "#endif",
+    1
+)
+open("fs/namespace.c", "w").write(txt)
+print("[OK] namespace.c: hunk#1 applied manually")
+EOF
+}
+
 if [ "$KSU_TYPE" = "ksun" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu ./KernelSU-Next
   curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" \
@@ -71,8 +100,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
 
   SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
   [ -f "$SUSFS_PATCH" ] && patch -p1 --forward --fuzz=3 < "$SUSFS_PATCH" || true
-  grep -q "linux/susfs.h" fs/namespace.c || \
-    sed -i '1i #include <linux/susfs.h>' fs/namespace.c
+  _patch_namespace_gki_hunk1
   mkdir -p fs include/linux
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
@@ -109,8 +137,7 @@ elif [ "$KSU_TYPE" = "suki" ]; then
 
   SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
   [ -f "$SUSFS_PATCH" ] && patch -p1 --forward --fuzz=3 < "$SUSFS_PATCH" || true
-  grep -q "linux/susfs.h" fs/namespace.c || \
-    sed -i '1i #include <linux/susfs.h>' fs/namespace.c
+  _patch_namespace_gki_hunk1
   mkdir -p fs include/linux
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
