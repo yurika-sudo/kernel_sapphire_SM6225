@@ -21,6 +21,25 @@ _wf=$(find ./artifacts -name "ksun_tag.txt" | head -1)
 KSUN_TAG=$([ -f "$_wf" ] && cat "$_wf" | tr -d '[:space:]' || echo "unknown")
 _sf=$(find ./artifacts -name "suki_ksu_tag.txt" | head -1)
 SUKI_TAG=$([ -f "$_sf" ] && cat "$_sf" | tr -d '[:space:]' || echo "unknown")
+# Version codes (for manager matching)
+_kv=$(find ./artifacts -name "ksun_version.txt" | head -1)
+KSUN_VERSION=$([ -f "$_kv" ] && cat "$_kv" | tr -d '[:space:]' || echo "")
+
+_sv=$(find ./artifacts -name "suki_version.txt" | head -1)
+SUKI_VERSION=$([ -f "$_sv" ] && cat "$_sv" | tr -d '[:space:]' || echo "")
+
+# Latest CI run for manager links (best-effort; falls back to Actions page)
+_kr=$(curl -sf --max-time 10 \
+  "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/runs?status=success&per_page=1" \
+  | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]')
+KSUN_MANAGER_URL="${_kr:+https://github.com/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}}"
+KSUN_MANAGER_URL="${KSUN_MANAGER_URL:-https://github.com/KernelSU-Next/KernelSU-Next/actions}"
+
+_sr=$(curl -sf --max-time 10 \
+  "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs?status=success&per_page=1" \
+  | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]')
+SUKI_MANAGER_URL="${_sr:+https://github.com/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}}"
+SUKI_MANAGER_URL="${SUKI_MANAGER_URL:-https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases}"
 
 DATE_TAG=$(date +'%Y%m%d')
 
@@ -46,6 +65,10 @@ ENCODED_TAG=$(echo "$RELEASE_TAG" | sed 's/+/%2B/g')
 RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${ENCODED_TAG}"
 
 {
+  echo "KSUN_VERSION=$KSUN_VERSION"
+  echo "SUKI_VERSION=$SUKI_VERSION"
+  echo "KSUN_MANAGER_URL=$KSUN_MANAGER_URL"
+  echo "SUKI_MANAGER_URL=$SUKI_MANAGER_URL"
   echo "KERNEL_VERSION=$KERNEL_VERSION"
   echo "KERNEL_UNAME=$KERNEL_UNAME"
   echo "SUSFS_VERSION=$SUSFS_VERSION"
