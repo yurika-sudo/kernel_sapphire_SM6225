@@ -24,10 +24,8 @@ if [ "$BUILD_TYPE" = "testing" ]; then
   BODY="${BODY}> Testing build — debug stripped, perf/sched configs non-default. Expect rough edges."$'\n\n'
 fi
 
-_kv="${KSUN_VERSION:+ (\`${KSUN_VERSION}\`)}"
-_sv="${SUKI_VERSION:+ (\`${SUKI_VERSION}\`)}"
-BODY="${BODY}**KSU-Next Manager${_kv}:** [CI Build ↗](${KSUN_MANAGER_URL})"$'\n'
-BODY="${BODY}**SukiSU Manager${_sv}:** [CI Build ↗](${SUKI_MANAGER_URL})"$'\n'
+BODY="${BODY}**KSU-Next Manager:** [CI Build ↗](${KSUN_MANAGER_URL})"$'\n'
+BODY="${BODY}**SukiSU Manager:** [CI Build ↗](${SUKI_MANAGER_URL})"$'\n'
 BODY="${BODY}**SUSFS module:** [${SUSFS_VERSION}](${SUSFS_MODULE_URL})"$'\n'
 BODY="${BODY}**Kernel base:** \`${KERNEL_VERSION}\`"$'\n\n'
 
@@ -41,15 +39,9 @@ fi
 BODY="${BODY}**ROM:** AOSP-based recommended — stock MIUI/HyperOS may have issues"$'\n'
 BODY="${BODY}**Issues:** [t.me/home_yu_chat](https://t.me/home_yu_chat) · Critical → PM directly"$'\n\n'
 
-# Compat manager known issue
-_show_manager_note=false
-[ "$BUILD_TYPE" = "testing" ]       && _show_manager_note=true
-[ "$WORKFLOW_TYPE" = "compat" ]     && _show_manager_note=true
-[ -n "$KSUN_VERSION" ]              && _show_manager_note=true
-if [ "$_show_manager_note" = "true" ]; then
-  BODY="${BODY}> [!IMPORTANT]"$'\n'
-  BODY="${BODY}> Manager version **must match** the kernel KSU version. Use the **CI Build** links above — not stable releases. Mismatch = can't grant root."$'\n\n'
-fi
+# Manager version warning — all builds
+BODY="${BODY}> [!IMPORTANT]"$'\n'
+BODY="${BODY}> **Manager version must match kernel version.** Can't grant root / manager shows errors? Use the **CI Build** links above — not stable releases. Mismatch = can't grant root."$'\n\n'
 
 BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
 BODY="${BODY}📋 **Per-build details:** [Run #${GITHUB_RUN_NUMBER} summary](${RUN_URL})"$'\n'
