@@ -29,14 +29,14 @@ _sv=$(find ./artifacts -name "suki_version.txt" | head -1)
 SUKI_VERSION=$([ -f "$_sv" ] && cat "$_sv" | tr -d '[:space:]' || echo "")
 
 # Latest CI run for manager links (best-effort; falls back to Actions page)
-_kr=$(curl -sf --max-time 10 \
-  "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/runs?status=success&per_page=1" \
+_kr=$(curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml/runs?status=success&branch=dev&per_page=1" \
   | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]')
 KSUN_MANAGER_URL="${_kr:+https://github.com/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}}"
 KSUN_MANAGER_URL="${KSUN_MANAGER_URL:-https://github.com/KernelSU-Next/KernelSU-Next/actions}"
 
-_sr=$(curl -sf --max-time 10 \
-  "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs?status=success&per_page=1" \
+_sr=$(curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
   | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]')
 SUKI_MANAGER_URL="${_sr:+https://github.com/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}}"
 SUKI_MANAGER_URL="${SUKI_MANAGER_URL:-https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases}"
