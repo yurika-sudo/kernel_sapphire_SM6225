@@ -39,7 +39,7 @@ _sr=$(curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
   | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]')
 SUKI_MANAGER_URL="${_sr:+https://github.com/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}}"
-SUKI_MANAGER_URL="${SUKI_MANAGER_URL:-https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases}"
+SUKI_MANAGER_URL="${SUKI_MANAGER_URL:-https://github.com/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml}"
 
 DATE_TAG=$(date +'%Y%m%d')
 
