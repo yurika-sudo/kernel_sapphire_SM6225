@@ -35,6 +35,7 @@ jobs:
         env:
           BUILD_TYPE: ${{ inputs.build_type }}
           WORKFLOW_TYPE: ${{ inputs.workflow_type }}
+          GITHUB_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
 
       - name: "🗂️ Collect / bundle ZIPs"
         env:
