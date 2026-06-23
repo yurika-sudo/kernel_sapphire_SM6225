@@ -34,12 +34,20 @@ _kr=$(curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]')
 KSUN_MANAGER_URL="${_kr:+https://github.com/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}}"
 KSUN_MANAGER_URL="${KSUN_MANAGER_URL:-https://github.com/KernelSU-Next/KernelSU-Next/actions}"
+KSUN_MANAGER_ARTIFACT_ID=$([ -n "$_kr" ] && \
+  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}/artifacts" \
+  | jq -r '.artifacts[] | select(.name == "manager") | .id // empty' | head -1 || true)
 
 _sr=$(curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
   | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]')
 SUKI_MANAGER_URL="${_sr:+https://github.com/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}}"
 SUKI_MANAGER_URL="${SUKI_MANAGER_URL:-https://github.com/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml}"
+SUKI_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \
+  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}/artifacts" \
+  | jq -r '.artifacts[] | select(.name == "manager") | .id // empty' | head -1 || true)
 
 DATE_TAG=$(date +'%Y%m%d')
 
@@ -69,6 +77,8 @@ RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${ENCODED_TAG}
   echo "SUKI_VERSION=$SUKI_VERSION"
   echo "KSUN_MANAGER_URL=$KSUN_MANAGER_URL"
   echo "SUKI_MANAGER_URL=$SUKI_MANAGER_URL"
+  echo "KSUN_MANAGER_ARTIFACT_ID=$KSUN_MANAGER_ARTIFACT_ID"
+  echo "SUKI_MANAGER_ARTIFACT_ID=$SUKI_MANAGER_ARTIFACT_ID"
   echo "KERNEL_VERSION=$KERNEL_VERSION"
   echo "KERNEL_UNAME=$KERNEL_UNAME"
   echo "SUSFS_VERSION=$SUSFS_VERSION"
