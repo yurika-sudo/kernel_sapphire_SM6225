@@ -1,4 +1,6 @@
-# Bootloop History
+# Config Blacklist
+
+> Maintainer reference only. Not user-facing.
 
 ## Do not re-add
 
