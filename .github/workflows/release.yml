@@ -35,12 +35,22 @@ jobs:
         env:
           BUILD_TYPE: ${{ inputs.build_type }}
           WORKFLOW_TYPE: ${{ inputs.workflow_type }}
+          GITHUB_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
 
       - name: "🗂️ Collect / bundle ZIPs"
         env:
           ZIP_MODE:   ${{ inputs.zip_mode }}
           BUILD_TYPE: ${{ inputs.build_type }}
         run: bash scripts/pack-release.sh
+
+      - name: "📦 Fetch manager APKs"
+        env:
+          GITHUB_TOKEN:              ${{ secrets.GITHUB_TOKEN }}
+          KSUN_MANAGER_ARTIFACT_ID:  ${{ env.KSUN_MANAGER_ARTIFACT_ID }}
+          SUKI_MANAGER_ARTIFACT_ID:  ${{ env.SUKI_MANAGER_ARTIFACT_ID }}
+          KSUN_VERSION:              ${{ env.KSUN_VERSION }}
+          SUKI_VERSION:              ${{ env.SUKI_VERSION }}
+        run: bash scripts/fetch-manager-apks.sh
 
       - name: "📋 Build summary"
         env:
@@ -86,6 +96,7 @@ jobs:
           overwrite: true  
           files: |
             ./release_zips/*.zip
+            ./manager_apks/*.apk
             ${{ env.LOG_AUDIT_ZIP }}
           tag_name:   ${{ env.RELEASE_TAG }}
           name:       ${{ env.RELEASE_NAME }}

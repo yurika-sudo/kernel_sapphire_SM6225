@@ -24,6 +24,20 @@ This started as a way to learn kernel building properly — CI/CD, GKI complianc
 
 ---
 
+## Support
+
+This is a personal project. You assume all risk by flashing this kernel.
+
+**Before asking for help:**
+- Have a PC available
+- Speak English (minimal fluency required)
+- Be prepared to respond quickly — slow replies get dropped
+- Check [installation troubleshooting](installation.md) first
+
+Reach out: DM [@superuseryu](https://t.me/home_yu_chat) via Telegram. If there's no quick response or feedback, support ends there. That's not being rude — it's time management.
+
+---
+
 ## Contact
 
 - Telegram: [t.me/home_yu_chat](https://t.me/home_yu_chat)
