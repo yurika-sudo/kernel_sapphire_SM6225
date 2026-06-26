@@ -21,7 +21,6 @@
 - **[backslashxx](https://github.com/backslashxx/mountify)** — Mountify module
 - **[ravindu644](https://github.com/ravindu644/droidspaces)** — Droidspaces
 - **[vc-teahouse](https://github.com/vc-teahouse/Baseband-guard)** — Baseband Guard
-- **[topnotchfreaks](https://github.com/topnotchfreaks/clang)** — Clang toolchain
 - **[osm0sis](https://github.com/osm0sis/AnyKernel3)** — AnyKernel3
 - **[CodeLinaro](https://git.codelinaro.org/)** — Qualcomm kernel source upstream
 
