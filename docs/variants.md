@@ -39,5 +39,5 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 | Source | `android.googlesource.com/kernel/common` | `git.codelinaro.org/clo/la/kernel/msm-5.15` |
 | Branch | `android13-5.15-lts` | `kernel.lnx.5.15.r1-rel` |
 | Config fragment | — | `vendor/bengal_GKI.config` |
-| Toolchain | Clang r547379 (topnotchfreaks) | Clang r547379 (topnotchfreaks) |
+| Toolchain | Clang r547379 | Clang r547379 |
 | LTO | Thin | Thin |
