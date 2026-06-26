@@ -57,7 +57,7 @@ echo "[${SOURCE_TYPE^^}] Switching to ThinLTO..."
   --enable  LTO_CLANG_THIN
 make "${MAKE_FLAGS[@]}" olddefconfig
 
-# CLO-only: merge vendor fragment then re-enforce ZRAM
+# CLO-only: merge vendor fragment then re-enforce overrides
 if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
    [ -f "arch/arm64/configs/${CLO_FRAGMENT}" ]; then
   echo "[CLO] Merging fragment: $CLO_FRAGMENT"
@@ -73,6 +73,13 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
     -e ZRAM_DEF_COMP_LZ4 \
     -d ZRAM_DEF_COMP_LZO \
     --set-str ZRAM_DEF_COMP "lz4"
+  echo "[CLO] Re-enforcing TCP_CONG=westwood after fragment merge"
+  ./scripts/config --file "${OUT_DIR}/dist/.config" \
+    -d TCP_CONG_BBR \
+    -e TCP_CONG_WESTWOOD \
+    --set-str DEFAULT_TCP_CONG "westwood" \
+    -d DEFAULT_BBR \
+    -e DEFAULT_WESTWOOD
   make "${MAKE_FLAGS[@]}" olddefconfig
 fi
 
