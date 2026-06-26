@@ -1,0 +1,8 @@
+--- a/mm/page_alloc.c
++++ b/mm/page_alloc.c
+@@ -435,7 +435,7 @@ int watermark_boost_factor __read_mostly = 15000;
+ #else
+ int watermark_boost_factor __read_mostly = 15000;
+ #endif
+-int watermark_scale_factor = 10;
++int watermark_scale_factor = 30;
