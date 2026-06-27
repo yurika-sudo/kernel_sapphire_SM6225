@@ -45,6 +45,7 @@ esac
 
 cd "$WORK_DIR"
 git clone --depth=1 "$AK3_REPO" ak3_tmp
+[ -d "${GITHUB_WORKSPACE}/anykernel/ramdisk" ] && cp -r "${GITHUB_WORKSPACE}/anykernel/ramdisk/." "ak3_tmp/ramdisk/"
 
 # Per-variant ZIP: only Image (for flashing) — no named copy to keep size lean
 cp "$IMAGE" "ak3_tmp/Image"
