@@ -18,6 +18,7 @@ sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CF"
 for SYM in PID_NS \
            DEBUG_KINFO \
            LRU_GEN LRU_GEN_ENABLED NET_SCH_FQ DEBUG_MEMORY_INIT PRINTK_CALLER \
+           NF_TABLES \
            USB_F_GSI USB_CONFIGFS_F_GSI \
            ZRAM_DEF_COMP_LZORLE ZRAM_DEF_COMP_ZSTD ZRAM_DEF_COMP_LZ4 ZRAM_DEF_COMP_LZO ZRAM_DEF_COMP; do
   sed -i "/^CONFIG_${SYM}[= ]/d; /^# CONFIG_${SYM} /d" "$CF"
@@ -64,6 +65,7 @@ CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
 # CONFIG_UBSAN is not set
 # CONFIG_F2FS_IOSTAT is not set
 # CONFIG_NTSYNC is not set
+CONFIG_NF_TABLES=y
 # CONFIG_USB_F_GSI is not set
 # CONFIG_USB_CONFIGFS_F_GSI is not set
 EOF
