@@ -81,18 +81,6 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
     -d DEFAULT_BBR \
     -e DEFAULT_WESTWOOD
   make "${MAKE_FLAGS[@]}" olddefconfig
-   echo "[${SOURCE_TYPE^^}] Disabling debug warnings and protecting BTF..."
-  ./scripts/config --file "${OUT_DIR}/dist/.config" \
-    --set-val CONFIG_PANIC_ON_OOPS_VALUE 0 \
-    -d SCHED_STACK_END_CHECK \
-    -d DEBUG_MISC \
-    -d DEBUG_LIST \
-    -d DEBUG_INFO \
-    -d DEBUG_INFO_DWARF4 \
-    -d DEBUG_INFO_DWARF5 \
-    -d DEBUG_INFO_BTF \
-    -d DEBUG_INFO_BTF_MODULES
-   make "${MAKE_FLAGS[@]}" olddefconfig
  fi
 
 echo "[${SOURCE_TYPE^^}] Building Image..."
