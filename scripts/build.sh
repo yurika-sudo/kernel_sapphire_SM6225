@@ -18,7 +18,6 @@ export PATH="${CLANG_DIR}/bin:$PATH"
 
 if command -v ccache &>/dev/null; then _CC="ccache clang"; else _CC="clang"; fi
 
-# ponytail: BRANCH/KMI_GENERATION are GKI-only KMI compliance flags; add per-source below
 MAKE_FLAGS=(
   -j$(nproc)
   O="${OUT_DIR}/dist"
@@ -37,7 +36,7 @@ MAKE_FLAGS=(
   CROSS_COMPILE_ARM32=arm-linux-gnueabi-
   KBUILD_BUILD_USER="$KBUILD_BUILD_USER"
   KBUILD_BUILD_HOST="$KBUILD_BUILD_HOST"
-  KCFLAGS="-pipe -fno-strict-aliasing -Wno-error"
+  KCFLAGS="-pipe -fno-strict-aliasing -Wno-error -Wno-unknown-warning-option -Wno-array-bounds -Wno-stringop-overflow -Wno-mismatched-function-types"
   LLVM_PARALLEL_LINK_JOBS=2
 )
 [[ "$SOURCE_TYPE" == gki* ]] && MAKE_FLAGS+=(BRANCH=android13-5.15-lts KMI_GENERATION=8)
@@ -53,6 +52,7 @@ make "${MAKE_FLAGS[@]}" "$DEFCONFIG"
 
 echo "[${SOURCE_TYPE^^}] Switching to ThinLTO..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
+  --disable LTO_NONE \
   --disable LTO_CLANG_FULL \
   --enable  LTO_CLANG_THIN
 make "${MAKE_FLAGS[@]}" olddefconfig
@@ -86,7 +86,7 @@ fi
 echo "[${SOURCE_TYPE^^}] Building Image..."
 if ! make "${MAKE_FLAGS[@]}" Image 2>&1 | tee "$LOG"; then
   echo "[FAIL] ${SOURCE_TYPE^^} build failed:"
-  tail -60 "$LOG"
+  tail -100 "$LOG"
   exit 1
 fi
 
