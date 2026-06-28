@@ -86,12 +86,12 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
     --set-val CONFIG_PANIC_ON_OOPS_VALUE 0 \
     -d SCHED_STACK_END_CHECK \
     -d DEBUG_MISC \
-    -d DEBUG_KERNEL \
     -d DEBUG_LIST \
-    -e DEBUG_INFO \
-    -e DEBUG_INFO_DWARF4 \
-    -e DEBUG_INFO_BTF \
-    -e DEBUG_INFO_BTF_MODULES
+    -d DEBUG_INFO \
+    -d DEBUG_INFO_DWARF4 \
+    -d DEBUG_INFO_DWARF5 \
+    -d DEBUG_INFO_BTF \
+    -d DEBUG_INFO_BTF_MODULES
    make "${MAKE_FLAGS[@]}" olddefconfig
  fi
 
