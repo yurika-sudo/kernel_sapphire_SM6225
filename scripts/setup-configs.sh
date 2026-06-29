@@ -17,8 +17,8 @@ sed -i 's/ cgroup_disable=pressure//'                    "$CF"
 sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
-for SYM in PID_NS \
-           DEBUG_KINFO \
+for SYM in PID_NS DEBUG_KINFO ZSMALLOC \
+           OVERLAY_FS NET_SCH_CODEL NET_SCH_FQ_CODEL UBSAN \
            LRU_GEN LRU_GEN_ENABLED NET_SCH_FQ DEBUG_MEMORY_INIT PRINTK_CALLER \
            ZRAM_DEF_COMP_LZORLE ZRAM_DEF_COMP_ZSTD ZRAM_DEF_COMP_LZ4 ZRAM_DEF_COMP_LZO ZRAM_DEF_COMP; do
   sed -i "/^CONFIG_${SYM}[= ]/d; /^# CONFIG_${SYM} /d" "$CF"
@@ -45,7 +45,6 @@ CONFIG_ZRAM_WRITEBACK=y
 CONFIG_ZRAM_DEF_COMP_LZ4=y
 # CONFIG_ZRAM_DEF_COMP_LZO is not set
 CONFIG_ZRAM_DEF_COMP="lz4"
-CONFIG_ZPOOL=y
 CONFIG_ZSMALLOC=y
 CONFIG_LRU_GEN=y
 # CONFIG_HZ_100 is not set
