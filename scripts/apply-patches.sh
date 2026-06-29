@@ -9,6 +9,8 @@ set -e
 : "${BUILD_TYPE:-stable}"
 : "${WORK_DIR:=$GITHUB_WORKSPACE}"
 
+[ "$KSU_TYPE" = "none" ] && { echo "[SKIP] NoKSU — all patches skipped (vanilla)"; exit 0; }
+
 source /tmp/apply_patch.sh
 cd "$KERNEL_SRC"
 
