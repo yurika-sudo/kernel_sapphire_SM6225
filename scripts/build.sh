@@ -68,8 +68,6 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
   make "${MAKE_FLAGS[@]}" olddefconfig
   echo "[CLO] Re-enforcing ZRAM_DEF_COMP=lz4 after fragment merge"
   ./scripts/config --file "${OUT_DIR}/dist/.config" \
-    -e ZRAM \
-    -e ZSMALLOC \
     -d ZRAM_DEF_COMP_LZORLE \
     -d ZRAM_DEF_COMP_ZSTD \
     -e ZRAM_DEF_COMP_LZ4 \
