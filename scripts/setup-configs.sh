@@ -17,10 +17,10 @@ sed -i 's/ cgroup_disable=pressure//'                    "$CF"
 sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
-for SYM in PID_NS DEBUG_KINFO DEBUG_LIST DEBUG_MISC \
-           USB_DWC3_MSM USB_F_GSI USB_CONFIGFS_F_GSI USB_BAM RCU_TRACE \
-           LRU_GEN LRU_GEN_ENABLED NET_SCH_FQ DEBUG_MEMORY_INIT PRINTK_CALLER DEBUG_INFO \
-           DEBUG_FS ZPOOL ZSMALLOC OVERLAY_FS NET_SCH_CODEL NET_SCH_FQ_CODEL UBSAN \
+for SYM in PID_NS \
+           DEBUG_KINFO \
+           DEBUG_LIST DEBUG_MISC \
+           LRU_GEN LRU_GEN_ENABLED NET_SCH_FQ DEBUG_MEMORY_INIT PRINTK_CALLER \
            ZRAM_DEF_COMP_LZORLE ZRAM_DEF_COMP_ZSTD ZRAM_DEF_COMP_LZ4 ZRAM_DEF_COMP_LZO ZRAM_DEF_COMP; do
   sed -i "/^CONFIG_${SYM}[= ]/d; /^# CONFIG_${SYM} /d" "$CF"
 done
