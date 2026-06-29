@@ -124,6 +124,7 @@ jobs:
           work_dir:   ${{ env.WORK_DIR }}
 
       - name: "🐳 Droidspaces"
+        if: inputs.ksu_type != 'none'
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           bash ${{ github.workspace }}/scripts/droidspaces.sh \
