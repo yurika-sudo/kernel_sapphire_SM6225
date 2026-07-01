@@ -63,6 +63,7 @@ jobs:
           key: clo-source-${{ steps.clo-pin.outputs.hash }}
 
       - name: "🔧 Fix source warnings"
+        if: inputs.ksu_type != 'none'
         run: bash scripts/fix-source-warnings.sh "${{ env.KERNEL_SRC }}"
 
       - name: "⚡ Configure ccache"
