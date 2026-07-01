@@ -18,6 +18,8 @@ cd "$KERNEL_SRC"
 echo "=== Applying upstream optimization patches ==="
 BASE="https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/common"
 
+apply_patch "$BASE/add_limitation_scaling_min_freq.patch"          "add_limitation_scaling_min_freq.patch"
+apply_patch "$BASE/re_write_limitation_scaling_min_freq.patch"          "re_write_limitation_scaling_min_freq.patch"
 apply_patch "$BASE/silence_irq_cpu_logspam.patch"          "silence_irq_cpu_logspam"
 apply_patch "$BASE/silence_system_logspam.patch"           "silence_system_logspam"
 apply_patch "$BASE/reduce_cache_pressure.patch"            "reduce_cache_pressure"
