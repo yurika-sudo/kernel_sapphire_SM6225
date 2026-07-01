@@ -95,7 +95,6 @@ jobs:
         run: bash scripts/setup-toolchain.sh
 
       - name: "🩹 Apply patches"
-        if: inputs.ksu_type != 'none'
         env:
           SOURCE_TYPE: ${{ inputs.source_type }}
           KSU_TYPE:    ${{ inputs.ksu_type }}
@@ -133,7 +132,6 @@ jobs:
             "arch/arm64/configs/${{ inputs.defconfig }}"
 
       - name: "⚙️ Kernel configs"
-        if: inputs.ksu_type != 'none'
         uses: ./.github/actions/setup-configs
         with:
           ksu_type:    ${{ inputs.ksu_type }}
