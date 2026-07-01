@@ -3,6 +3,8 @@ set -e
 
 KERNEL_SRC="${1:-kernel_src}"
 
+[ "$KSU_TYPE" = "none" ] && { echo "[SKIP] NoKSU — config injections skipped (vanilla)"; exit 0; }
+
 # Fix bpf_doc.py SyntaxWarnings
 BPF_DOC="$KERNEL_SRC/scripts/bpf_doc.py"
 if [ -f "$BPF_DOC" ]; then
