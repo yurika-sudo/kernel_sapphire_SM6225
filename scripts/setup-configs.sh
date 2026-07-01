@@ -8,8 +8,6 @@ set -e
 : "${DEFCONFIG:?}"
 : "${KERNEL_DIR:?}"
 
-[ "$KSU_TYPE" = "none" ] && { echo "[SKIP] NoKSU — config injections skipped (vanilla)"; exit 0; }
-
 CF="$DEFCONFIG"
 
 # Base cleanup
