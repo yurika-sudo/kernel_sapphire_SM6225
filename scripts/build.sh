@@ -52,9 +52,11 @@ make "${MAKE_FLAGS[@]}" "$DEFCONFIG"
 
 echo "[${SOURCE_TYPE^^}] Switching to ThinLTO..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
-  --disable LTO_NONE \
-  --disable LTO_CLANG_FULL \
-  --enable  LTO_CLANG_THIN
+  -e LTO_CLANG \
+  -d LTO_NONE \
+  -e LTO_CLANG_THIN \
+  -d LTO_CLANG_FULL \
+  -e THINLTO
 make "${MAKE_FLAGS[@]}" olddefconfig
 
 # CLO-only: merge vendor fragment then re-enforce overrides
