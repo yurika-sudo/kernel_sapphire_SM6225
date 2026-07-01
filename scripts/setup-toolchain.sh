@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup-toolchain.sh — download ZyC Clang
+# setup-toolchain.sh
 set -e
 
 : "${WORK_DIR:=$GITHUB_WORKSPACE}"
