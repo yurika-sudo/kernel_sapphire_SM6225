@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # setup-configs.sh — inject kernel configs into defconfig
-# env: KSU_TYPE, SOURCE_TYPE, DEFCONFIG (full path), KERNEL_DIR
+# env: KSU_TYPE, SOURCE_TYPE, DEFCONFIG (full path), KERNEL_DIR, CLO_FRAGMENT (optional)
 set -e
 
 : "${KSU_TYPE:?}"
@@ -65,6 +65,23 @@ CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
 # CONFIG_F2FS_IOSTAT is not set
 # CONFIG_NTSYNC is not set
 EOF
+
+# Topaz fragment (SM6225/sapphire test build only — see clo_fragment input)
+# NOTE: symbols validated in-container via merge_config.sh + olddefconfig
+# before this was added; see fetch-topaz-drivers.sh / apply-topaz-wiring.sh
+if [[ "${CLO_FRAGMENT:-}" == *topaz* ]]; then
+  cat >> "$CF" << 'EOF'
+CONFIG_FINGERPRINT_FPC1020=m
+CONFIG_FINGERPRINT_GOODIX_FOD=m
+CONFIG_NOPMI_CHARGER=m
+CONFIG_TCPC_CLASS=m
+CONFIG_TCPC_RT1711H=m
+CONFIG_SIMTRAY_STATUS=m
+CONFIG_ANT_CHECK=m
+CONFIG_ANT_CHECK_DIV=m
+CONFIG_BATT_VERIFY_BY_DS28E16=m
+EOF
+fi
 
 # KSU-Next
 if [ "$KSU_TYPE" = "ksun" ]; then
