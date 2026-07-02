@@ -43,6 +43,7 @@ case "$SOURCE_TYPE" in
         sleep 30
       done
     fi
+  ;;
 
   gki-compat)
     GKI_REPO="https://android.googlesource.com/kernel/common"
