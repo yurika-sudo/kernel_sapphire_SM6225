@@ -1,0 +1,18 @@
+name: "🔨 Build Kernel — Topaz Test"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-kernel.yml
+    with:
+      variant_name:  "CLO-Topaz-Test"
+      source_type:   "clo"
+      ksu_type:      "ksun"
+      zip_prefix:    "CLO_Topaz_Test"
+      artifact_name: "clo-topaz-test"
+      defconfig:     "gki_defconfig"
+      clo_fragment:  "vendor/topaz_GKI.config"
+      build_type:    "testing"
+    secrets: inherit
