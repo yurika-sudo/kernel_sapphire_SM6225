@@ -44,17 +44,6 @@ case "$SOURCE_TYPE" in
       done
     fi
 
-    # NOTE: topaz is a fragment of the same sapphire/bengal device, not a
-    # new device — gated on clo_fragment so it only runs for the topaz test
-    # build, never touches the regular bengal CLO variants.
-    if [[ "${CLO_FRAGMENT:-}" == *topaz* ]]; then
-      echo "[CLO] topaz fragment detected — wiring topaz driver sources..."
-      KERNEL_SRC="$KERNEL_SRC" bash "$(dirname "$0")/fetch-topaz-drivers.sh"
-      KERNEL_SRC="$KERNEL_SRC" bash "$(dirname "$0")/apply-topaz-wiring.sh"
-    fi
-    ;;
-
-
   gki-compat)
     GKI_REPO="https://android.googlesource.com/kernel/common"
     GKI_BRANCH="deprecated/android13-5.15-2023-10"
