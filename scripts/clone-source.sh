@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # clone-source.sh — clone kernel source (GKI or CLO)
-# env: SOURCE_TYPE, KSU_TYPE, KERNEL_SRC (output dir)
+# env: SOURCE_TYPE, KSU_TYPE, KERNEL_SRC (output dir), CLO_FRAGMENT (optional)
 set -e
 
 : "${SOURCE_TYPE:?}"
@@ -42,6 +42,15 @@ case "$SOURCE_TYPE" in
         rm -rf "$KERNEL_SRC" && mkdir -p "$KERNEL_SRC"
         sleep 30
       done
+    fi
+
+    # NOTE: topaz is a fragment of the same sapphire/bengal device, not a
+    # new device — gated on clo_fragment so it only runs for the topaz test
+    # build, never touches the regular bengal CLO variants.
+    if [[ "${CLO_FRAGMENT:-}" == *topaz* ]]; then
+      echo "[CLO] topaz fragment detected — wiring topaz driver sources..."
+      KERNEL_SRC="$KERNEL_SRC" bash "$(dirname "$0")/fetch-topaz-drivers.sh"
+      KERNEL_SRC="$KERNEL_SRC" bash "$(dirname "$0")/apply-topaz-wiring.sh"
     fi
     ;;
 
