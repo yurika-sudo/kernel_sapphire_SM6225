@@ -1,11 +1,11 @@
---- kernel/sched/fair.c.orig    2026-07-03 01:14:08.914433060 +0700
-+++ kernel/sched/fair.c 2026-07-03 00:51:16.030962960 +0700
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
 @@ -61,7 +61,7 @@
   *
   * (default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)
   */
--unsigned int sysctl_sched_min_granularity                      = 750000ULL;
-+unsigned int sysctl_sched_min_granularity                      = 1500000ULL;
- static unsigned int normalized_sysctl_sched_min_granularity    = 750000ULL;
-
+-unsigned int sysctl_sched_min_granularity			= 750000ULL;
++unsigned int sysctl_sched_min_granularity			= 1500000ULL;
+ static unsigned int normalized_sysctl_sched_min_granularity	= 750000ULL;
+ 
  /*
