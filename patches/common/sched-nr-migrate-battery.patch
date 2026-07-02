@@ -1,0 +1,11 @@
+--- kernel/sched/core.c.orig    2026-07-03 01:14:08.964433065 +0700
++++ kernel/sched/core.c 2026-07-02 21:18:44.439999157 +0700
+@@ -89,7 +89,7 @@
+  * Number of tasks to iterate in a single balance run.
+  * Limited because this is done with IRQs disabled.
+  */
+-const_debug unsigned int sysctl_sched_nr_migrate = 32;
++const_debug unsigned int sysctl_sched_nr_migrate = 16;
+
+ /*
+  * period over which we measure -rt task CPU usage in us.
