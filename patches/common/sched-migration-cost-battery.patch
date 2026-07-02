@@ -1,0 +1,11 @@
+--- kernel/sched/fair.c.orig    2026-07-03 00:48:29.844279738 +0700
++++ kernel/sched/fair.c 2026-07-03 00:51:16.030962960 +0700
+@@ -87,7 +87,7 @@
+ unsigned int sysctl_sched_wakeup_granularity                   = 1000000UL;
+ static unsigned int normalized_sysctl_sched_wakeup_granularity = 1000000UL;
+
+-const_debug unsigned int sysctl_sched_migration_cost   = 500000UL;
++const_debug unsigned int sysctl_sched_migration_cost   = 1000000UL;
+
+ int sched_thermal_decay_shift;
+ static int __init setup_sched_thermal_decay_shift(char *str)
