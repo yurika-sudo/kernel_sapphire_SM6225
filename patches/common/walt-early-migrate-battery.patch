@@ -1,0 +1,13 @@
+--- a/kernel/sched/walt/sysctl.c
++++ b/kernel/sched/walt/sysctl.c
+@@ -1107,8 +1107,8 @@ void walt_tunables(void)
+ 	for (i = 0; i < MAX_MARGIN_LEVELS; i++) {
+ 		sysctl_sched_capacity_margin_up_pct[i] = 95; /* ~5% margin */
+ 		sysctl_sched_capacity_margin_dn_pct[i] = 85; /* ~15% margin */
+-		sysctl_sched_early_up[i] = 1077;
+-		sysctl_sched_early_down[i] = 1204;
++		sysctl_sched_early_up[i] = 1250;
++		sysctl_sched_early_down[i] = 1400;
+ 	}
+ 
+ 	sysctl_sched_group_upmigrate_pct = 100;
