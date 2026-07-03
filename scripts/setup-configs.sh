@@ -64,7 +64,6 @@ CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
 # CONFIG_UBSAN is not set
 # CONFIG_F2FS_IOSTAT is not set
 # CONFIG_NTSYNC is not set
-# CONFIG_SCHED_WALT is not set
 EOF
 
 # KSU-Next
