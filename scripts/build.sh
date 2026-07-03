@@ -59,10 +59,6 @@ echo "[${SOURCE_TYPE^^}] Switching to ThinLTO..."
   -e LTO_CLANG_THIN \
   -d LTO_CLANG_FULL \
   -e THINLTO
-
-echo "[${SOURCE_TYPE^^}] Nuke Walt..."
-./scripts/config --file "${OUT_DIR}/dist/.config" \
-  -d SCHED_WALT
 make "${MAKE_FLAGS[@]}" olddefconfig
 
 # CLO-only: merge vendor fragment then re-enforce overrides
@@ -88,9 +84,6 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
     --set-str DEFAULT_TCP_CONG "westwood" \
     -d DEFAULT_BBR \
     -e DEFAULT_WESTWOOD
-  echo "[CLO] Nuke Walt..."
-  ./scripts/config --file "${OUT_DIR}/dist/.config" \
-    -d SCHED_WALT
   make "${MAKE_FLAGS[@]}" olddefconfig
  fi
 
