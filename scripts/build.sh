@@ -56,8 +56,8 @@ echo "[${SOURCE_TYPE^^}] Fix Usb tethering...."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -e USB_CONFIGFS_NCM \
   -e USB_F_NCM \
-  -d USB_CONFIGFS_RNDIS \
-  -d USB_F_NCM_GKI
+  -e USB_CONFIGFS_RNDIS \
+  -e USB_F_RNDIS
 
 echo "[${SOURCE_TYPE^^}] Switching to ThinLTO..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
@@ -91,6 +91,12 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
     --set-str DEFAULT_TCP_CONG "westwood" \
     -d DEFAULT_BBR \
     -e DEFAULT_WESTWOOD
+  echo "[${SOURCE_TYPE^^}] Fix Usb tethering...."
+  ./scripts/config --file "${OUT_DIR}/dist/.config" \
+    -e USB_CONFIGFS_NCM \
+    -e USB_F_NCM \
+    -e USB_CONFIGFS_RNDIS \
+    -e USB_F_RNDIS
   make "${MAKE_FLAGS[@]}" olddefconfig
  fi
 
