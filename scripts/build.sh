@@ -52,6 +52,13 @@ LOG="/tmp/build_${SOURCE_TYPE}.log"
 echo "[${SOURCE_TYPE^^}] Building defconfig: $DEFCONFIG"
 make "${MAKE_FLAGS[@]}" "$DEFCONFIG"
 
+echo "[${SOURCE_TYPE^^}] Fix Usb tethering...."
+./scripts/config --file "${OUT_DIR}/dist/.config" \
+  -e USB_CONFIGFS_NCM \
+  -e USB_F_NCM \
+  -d USB_CONFIGFS_RNDIS \
+  -d USB_F_NCM_GKI
+
 echo "[${SOURCE_TYPE^^}] Switching to ThinLTO..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -e LTO_CLANG \
