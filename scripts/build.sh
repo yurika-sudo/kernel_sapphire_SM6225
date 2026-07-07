@@ -52,13 +52,6 @@ LOG="/tmp/build_${SOURCE_TYPE}.log"
 echo "[${SOURCE_TYPE^^}] Building defconfig: $DEFCONFIG"
 make "${MAKE_FLAGS[@]}" "$DEFCONFIG"
 
-echo "[${SOURCE_TYPE^^}] Fix Usb tethering...."
-./scripts/config --file "${OUT_DIR}/dist/.config" \
-  -e USB_CONFIGFS_NCM \
-  -e USB_F_NCM \
-  -e USB_CONFIGFS_RNDIS \
-  -e USB_F_RNDIS
-
 echo "[${SOURCE_TYPE^^}] Switching to ThinLTO..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -e LTO_CLANG \
@@ -91,12 +84,6 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
     --set-str DEFAULT_TCP_CONG "westwood" \
     -d DEFAULT_BBR \
     -e DEFAULT_WESTWOOD
-  echo "[${SOURCE_TYPE^^}] Fix Usb tethering...."
-  ./scripts/config --file "${OUT_DIR}/dist/.config" \
-    -e USB_CONFIGFS_NCM \
-    -e USB_F_NCM \
-    -e USB_CONFIGFS_RNDIS \
-    -e USB_F_RNDIS
   make "${MAKE_FLAGS[@]}" olddefconfig
  fi
 
