@@ -93,6 +93,8 @@ jobs:
             ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-
 
       - name: "🔧 Setup toolchain"
+        env:
+          SOURCE_TYPE: ${{ inputs.source_type }}
         run: bash scripts/setup-toolchain.sh
 
       - name: "🩹 Apply patches"
