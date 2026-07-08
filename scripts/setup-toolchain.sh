@@ -23,4 +23,3 @@ rm -f /tmp/clang.tar.gz
 
 echo "CLANG_DIR=$CLANG_DIR" >> "${GITHUB_ENV:-/dev/null}"
 echo "[OK] Toolchain ready: $CLANG_DIR"
-EOF
