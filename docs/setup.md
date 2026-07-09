@@ -10,6 +10,7 @@
 |--------|-------|
 | `TELEGRAM_BOT_TOKEN` | your bot token |
 | `TELEGRAM_CHAT_ID` | your chat ID |
+| `TELEGRAM_TOPIC_ID` | (Optional) topic message thread ID |
 
 ---
 
