@@ -7,10 +7,12 @@ MODE="${1:?usage: notify.sh <success|failure|check>}"
 
 : "${TELEGRAM_BOT_TOKEN:?}"
 : "${TELEGRAM_CHAT_ID:?}"
+: "${TELEGRAM_TOPIC_ID:?}"
 
 _tg_msg() {
   curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
     -d chat_id="$TELEGRAM_CHAT_ID" \
+    -d message_thread_id="$TELEGRAM_TOPIC_ID" \
     -d text="$1" \
     -d parse_mode="HTML" \
     -d disable_web_page_preview=true
@@ -21,6 +23,7 @@ _tg_doc() {
   [ -f "$FILE" ] || return 0
   curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
     -F chat_id="$TELEGRAM_CHAT_ID" \
+    -F message_thread_id="$TELEGRAM_TOPIC_ID" \
     -F document=@"$FILE" \
     -F caption="$CAPTION"
 }
