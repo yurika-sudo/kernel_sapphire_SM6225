@@ -84,6 +84,12 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
     --set-str DEFAULT_TCP_CONG "westwood" \
     -d DEFAULT_BBR \
     -e DEFAULT_WESTWOOD
+  echo "[CLO] Re-enforcing mq-deadline I/O scheduler after fragment merge"
+  ./scripts/config --file "${OUT_DIR}/dist/.config" \
+    -e MQ_IOSCHED_DEADLINE \
+    -e DEFAULT_DEADLINE \
+    -d DEFAULT_BFQ \
+    -d DEFAULT_NONE  
   make "${MAKE_FLAGS[@]}" olddefconfig
  fi
 
