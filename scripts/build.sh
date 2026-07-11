@@ -87,9 +87,11 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
   echo "[CLO] Re-enforcing mq-deadline I/O scheduler after fragment merge"
   ./scripts/config --file "${OUT_DIR}/dist/.config" \
     -e MQ_IOSCHED_DEADLINE \
-    -e DEFAULT_DEADLINE \
+    -d DEFAULT_DEADLINE \
     -d DEFAULT_BFQ \
-    -d DEFAULT_NONE  
+    -d DEFAULT_NONE \
+    -e MQ_IOSCHED_ADIOS \
+    -e MQ_IOSCHED_DEFAULT_ADIOS
   make "${MAKE_FLAGS[@]}" olddefconfig
  fi
 
