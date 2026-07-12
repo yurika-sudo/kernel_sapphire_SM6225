@@ -77,11 +77,11 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
     -e ZRAM_DEF_COMP_LZ4 \
     -d ZRAM_DEF_COMP_LZO \
     --set-str ZRAM_DEF_COMP "lz4"
-  echo "[CLO] Re-enforcing TCP_CONG=westwood after fragment merge"
+  echo "[CLO] Re-enforcing TCP_CONG=bbr3 after fragment merge"
   ./scripts/config --file "${OUT_DIR}/dist/.config" \
     -d TCP_CONG_BBR \
     -e TCP_CONG_WESTWOOD \
-    -e TCP_CONG_BBR3
+    -e TCP_CONG_BBR3 \
     --set-str DEFAULT_TCP_CONG "bbr3" \
     -d DEFAULT_BBR \
     -e DEFAULT_BBR3
