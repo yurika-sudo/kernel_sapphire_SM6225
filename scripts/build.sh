@@ -90,8 +90,7 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
     -d DEFAULT_DEADLINE \
     -d DEFAULT_BFQ \
     -d DEFAULT_NONE \
-    -e MQ_IOSCHED_ADIOS \
-    -e MQ_IOSCHED_DEFAULT_ADIOS
+    -e MQ_IOSCHED_ADIOS
   make "${MAKE_FLAGS[@]}" olddefconfig
  fi
 
