@@ -12,7 +12,7 @@ CF="$DEFCONFIG"
 
 # Base cleanup
 sed -i 's/ cgroup_disable=pressure//'                    "$CF"
-sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off /' "$CF"
+sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off noirqdebug /' "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
 for SYM in PID_NS DEBUG_KINFO \
@@ -25,9 +25,15 @@ done
 # Common configs (all variants)
 cat >> "$CF" << 'EOF'
 CONFIG_TCP_CONG_ADVANCED=y
-CONFIG_TCP_CONG_BBR=n
+# CONFIG_TCP_CONG_BBR is not set
 CONFIG_TCP_CONG_BBR3=y
 CONFIG_TCP_CONG_WESTWOOD=y
+CONFIG_NET_SCH_CAKE=y
+CONFIG_NET_SCH_FQ=y
+CONFIG_IOSCHED_BFQ=n
+CONFIG_BFQ_GROUP_IOSCHED=n
+CONFIG_MQ_IOSCHED_DEADLINE=y
+CONFIG_DEFAULT_MQ_IOSCHED="mq-deadline"
 CONFIG_DEFAULT_DEADLINE=y
 CONFIG_ZRAM_WRITEBACK=y
 # CONFIG_ZRAM_MEMORY_TRACKING is not set
@@ -36,6 +42,8 @@ CONFIG_ZRAM_WRITEBACK=y
 CONFIG_ZRAM_DEF_COMP_LZ4=y
 # CONFIG_ZRAM_DEF_COMP_LZO is not set
 CONFIG_ZRAM_DEF_COMP="lz4"
+CONFIG_ZRAM=y
+CONFIG_ZSMALLOC=y
 CONFIG_LRU_GEN=y
 CONFIG_LRU_GEN_ENABLED=y
 # CONFIG_HZ_100 is not set
@@ -59,6 +67,11 @@ CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
 # CONFIG_NTSYNC is not set
 CONFIG_SCHED_BORE=y
 CONFIG_SCHED_PREFER_SILVER=y
+CONFIG_CPU_FREQ_GOV_SCHEDHORIZON=y
+# CONFIG_RCU_LAZY_DEFAULT_OFF is not set
+# CONFIG_MITIGATE_SPECTRE_BRANCH_HISTORY is not set
+# CONFIG_ARM64_PTR_AUTH is not set
+# CONFIG_UNMAP_KERNEL_AT_EL0 is not set
 EOF
 
 # KSU-Next
