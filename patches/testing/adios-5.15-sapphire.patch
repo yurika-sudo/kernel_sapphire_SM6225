@@ -37,7 +37,7 @@ index 9853ab3a7..fe48128a7 100644
  
 diff --git a/block/adios.c b/block/adios.c
 new file mode 100644
-index 000000000..dd90ace6d
+index 000000000..9ffe648f8
 --- /dev/null
 +++ b/block/adios.c
 @@ -0,0 +1,2074 @@
@@ -1053,9 +1053,9 @@ index 000000000..dd90ace6d
 +		rq = list_first_entry(list, struct request, queuelist);
 +		list_del_init(&rq->queuelist);
 +		if (likely(ad->models_stable))
-+			insert_request_post_stability(hctx, rq, insert_flags, &free);
++			insert_request_post_stability(hctx, rq, at_head, &free);
 +		else
-+			insert_request_pre_stability(hctx, rq, insert_flags, &free);
++			insert_request_pre_stability(hctx, rq, at_head, &free);
 +	}} while (!stop);
 +
 +	blk_mq_free_requests(&free);
