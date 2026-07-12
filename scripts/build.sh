@@ -79,18 +79,18 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
     --set-str ZRAM_DEF_COMP "lz4"
   echo "[CLO] Re-enforcing TCP_CONG=westwood after fragment merge"
   ./scripts/config --file "${OUT_DIR}/dist/.config" \
-    -e TCP_CONG_BBR \
+    -d TCP_CONG_BBR \
     -e TCP_CONG_WESTWOOD \
-    --set-str DEFAULT_TCP_CONG "westwood" \
+    -e TCP_CONG_BBR3
+    --set-str DEFAULT_TCP_CONG "bbr3" \
     -d DEFAULT_BBR \
-    -e DEFAULT_WESTWOOD
+    -e DEFAULT_BBR3
   echo "[CLO] Re-enforcing mq-deadline I/O scheduler after fragment merge"
   ./scripts/config --file "${OUT_DIR}/dist/.config" \
     -e MQ_IOSCHED_DEADLINE \
-    -d DEFAULT_DEADLINE \
+    -e DEFAULT_DEADLINE \
     -d DEFAULT_BFQ \
-    -d DEFAULT_NONE \
-    -e MQ_IOSCHED_ADIOS
+    -d DEFAULT_NONE
   make "${MAKE_FLAGS[@]}" olddefconfig
  fi
 
