@@ -37,10 +37,10 @@ index 9853ab3a7..fe48128a7 100644
  
 diff --git a/block/adios.c b/block/adios.c
 new file mode 100644
-index 000000000..9ffe648f8
+index 000000000..c17db91d5
 --- /dev/null
 +++ b/block/adios.c
-@@ -0,0 +1,2074 @@
+@@ -0,0 +1,2084 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Adaptive Deadline I/O Scheduler (ADIOS)
@@ -1406,6 +1406,8 @@ index 000000000..9ffe648f8
 +	struct request *rq;
 +
 +retry:
++	{
++	static int retry_count;
 +	rq = dispatch_from_pq(ad);
 +	if (rq)
 +		goto found;
@@ -1423,11 +1425,19 @@ index 000000000..9ffe648f8
 +		bool barrier_released = false;
 +		scoped_guard(spinlock_irqsave, &ad->lock)
 +			barrier_released = release_barrier_requests(ad);
-+		if (barrier_released)
++		if (barrier_released) {
++			if (++retry_count > 10000) {
++				printk_ratelimited(KERN_ERR "adios: dispatch retry limit hit, bailing out\n");
++				retry_count = 0;
++				return NULL;
++			}
 +			goto retry;
++		}
 +	}
++	retry_count = 0;
 +
 +	return NULL;
++	}
 +found:
 +	if (ad->is_rotational)
 +		ad->head_pos = blk_rq_pos(rq) + blk_rq_sectors(rq);
