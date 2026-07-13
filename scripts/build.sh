@@ -72,6 +72,14 @@ echo "[${SOURCE_TYPE^^}] Forcing mq-deadline and stripping BFQ..."
   --set-str DEFAULT_MQ_IOSCHED "mq-deadline"
 make "${MAKE_FLAGS[@]}" olddefconfig
 
+echo "[${SOURCE_TYPE^^}] disable walt, change to schedutil by default..."
+./scripts/config --file "${OUT_DIR}/dist/.config" \
+  -d SCHED_WALT \
+  -d SCHED_WALT_DEBUG \
+  -e CPU_FREQ_GOV_SCHEDUTIL \
+  -e CPU_FREQ_DEFAULT_GOV_SCHEDUTIL
+  make "${MAKE_FLAGS[@]}" olddefconfig
+
 # CLO-only: merge vendor fragment then re-enforce overrides
 if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
    [ -f "arch/arm64/configs/${CLO_FRAGMENT}" ]; then
@@ -105,6 +113,12 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
     -d DEFAULT_BFQ \
     -d DEFAULT_NONE\
     --set-str DEFAULT_MQ_IOSCHED "mq-deadline"
+   echo "[CLO] disable walt, change to schedutil by default..."
+  ./scripts/config --file "${OUT_DIR}/dist/.config" \
+    -d SCHED_WALT \
+    -d SCHED_WALT_DEBUG \
+    -e CPU_FREQ_GOV_SCHEDUTIL \
+    -e CPU_FREQ_DEFAULT_GOV_SCHEDUTIL
   make "${MAKE_FLAGS[@]}" olddefconfig
  fi
 
