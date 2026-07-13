@@ -12,7 +12,7 @@ CF="$DEFCONFIG"
 
 # Base cleanup
 sed -i 's/ cgroup_disable=pressure//'                    "$CF"
-sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off noirqdebug /' "$CF"
+sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off noirqdebug mitigations=off /' "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
 for SYM in PID_NS DEBUG_KINFO \
@@ -42,6 +42,8 @@ CONFIG_ZRAM_WRITEBACK=y
 CONFIG_ZRAM_DEF_COMP_LZ4=y
 # CONFIG_ZRAM_DEF_COMP_LZO is not set
 CONFIG_ZRAM_DEF_COMP="lz4"
+CONFIG_ZRAM=y
+CONFIG_ZSMALLOC=y
 CONFIG_LRU_GEN=y
 CONFIG_LRU_GEN_ENABLED=y
 # CONFIG_HZ_100 is not set
