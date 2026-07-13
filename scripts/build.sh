@@ -64,6 +64,8 @@ make "${MAKE_FLAGS[@]}" olddefconfig
 echo "[${SOURCE_TYPE^^}] Forcing mq-deadline and stripping BFQ..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -e MQ_IOSCHED_DEADLINE \
+  -d IOSCHED_BFQ \
+  -d BFQ_GROUP_IOSCHED \
   -d DEFAULT_BFQ \
   -d DEFAULT_NONE \
   -e DEFAULT_DEADLINE \
@@ -97,6 +99,8 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
   echo "[CLO] Re-enforcing mq-deadline I/O scheduler after fragment merge"
   ./scripts/config --file "${OUT_DIR}/dist/.config" \
     -e MQ_IOSCHED_DEADLINE \
+    -d IOSCHED_BFQ \
+    -d BFQ_GROUP_IOSCHED \
     -e DEFAULT_DEADLINE \
     -d DEFAULT_BFQ \
     -d DEFAULT_NONE\
