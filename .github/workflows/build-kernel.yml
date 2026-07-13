@@ -64,7 +64,6 @@ jobs:
           key: clo-source-${{ steps.clo-pin.outputs.hash }}
 
       - name: "🔧 Fix source warnings"
-        if: inputs.ksu_type != 'none'
         run: bash scripts/fix-source-warnings.sh "${{ env.KERNEL_SRC }}"
 
       - name: "⚡ Configure ccache"
@@ -128,7 +127,6 @@ jobs:
           work_dir:   ${{ env.WORK_DIR }}
 
       - name: "🐳 Droidspaces"
-        if: inputs.ksu_type != 'none'
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           bash ${{ github.workspace }}/scripts/droidspaces.sh \
