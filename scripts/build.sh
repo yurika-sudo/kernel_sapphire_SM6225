@@ -72,12 +72,6 @@ echo "[${SOURCE_TYPE^^}] Forcing mq-deadline and stripping BFQ..."
   --set-str DEFAULT_MQ_IOSCHED "mq-deadline"
 make "${MAKE_FLAGS[@]}" olddefconfig
 
-echo "[${SOURCE_TYPE^^}] Builtin ZRAM/ZSMALLOC..."
-./scripts/config --file "${OUT_DIR}/dist/.config" \
-  -e ZRAM \
-  -e ZSMALLOC
-  make "${MAKE_FLAGS[@]}" olddefconfig
-
 # CLO-only: merge vendor fragment then re-enforce overrides
 if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
    [ -f "arch/arm64/configs/${CLO_FRAGMENT}" ]; then
@@ -111,10 +105,6 @@ if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
     -d DEFAULT_BFQ \
     -d DEFAULT_NONE\
     --set-str DEFAULT_MQ_IOSCHED "mq-deadline"
-   echo "[CLO] Builtin ZRAM/ZSMALLOC..."
-  ./scripts/config --file "${OUT_DIR}/dist/.config" \
-    -e ZRAM \
-    -e ZSMALLOC
   make "${MAKE_FLAGS[@]}" olddefconfig
  fi
 
