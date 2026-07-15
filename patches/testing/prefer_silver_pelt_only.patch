@@ -149,38 +149,13 @@ index 000000000..5fc668e06
 +
 +static bool detect_cluster_capacity(void)
 +{
-+	cpumask_t tmp_silver_mask;
-+	unsigned long min_cap    = ULONG_MAX;
-+	unsigned long second_cap = ULONG_MAX;
-+	int cpu;
++	cpumask_clear(&ps_silver_mask);
++	for (int i = 0; i < 4; i++)
++		cpumask_set_cpu(i, &ps_silver_mask);
 +
-+	cpumask_clear(&tmp_silver_mask);
++	ps_silver_cap = 512;
++	ps_gold_cap = 1024;
 +
-+
-+	for_each_possible_cpu(cpu) {
-+		unsigned long cap = capacity_orig_of(cpu);
-+		if (cap < min_cap)
-+			min_cap = cap;
-+	}
-+	for_each_possible_cpu(cpu) {
-+		unsigned long cap = capacity_orig_of(cpu);
-+		if (cap > (min_cap * 115 / 100) && cap < second_cap)
-+			second_cap = cap;
-+	}
-+	for_each_possible_cpu(cpu) {
-+		if (capacity_orig_of(cpu) <= (min_cap * 115 / 100))
-+			cpumask_set_cpu(cpu, &tmp_silver_mask);
-+	}
-+
-+	if (min_cap == ULONG_MAX || cpumask_empty(&tmp_silver_mask))
-+		return false;
-+
-+	if (cpumask_weight(&tmp_silver_mask) >= num_possible_cpus())
-+		return false;
-+
-+	ps_silver_cap = min_cap;
-+	ps_gold_cap   = (second_cap == ULONG_MAX) ? (min_cap * 2) : second_cap;
-+	cpumask_copy(&ps_silver_mask, &tmp_silver_mask);
 +	update_silver_online();
 +
 +	if (cpumask_empty(&ps_silver_online))
