@@ -11,7 +11,7 @@ if [[ "$SOURCE_TYPE" == gki* ]]; then
   CLANG_VER=$(grep '^CLANG_VERSION=' "$KERNEL_SRC/build.config.constants" | cut -d= -f2)
   CLANG_URL="https://github.com/yurika-sudo/clang-repo/releases/download/clang-1/clang-${CLANG_VER}.tar.gz"
  else
-  CLANG_VER="ZyC-Clang-15.0.7"
+  CLANG_VER="ZyC-Clang-14.0.6"
   CLANG_URL="https://github.com/yurika-sudo/clang-repo/releases/download/clang-1/${CLANG_VER}.tar.gz"
 fi
 
