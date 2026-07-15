@@ -9,9 +9,9 @@ set -e
 
 if [[ "$SOURCE_TYPE" == gki* ]]; then
   CLANG_VER=$(grep '^CLANG_VERSION=' "$KERNEL_SRC/build.config.constants" | cut -d= -f2)
-  CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/master-kernel-build-2022/clang-${CLANG_VER}.tar.gz"
-else
-  CLANG_VER="ZyC-Clang-23.0.0git"
+  CLANG_URL="https://github.com/yurika-sudo/clang-repo/releases/download/clang-1/clang-${CLANG_VER}.tar.gz"
+ else
+  CLANG_VER="ZyC-Clang-15.0.7"
   CLANG_URL="https://github.com/yurika-sudo/clang-repo/releases/download/clang-1/${CLANG_VER}.tar.gz"
 fi
 
