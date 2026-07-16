@@ -89,7 +89,6 @@ if [ -n "${CLO_FRAGMENT:-}" ]; then
   KCONFIG_CONFIG="${OUT_DIR}/dist/.config" \
     scripts/kconfig/merge_config.sh -m \
     "${OUT_DIR}/dist/.config" \
-    "arch/arm64/configs/${CLO_FRAGMENT}"
     "${FRAG_PATHS[@]}"
   make "${MAKE_FLAGS[@]}" olddefconfig
   echo "[CLO] Re-enforcing ZRAM_DEF_COMP=lz4 after fragment merge"
