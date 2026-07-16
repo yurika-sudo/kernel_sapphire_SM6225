@@ -45,6 +45,18 @@ case "$SOURCE_TYPE" in
     fi
   ;;
 
+  creek)
+    CREEK_REPO="https://github.com/MiCode/Xiaomi_Kernel_OpenSource"
+    CREEK_BRANCH="creek-v-oss"
+    echo "[CREEK] Cloning $CREEK_BRANCH ..."
+    for attempt in 1 2 3; do
+      git clone --recursive --branch "$CREEK_BRANCH" "$CREEK_REPO" "$KERNEL_SRC" --depth=1 && break
+      echo "⚠️ Attempt $attempt failed, retrying in 30s..."
+      rm -rf "$KERNEL_SRC" && mkdir -p "$KERNEL_SRC"
+      sleep 30
+    done
+    ;;
+
   gki-compat)
     GKI_REPO="https://android.googlesource.com/kernel/common"
     GKI_BRANCH="deprecated/android13-5.15-2023-10"
