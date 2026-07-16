@@ -8,7 +8,7 @@ jobs:
     uses: ./.github/workflows/build-kernel.yml
     with:
       variant_name:  "CLO-Creek-Test"
-      source_type:   "clo"
+      source_type:   "creek"
       ksu_type:      "ksun"
       zip_prefix:    "CLO_Creek_Test"
       artifact_name: "clo-creek-test"
