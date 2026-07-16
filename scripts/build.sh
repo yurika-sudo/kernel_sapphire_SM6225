@@ -82,12 +82,15 @@ echo "[${SOURCE_TYPE^^}] disable walt, change to schedutil by default..."
 
 if [ -n "${CLO_FRAGMENT:-}" ]; then
   echo "[${SOURCE_TYPE^^}] Merging fragment(s): $CLO_FRAGMENT"
-  PATHS=$(printf "arch/arm64/configs/%s " $CLO_FRAGMENT)
+  FRAG_PATHS=""
+  for f in $CLO_FRAGMENT; do
+    FRAG_PATHS+=" arch/arm64/configs/$f"
+  done
   KCONFIG_CONFIG="${OUT_DIR}/dist/.config" \
     scripts/kconfig/merge_config.sh -m \
     "${OUT_DIR}/dist/.config" \
     "arch/arm64/configs/${CLO_FRAGMENT}"
-    $PATHS
+    $FRAG_PATHS
   make "${MAKE_FLAGS[@]}" olddefconfig
   echo "[CLO] Re-enforcing ZRAM_DEF_COMP=lz4 after fragment merge"
   ./scripts/config --file "${OUT_DIR}/dist/.config" \
