@@ -572,8 +572,6 @@ index 000000000..5fc668e06
 +{
 +	int ret;
 +
-+	cpumask_clear(&ps_silver_mask);
-+	cpumask_clear(&ps_silver_online);
 +
 +	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
 +					"sched/prefer_silver:online",
