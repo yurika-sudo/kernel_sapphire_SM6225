@@ -80,14 +80,14 @@ echo "[${SOURCE_TYPE^^}] disable walt, change to schedutil by default..."
   -e CPU_FREQ_DEFAULT_GOV_SCHEDUTIL
   make "${MAKE_FLAGS[@]}" olddefconfig
 
-# CLO-only: merge vendor fragment then re-enforce overrides
-if [ "$SOURCE_TYPE" = "clo" ] && [ -n "${CLO_FRAGMENT:-}" ] && \
-   [ -f "arch/arm64/configs/${CLO_FRAGMENT}" ]; then
-  echo "[CLO] Merging fragment: $CLO_FRAGMENT"
+if [ -n "${CLO_FRAGMENT:-}" ]; then
+  echo "[${SOURCE_TYPE^^}] Merging fragment(s): $CLO_FRAGMENT"
+  PATHS=$(printf "arch/arm64/configs/%s " $CLO_FRAGMENT)
   KCONFIG_CONFIG="${OUT_DIR}/dist/.config" \
     scripts/kconfig/merge_config.sh -m \
     "${OUT_DIR}/dist/.config" \
     "arch/arm64/configs/${CLO_FRAGMENT}"
+    $PATHS
   make "${MAKE_FLAGS[@]}" olddefconfig
   echo "[CLO] Re-enforcing ZRAM_DEF_COMP=lz4 after fragment merge"
   ./scripts/config --file "${OUT_DIR}/dist/.config" \
