@@ -13,6 +13,7 @@
 
 ## Thanks & Credits
 
+- **[ZyCromerZ](https://github.com/ZyCromerZ/Clang)** — ZyC-Clang toolchain builds
 - **[The Wild James](https://github.com/TheWildJames)** — kernel patches & build pipeline reference *(used with permission)*
 - **[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next)** — KSU-Next implementation
 - **[SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)** — SukiSU implementation
