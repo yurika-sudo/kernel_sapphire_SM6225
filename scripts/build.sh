@@ -118,7 +118,7 @@ if [ -n "${CLO_FRAGMENT:-}" ]; then
     -d BFQ_GROUP_IOSCHED \
     -e DEFAULT_DEADLINE \
     -d DEFAULT_BFQ \
-    -d DEFAULT_NONE\
+    -d DEFAULT_NONE \
     --set-str DEFAULT_MQ_IOSCHED "mq-deadline"
    echo "[CLO] disable walt, change to schedutil by default..."
   ./scripts/config --file "${OUT_DIR}/dist/.config" \
