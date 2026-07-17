@@ -18,7 +18,6 @@
 - **[SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)** — SukiSU implementation
 - **[simonpunk](https://gitlab.com/simonpunk/susfs4ksu)** — SUSFS4KSU patches
 - **[sidex15](https://github.com/sidex15/susfs4ksu-module)** — SUSFS systemless module
-- **[backslashxx](https://github.com/backslashxx/mountify)** — Mountify module
 - **[ravindu644](https://github.com/ravindu644/droidspaces)** — Droidspaces
 - **[vc-teahouse](https://github.com/vc-teahouse/Baseband-guard)** — Baseband Guard
 - **[osm0sis](https://github.com/osm0sis/AnyKernel3)** — AnyKernel3
