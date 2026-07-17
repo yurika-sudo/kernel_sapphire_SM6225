@@ -74,7 +74,7 @@ echo "[${SOURCE_TYPE^^}] disable walt, change to schedutil by default..."
   -d SCHED_WALT_DEBUG \
   -e CPU_FREQ_GOV_SCHEDUTIL \
   -e CPU_FREQ_DEFAULT_GOV_SCHEDUTIL
-echo "[CLO] Re-enforcing ZRAM_DEF_COMP=lz4 after fragment merge"
+echo "[${SOURCE_TYPE^^}] Re-enforcing ZRAM_DEF_COMP=lz4"
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -d ZRAM_DEF_COMP_LZORLE \
   -d ZRAM_DEF_COMP_ZSTD \
