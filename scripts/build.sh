@@ -59,8 +59,6 @@ echo "[${SOURCE_TYPE^^}] Switching to ThinLTO..."
   -e LTO_CLANG_THIN \
   -d LTO_CLANG_FULL \
   -e THINLTO
-make "${MAKE_FLAGS[@]}" olddefconfig
-
 echo "[${SOURCE_TYPE^^}] Forcing mq-deadline and stripping BFQ..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -e MQ_IOSCHED_DEADLINE \
@@ -70,15 +68,21 @@ echo "[${SOURCE_TYPE^^}] Forcing mq-deadline and stripping BFQ..."
   -d DEFAULT_NONE \
   -e DEFAULT_DEADLINE \
   --set-str DEFAULT_MQ_IOSCHED "mq-deadline"
-make "${MAKE_FLAGS[@]}" olddefconfig
-
 echo "[${SOURCE_TYPE^^}] disable walt, change to schedutil by default..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -d SCHED_WALT \
   -d SCHED_WALT_DEBUG \
   -e CPU_FREQ_GOV_SCHEDUTIL \
   -e CPU_FREQ_DEFAULT_GOV_SCHEDUTIL
-  make "${MAKE_FLAGS[@]}" olddefconfig
+echo "[CLO] Re-enforcing ZRAM_DEF_COMP=lz4 after fragment merge"
+./scripts/config --file "${OUT_DIR}/dist/.config" \
+  -d ZRAM_DEF_COMP_LZORLE \
+  -d ZRAM_DEF_COMP_ZSTD \
+  -e ZRAM_DEF_COMP_LZ4 \
+  -d ZRAM_DEF_COMP_LZO \
+  -d CRYPTO_LZO \
+  --set-str ZRAM_DEF_COMP "lz4"
+make "${MAKE_FLAGS[@]}" olddefconfig  
 
 if [ -n "${CLO_FRAGMENT:-}" ]; then
   echo "[${SOURCE_TYPE^^}] Merging fragment(s): $CLO_FRAGMENT"
@@ -97,6 +101,7 @@ if [ -n "${CLO_FRAGMENT:-}" ]; then
     -d ZRAM_DEF_COMP_ZSTD \
     -e ZRAM_DEF_COMP_LZ4 \
     -d ZRAM_DEF_COMP_LZO \
+    -d CRYPTO_LZO \
     --set-str ZRAM_DEF_COMP "lz4"
   echo "[CLO] Re-enforcing TCP_CONG=bbr3 after fragment merge"
   ./scripts/config --file "${OUT_DIR}/dist/.config" \
