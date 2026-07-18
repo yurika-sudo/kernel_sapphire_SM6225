@@ -1,8 +1,8 @@
 diff --git a/block/Kconfig.iosched b/block/Kconfig.iosched
-index 27f11320b8..e98585dd83 100644
+index 2f2158e05..d013a5849 100644
 --- a/block/Kconfig.iosched
 +++ b/block/Kconfig.iosched
-@@ -13,6 +13,20 @@ config MQ_IOSCHED_KYBER
+@@ -18,6 +18,20 @@ config MQ_IOSCHED_KYBER
  	  synchronous writes, it will self-tune queue depths to achieve that
  	  goal.
  
@@ -24,10 +24,10 @@ index 27f11320b8..e98585dd83 100644
  	tristate "BFQ I/O scheduler"
  	help
 diff --git a/block/Makefile b/block/Makefile
-index ddfd21c1a9..3b1f5e8a2c 100644
+index 9853ab3a7..fe48128a7 100644
 --- a/block/Makefile
 +++ b/block/Makefile
-@@ -23,6 +23,7 @@ obj-$(CONFIG_BLK_CGROUP_IOLATENCY)	+= blk-iolatency.o
+@@ -22,6 +22,7 @@ obj-$(CONFIG_BLK_CGROUP_IOLATENCY)	+= blk-iolatency.o
  obj-$(CONFIG_BLK_CGROUP_IOCOST)	+= blk-iocost.o
  obj-$(CONFIG_MQ_IOSCHED_DEADLINE)	+= mq-deadline.o
  obj-$(CONFIG_MQ_IOSCHED_KYBER)	+= kyber-iosched.o
@@ -37,7 +37,7 @@ index ddfd21c1a9..3b1f5e8a2c 100644
  
 diff --git a/block/adios.c b/block/adios.c
 new file mode 100644
-index 0000000000..6e54b5c3be
+index 000000000..6e54b5c3b
 --- /dev/null
 +++ b/block/adios.c
 @@ -0,0 +1,2076 @@
@@ -2119,12 +2119,10 @@ index 0000000000..6e54b5c3be
 +MODULE_DESCRIPTION(ADIOS_PROGNAME);
 \ No newline at end of file
 diff --git a/block/elevator.c b/block/elevator.c
-index 1f76e9efd7..2f3244d15f 100644
+index a98e8356f..ab623ae30 100644
 --- a/block/elevator.c
 +++ b/block/elevator.c
-@@ -632,11 +632,16 @@ static struct elevator_type *elevator_get_default(struct request_queue *q)
- static struct elevator_type *elevator_get_default(struct request_queue *q)
- {
+@@ -634,11 +634,16 @@ static struct elevator_type *elevator_get_default(struct request_queue *q)
  	if (q->tag_set->flags & BLK_MQ_F_NO_SCHED_BY_DEFAULT)
  		return NULL;
  
