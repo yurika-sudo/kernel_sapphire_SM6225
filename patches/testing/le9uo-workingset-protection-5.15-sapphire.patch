@@ -114,7 +114,7 @@ index 3e33d17b1..b87eba1e3 100644
  extern unsigned long sysctl_admin_reserve_kbytes;
  
 diff --git a/kernel/sysctl.c b/kernel/sysctl.c
-index 2ae8fb98c..0d40596fc 100644
+index 2ae8fb98c..b5b3c9230 100644
 --- a/kernel/sysctl.c
 +++ b/kernel/sysctl.c
 @@ -3074,6 +3074,40 @@ static struct ctl_table vm_table[] = {
@@ -124,7 +124,7 @@ index 2ae8fb98c..0d40596fc 100644
 +	{
 +		.procname	= "workingset_protection",
 +		.data		= &sysctl_workingset_protection,
-+		.maxlen		= sizeof(bool),
++		.maxlen		= sizeof(int),
 +		.mode		= 0644,
 +		.proc_handler	= &proc_dobool,
 +	},
