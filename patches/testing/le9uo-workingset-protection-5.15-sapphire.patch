@@ -1,5 +1,5 @@
 diff --git a/Documentation/admin-guide/sysctl/vm.rst b/Documentation/admin-guide/sysctl/vm.rst
-index f4804ce37..e643a9653 100644
+index f4804ce37..1a4abf387 100644
 --- a/Documentation/admin-guide/sysctl/vm.rst
 +++ b/Documentation/admin-guide/sysctl/vm.rst
 @@ -25,6 +25,9 @@ files can be found in mm/swap.c.
@@ -36,7 +36,7 @@ index f4804ce37..e643a9653 100644
 +
 +
 +clean_low_ratio
-+================
++===============
 +
 +This knob provides *best-effort* protection of clean file pages. The file pages
 +on the current node won't be reclaimed under memory pressure when the amount of
@@ -57,7 +57,7 @@ index f4804ce37..e643a9653 100644
 +
 +
 +clean_min_ratio
-+================
++===============
 +
 +This knob provides *hard* protection of clean file pages. The file pages on the
 +current node won't be reclaimed under memory pressure when the amount of clean
@@ -233,7 +233,7 @@ index 9d982e52c..3f72482c0 100644
  	bool
  
 diff --git a/mm/vmscan.c b/mm/vmscan.c
-index 910d03543..a8f0b37ab 100644
+index 910d03543..25994432d 100644
 --- a/mm/vmscan.c
 +++ b/mm/vmscan.c
 @@ -133,6 +133,15 @@ struct scan_control {
@@ -256,7 +256,7 @@ index 910d03543..a8f0b37ab 100644
   */
  int vm_swappiness = 60;
  
-+bool sysctl_workingset_protection __read_mostly = false;
++bool sysctl_workingset_protection __read_mostly = true;
 +u8 sysctl_anon_min_ratio  __read_mostly = CONFIG_ANON_MIN_RATIO;
 +u8 sysctl_clean_low_ratio __read_mostly = CONFIG_CLEAN_LOW_RATIO;
 +u8 sysctl_clean_min_ratio __read_mostly = CONFIG_CLEAN_MIN_RATIO;
