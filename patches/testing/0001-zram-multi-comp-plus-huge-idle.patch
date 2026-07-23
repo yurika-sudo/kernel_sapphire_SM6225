@@ -423,7 +423,7 @@ index ddd32c96a..eb24c495e 100644
  {
  	struct zcomp_strm *zstrm;
  	unsigned long handle;
-@@ -1262,14 +1419,15 @@ static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
+@@ -1262,14 +1419,13 @@ static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
  		mem = kmap_atomic(page);
  		zram_fill_page(mem, PAGE_SIZE, value);
  		kunmap_atomic(mem);
@@ -435,10 +435,8 @@ index ddd32c96a..eb24c495e 100644
  
 -	if (size != PAGE_SIZE)
 -		zstrm = zcomp_stream_get(zram->comp);
-+	if (size != PAGE_SIZE) {
-+		prio = zram_get_priority(zram, index);
-+		zstrm = zcomp_stream_get(zram->comps[prio]);
-+	}
++	if (size != PAGE_SIZE)
++		zstrm = zcomp_stream_get(zram->comps[zram_get_priority(zram, index)]);
  
  	src = zs_map_object(zram->mem_pool, handle, ZS_MM_RO);
  	if (size == PAGE_SIZE) {
@@ -447,7 +445,7 @@ index ddd32c96a..eb24c495e 100644
  		ret = zcomp_decompress(zstrm, src, size, dst);
  		kunmap_atomic(dst);
 -		zcomp_stream_put(zram->comp);
-+		zcomp_stream_put(zram->comps[prio]);
++		zcomp_stream_put(zram->comps[zram_get_priority(zram, index)]);
  	}
  	zs_unmap_object(zram->mem_pool, handle);
 -	zram_slot_unlock(zram, index);
@@ -808,8 +806,22 @@ index ddd32c96a..eb24c495e 100644
  /*
   * zram_bio_discard - handler on discard request
   * @index: physical block index in PAGE_SIZE units
-@@ -1696,8 +2145,9 @@ static int zram_rw_page(struct block_device *bdev, sector_t sector,
+@@ -1696,8 +2145,23 @@ static int zram_rw_page(struct block_device *bdev, sector_t sector,
  
++static void zram_destroy_comps(struct zram *zram)
++{
++	u32 prio;
++
++	for (prio = 0; prio < ZRAM_MAX_COMPS; prio++) {
++		struct zcomp *comp = zram->comps[prio];
++
++		zram->comps[prio] = NULL;
++		if (!comp)
++			continue;
++		zcomp_destroy(comp);
++	}
++}
++
  static void zram_reset_device(struct zram *zram)
  {
 -	struct zcomp *comp;
