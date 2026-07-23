@@ -18,7 +18,7 @@ sed -i 's/kasan\.stacktrace=off/kasan=off/'               "$CF"
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
 for SYM in PID_NS DEBUG_KINFO \
            NET_SCH_CODEL NET_SCH_FQ_CODEL UBSAN \
-           ZRAM ZSMALLOC \
+           ZRAM \
            LRU_GEN LRU_GEN_ENABLED NET_SCH_FQ DEBUG_MEMORY_INIT PRINTK_CALLER \
            ZRAM_DEF_COMP_LZORLE ZRAM_DEF_COMP_ZSTD ZRAM_DEF_COMP_LZ4 ZRAM_DEF_COMP_LZO ZRAM_DEF_COMP \
            SCHED_WALT SCHED_WALT_DEBUG CPU_FREQ_GOV_SCHEDUTIL CPU_FREQ_DEFAULT_GOV_SCHEDUTIL; do
