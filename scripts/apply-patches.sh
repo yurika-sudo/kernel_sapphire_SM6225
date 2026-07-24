@@ -38,6 +38,8 @@ apply_patch "$BASE/mem_opt_prefetch.patch"                 "mem_opt_prefetch"
 apply_patch "$BASE/optimized_mem_operations.patch"         "optimized_mem_operations"
 apply_patch "$BASE/unicode_bypass_fix_6.1-.patch"          "unicode_bypass_fix_6.1-"
 apply_patch "$BASE/use_unlikely_wrap_cpufreq.patch"        "use_unlikely_wrap_cpufreq.patch"
+apply_patch "$BASE/ntsync/ntsync_base.patch"                            "ntsync_base"
+apply_patch "$BASE/ntsync/ntsync_compat_android13-5.15.patch"           "ntsync_compat_android13-5.15"
 
 # Local common patches
 echo "=== Applying local common patches ==="
