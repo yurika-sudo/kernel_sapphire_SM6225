@@ -82,6 +82,14 @@ echo "[${SOURCE_TYPE^^}] Re-enforcing ZRAM_DEF_COMP=lz4"
   -d ZRAM_DEF_COMP_LZO \
   -d CRYPTO_LZO \
   --set-str ZRAM_DEF_COMP "lz4"
+echo "[${SOURCE_TYPE^^}] Forcing Net Scheduler to FQ..."
+./scripts/config --file "${OUT_DIR}/dist/.config" \
+  -e NET_SCH_FQ \
+  -e NET_SCH_FQ_CODEL \
+  -e NET_SCH_CAKE \
+  -e NET_SCH_PIE \
+  -e NET_SCH_DEFAULT \
+  --set-str DEFAULT_NET_SCH "fq"
 make "${MAKE_FLAGS[@]}" olddefconfig  
 
 if [ -n "${CLO_FRAGMENT:-}" ]; then
@@ -105,6 +113,7 @@ if [ -n "${CLO_FRAGMENT:-}" ]; then
     --set-str ZRAM_DEF_COMP "lz4"
   echo "[CLO] Re-enforcing TCP_CONG=bbr3 after fragment merge"
   ./scripts/config --file "${OUT_DIR}/dist/.config" \
+    -e TCP_CONG_ADVANCED \
     -d TCP_CONG_BBR \
     -e TCP_CONG_WESTWOOD \
     -e TCP_CONG_BBR3 \
@@ -120,12 +129,14 @@ if [ -n "${CLO_FRAGMENT:-}" ]; then
     -d DEFAULT_BFQ \
     -d DEFAULT_NONE \
     --set-str DEFAULT_MQ_IOSCHED "mq-deadline"
-   echo "[CLO] disable walt, change to schedutil by default..."
+  echo "[CLO] Forcing Net Scheduler to FQ and TCP Advanced..."
   ./scripts/config --file "${OUT_DIR}/dist/.config" \
-    -d SCHED_WALT \
-    -d SCHED_WALT_DEBUG \
-    -e CPU_FREQ_GOV_SCHEDUTIL \
-    -e CPU_FREQ_DEFAULT_GOV_SCHEDUTIL
+    -e NET_SCH_FQ \
+    -e NET_SCH_FQ_CODEL \
+    -e NET_SCH_CAKE \
+    -e NET_SCH_PIE \
+    -e NET_SCH_DEFAULT \
+    --set-str DEFAULT_NET_SCH "fq"
   make "${MAKE_FLAGS[@]}" olddefconfig
  fi
 
