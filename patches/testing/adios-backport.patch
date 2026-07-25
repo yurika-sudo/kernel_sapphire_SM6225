@@ -37,10 +37,10 @@ index 9853ab3a7..fe48128a7 100644
  
 diff --git a/block/adios.c b/block/adios.c
 new file mode 100644
-index 000000000..c17db91d5
+index 000000000..31e612f43
 --- /dev/null
 +++ b/block/adios.c
-@@ -0,0 +1,2084 @@
+@@ -0,0 +1,2064 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Adaptive Deadline I/O Scheduler (ADIOS)
@@ -395,9 +395,9 @@ index 000000000..c17db91d5
 +	}
 +
 +	// Calculate the average latency, excluding outliers
-+	for (u8 k = 0; k <= outlier_threshold_bucket; k++) {
-+		struct latency_bucket_small *bucket = &buckets[k];
-+		if (k < outlier_threshold_bucket) {
++	for (u8 i = 0; i <= outlier_threshold_bucket; i++) {
++		struct latency_bucket_small *bucket = &buckets[i];
++		if (i < outlier_threshold_bucket) {
 +			sum_latency += bucket->weighted_sum_latency;
 +			sum_weight += bucket->sum_of_weights;
 +		} else {
@@ -468,9 +468,9 @@ index 000000000..c17db91d5
 +	}
 +
 +	// Calculate the average latency and block size, excluding outliers
-+	for (u8 k = 0; k <= outlier_threshold_bucket; k++) {
-+		struct latency_bucket_large *bucket = &buckets[k];
-+		if (k < outlier_threshold_bucket) {
++	for (u8 i = 0; i <= outlier_threshold_bucket; i++) {
++		struct latency_bucket_large *bucket = &buckets[i];
++		if (i < outlier_threshold_bucket) {
 +			sum_latency += bucket->weighted_sum_latency;
 +			sum_block_size += bucket->weighted_sum_block_size;
 +			sum_weight += bucket->sum_of_weights;
@@ -851,14 +851,6 @@ index 000000000..c17db91d5
 +		q->last_merge = NULL;
 +}
 +
-+// Convert a queue depth to the corresponding word depth for shallow allocation
-+static int to_word_depth(struct blk_mq_hw_ctx *hctx, unsigned int qdepth) {
-+	struct sbitmap_queue *bt = hctx->sched_tags->bitmap_tags;
-+	const unsigned int nrr = hctx->queue->nr_requests;
-+
-+	return ((qdepth << bt->sb.shift) + nrr - 1) / nrr;
-+}
-+
 +// We limit the depth of request allocation for asynchronous and write requests
 +static void adios_limit_depth(unsigned int opf, struct blk_mq_alloc_data *data) {
 +	struct adios_data *ad = data->q->elevator->elevator_data;
@@ -867,7 +859,7 @@ index 000000000..c17db91d5
 +	if (op_is_sync(opf) && !op_is_write(opf))
 +		return;
 +
-+	data->shallow_depth = to_word_depth(data->hctx, ad->async_depth);
++	data->shallow_depth = ad->async_depth;
 +}
 +
 +// The number of requests in the queue was notified from the block layer
@@ -875,10 +867,11 @@ index 000000000..c17db91d5
 +	struct request_queue *q = hctx->queue;
 +	struct adios_data *ad = q->elevator->elevator_data;
 +	struct blk_mq_tags *tags = hctx->sched_tags;
++	unsigned int shift = tags->bitmap_tags->sb.shift;
 +
-+	ad->async_depth = q->nr_requests;
++	ad->async_depth = max(1U, 3 * (1U << shift) / 4);
 +
-+	sbitmap_queue_min_shallow_depth(tags->bitmap_tags, 1);
++	sbitmap_queue_min_shallow_depth(tags->bitmap_tags, ad->async_depth);
 +}
 +
 +// Handle request merging after a merge operation
@@ -1011,7 +1004,7 @@ index 000000000..c17db91d5
 +	struct adios_data *ad = hctx->queue->elevator->elevator_data;
 +	struct adios_rq_data *rd = get_rq_data(rq);
 +	u8 optype = adios_optype(rq);
-+	u8 pq_idx = !(at_head);
++	u8 pq_idx = !at_head;
 +	bool stable = false;
 +
 +	rd->managed = true;
@@ -1406,8 +1399,6 @@ index 000000000..c17db91d5
 +	struct request *rq;
 +
 +retry:
-+	{
-+	static int retry_count;
 +	rq = dispatch_from_pq(ad);
 +	if (rq)
 +		goto found;
@@ -1425,19 +1416,11 @@ index 000000000..c17db91d5
 +		bool barrier_released = false;
 +		scoped_guard(spinlock_irqsave, &ad->lock)
 +			barrier_released = release_barrier_requests(ad);
-+		if (barrier_released) {
-+			if (++retry_count > 10000) {
-+				printk_ratelimited(KERN_ERR "adios: dispatch retry limit hit, bailing out\n");
-+				retry_count = 0;
-+				return NULL;
-+			}
++		if (barrier_released)
 +			goto retry;
-+		}
 +	}
-+	retry_count = 0;
 +
 +	return NULL;
-+	}
 +found:
 +	if (ad->is_rotational)
 +		ad->head_pos = blk_rq_pos(rq) + blk_rq_sectors(rq);
@@ -1590,9 +1573,9 @@ index 000000000..c17db91d5
 +	for (int i = 0; i < ADIOS_PQ_LEVELS; i++)
 +		INIT_LIST_HEAD(&ad->prio_queue[i]);
 +
-+	for (u8 j = 0; j < ADIOS_DL_TYPES; j++) {
-+		ad->dl_tree[j] = RB_ROOT_CACHED;
-+		ad->dl_prio[j] = default_dl_prio[j];
++	for (u8 i = 0; i < ADIOS_DL_TYPES; i++) {
++		ad->dl_tree[i] = RB_ROOT_CACHED;
++		ad->dl_prio[i] = default_dl_prio[i];
 +	}
 +	ad->dl_bias = 0;
 +
@@ -1673,8 +1656,6 @@ index 000000000..c17db91d5
 +
 +	timer_setup(&ad->update_timer, update_timer_callback, 0);
 +
-+	/* We dispatch from request queue wide instead of hw queue */
-+
 +	ad->queue = q;
 +	blk_stat_enable_accounting(q);
 +
@@ -1715,8 +1696,8 @@ index 000000000..c17db91d5
 +	for (int i = 0; i < 2; i++)
 +		WARN_ON_ONCE(!list_empty(&ad->prio_queue[i]));
 +
-+	for (u8 j = 0; j < ADIOS_OPTYPES; j++) {
-+		struct latency_model *model = &ad->latency_model[j];
++	for (u8 i = 0; i < ADIOS_OPTYPES; i++) {
++		struct latency_model *model = &ad->latency_model[i];
 +		struct latency_model_params *params = rcu_access_pointer(model->params);
 +
 +		RCU_INIT_POINTER(model->params, NULL);
@@ -1736,7 +1717,6 @@ index 000000000..c17db91d5
 +
 +	if (ad->dl_group_pool)
 +		kmem_cache_destroy(ad->dl_group_pool);
-+
 +
 +	kfree(ad);
 +}
@@ -2127,17 +2107,17 @@ index 000000000..c17db91d5
 +MODULE_DESCRIPTION(ADIOS_PROGNAME);
 \ No newline at end of file
 diff --git a/block/elevator.c b/block/elevator.c
-index a98e8356f..0c377a56f 100644
+index a98e8356f..ab623ae30 100644
 --- a/block/elevator.c
 +++ b/block/elevator.c
-@@ -633,12 +633,16 @@ static struct elevator_type *elevator_get_default(struct request_queue *q)
- {
+@@ -634,11 +634,16 @@ static struct elevator_type *elevator_get_default(struct request_queue *q)
  	if (q->tag_set->flags & BLK_MQ_F_NO_SCHED_BY_DEFAULT)
  		return NULL;
+ 
 +#ifdef CONFIG_MQ_IOSCHED_DEFAULT_ADIOS
 +	return elevator_get(q, "adios", false);
 +#else // !CONFIG_MQ_IOSCHED_DEFAULT_ADIOS
- 
++
  	if (q->nr_hw_queues != 1 &&
  			!blk_mq_is_sbitmap_shared(q->tag_set->flags))
  		return NULL;
