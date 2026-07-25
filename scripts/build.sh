@@ -68,12 +68,15 @@ echo "[${SOURCE_TYPE^^}] Forcing mq-deadline and stripping BFQ..."
   -d DEFAULT_NONE \
   -e DEFAULT_DEADLINE \
   --set-str DEFAULT_MQ_IOSCHED "mq-deadline"
-echo "[${SOURCE_TYPE^^}] disable walt, change to schedutil by default..."
+echo "[${SOURCE_TYPE^^}] Re-enforcing TCP_CONG=bbr3 after fragment merge"
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
-  -d SCHED_WALT \
-  -d SCHED_WALT_DEBUG \
-  -e CPU_FREQ_GOV_SCHEDUTIL \
-  -e CPU_FREQ_DEFAULT_GOV_SCHEDUTIL
+  -e TCP_CONG_ADVANCED \
+  -d TCP_CONG_BBR \
+  -e TCP_CONG_WESTWOOD \
+  -e TCP_CONG_BBR3 \
+  --set-str DEFAULT_TCP_CONG "bbr3" \
+  -d DEFAULT_BBR \
+  -e DEFAULT_BBR3
 echo "[${SOURCE_TYPE^^}] Re-enforcing ZRAM_DEF_COMP=lz4"
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -d ZRAM_DEF_COMP_LZORLE \
