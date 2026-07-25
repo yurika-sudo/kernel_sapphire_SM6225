@@ -48,7 +48,7 @@ index d367ac9e1..5af0995bd 100644
   * cpufreq_get_current_driver - Return the current driver's name.
 diff --git a/drivers/cpufreq/cpufreq_reflex.c b/drivers/cpufreq/cpufreq_reflex.c
 new file mode 100644
-index 000000000..078edcdb5
+index 000000000..d13f1fd22
 --- /dev/null
 +++ b/drivers/cpufreq/cpufreq_reflex.c
 @@ -0,0 +1,1085 @@
@@ -825,7 +825,7 @@ index 000000000..078edcdb5
 +	kfree(to_rfx_tunables(attr_set));
 +}
 +
-+static const struct kobj_type rfx_tunables_ktype = {
++static struct kobj_type rfx_tunables_ktype = {
 +	.default_groups = rfx_groups,
 +	.sysfs_ops = &governor_sysfs_ops,
 +	.release = &rfx_tunables_free,
