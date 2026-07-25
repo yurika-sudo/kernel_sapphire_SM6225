@@ -12,8 +12,7 @@ CF="$DEFCONFIG"
 
 # Base cleanup
 sed -i 's/ cgroup_disable=pressure//'                    "$CF"
-sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off noirqdebug mitigations=off /'
-"$CF"
+sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off noirqdebug mitigations=off /' "$CF"
 sed -i 's/kasan\.stacktrace=off/kasan=off/'               "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
@@ -134,7 +133,7 @@ CONFIG_KSU_SUSFS_SUS_SU=y
 CONFIG_KPM=y
 EOF
 
-# NoKSU — no extras, commonvconfigs above apply
+# NoKSU — no extras, common configs above apply
 # (only common configs above apply — nothing extra here)
 fi
 
