@@ -89,6 +89,7 @@ echo "[${SOURCE_TYPE^^}] Forcing Net Scheduler to FQ..."
   -e NET_SCH_CAKE \
   -e NET_SCH_PIE \
   -e NET_SCH_DEFAULT \
+  -e DEFAULT_FQ \
   --set-str DEFAULT_NET_SCH "fq"
 make "${MAKE_FLAGS[@]}" olddefconfig  
 
@@ -136,6 +137,7 @@ if [ -n "${CLO_FRAGMENT:-}" ]; then
     -e NET_SCH_CAKE \
     -e NET_SCH_PIE \
     -e NET_SCH_DEFAULT \
+    -e DEFAULT_FQ \
     --set-str DEFAULT_NET_SCH "fq"
   make "${MAKE_FLAGS[@]}" olddefconfig
  fi
