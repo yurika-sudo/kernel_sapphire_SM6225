@@ -37,7 +37,7 @@ index 9853ab3a7..fe48128a7 100644
  
 diff --git a/block/adios.c b/block/adios.c
 new file mode 100644
-index 000000000..31e612f43
+index 000000000..f983e6524
 --- /dev/null
 +++ b/block/adios.c
 @@ -0,0 +1,2064 @@
@@ -395,9 +395,9 @@ index 000000000..31e612f43
 +	}
 +
 +	// Calculate the average latency, excluding outliers
-+	for (u8 i = 0; i <= outlier_threshold_bucket; i++) {
-+		struct latency_bucket_small *bucket = &buckets[i];
-+		if (i < outlier_threshold_bucket) {
++	for (u8 k = 0; k <= outlier_threshold_bucket; k++) {
++		struct latency_bucket_small *bucket = &buckets[k];
++		if (k < outlier_threshold_bucket) {
 +			sum_latency += bucket->weighted_sum_latency;
 +			sum_weight += bucket->sum_of_weights;
 +		} else {
@@ -468,9 +468,9 @@ index 000000000..31e612f43
 +	}
 +
 +	// Calculate the average latency and block size, excluding outliers
-+	for (u8 i = 0; i <= outlier_threshold_bucket; i++) {
-+		struct latency_bucket_large *bucket = &buckets[i];
-+		if (i < outlier_threshold_bucket) {
++	for (u8 k = 0; k <= outlier_threshold_bucket; k++) {
++		struct latency_bucket_large *bucket = &buckets[k];
++		if (k < outlier_threshold_bucket) {
 +			sum_latency += bucket->weighted_sum_latency;
 +			sum_block_size += bucket->weighted_sum_block_size;
 +			sum_weight += bucket->sum_of_weights;
@@ -1573,9 +1573,9 @@ index 000000000..31e612f43
 +	for (int i = 0; i < ADIOS_PQ_LEVELS; i++)
 +		INIT_LIST_HEAD(&ad->prio_queue[i]);
 +
-+	for (u8 i = 0; i < ADIOS_DL_TYPES; i++) {
-+		ad->dl_tree[i] = RB_ROOT_CACHED;
-+		ad->dl_prio[i] = default_dl_prio[i];
++	for (u8 j = 0; j < ADIOS_DL_TYPES; j++) {
++		ad->dl_tree[j] = RB_ROOT_CACHED;
++		ad->dl_prio[j] = default_dl_prio[j];
 +	}
 +	ad->dl_bias = 0;
 +
@@ -1696,8 +1696,8 @@ index 000000000..31e612f43
 +	for (int i = 0; i < 2; i++)
 +		WARN_ON_ONCE(!list_empty(&ad->prio_queue[i]));
 +
-+	for (u8 i = 0; i < ADIOS_OPTYPES; i++) {
-+		struct latency_model *model = &ad->latency_model[i];
++	for (u8 j = 0; j < ADIOS_OPTYPES; j++) {
++		struct latency_model *model = &ad->latency_model[j];
 +		struct latency_model_params *params = rcu_access_pointer(model->params);
 +
 +		RCU_INIT_POINTER(model->params, NULL);
