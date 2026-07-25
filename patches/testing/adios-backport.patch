@@ -37,10 +37,10 @@ index 9853ab3a7..fe48128a7 100644
  
 diff --git a/block/adios.c b/block/adios.c
 new file mode 100644
-index 000000000..f983e6524
+index 000000000..83b7f58f6
 --- /dev/null
 +++ b/block/adios.c
-@@ -0,0 +1,2064 @@
+@@ -0,0 +1,2063 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Adaptive Deadline I/O Scheduler (ADIOS)
@@ -867,11 +867,10 @@ index 000000000..f983e6524
 +	struct request_queue *q = hctx->queue;
 +	struct adios_data *ad = q->elevator->elevator_data;
 +	struct blk_mq_tags *tags = hctx->sched_tags;
-+	unsigned int shift = tags->bitmap_tags->sb.shift;
 +
-+	ad->async_depth = max(1U, 3 * (1U << shift) / 4);
++        ad->async_depth = q->nr_requests;
 +
-+	sbitmap_queue_min_shallow_depth(tags->bitmap_tags, ad->async_depth);
++	sbitmap_queue_min_shallow_depth(tags->bitmap_tags, 1);
 +}
 +
 +// Handle request merging after a merge operation
