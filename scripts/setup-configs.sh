@@ -12,7 +12,8 @@ CF="$DEFCONFIG"
 
 # Base cleanup
 sed -i 's/ cgroup_disable=pressure//'                    "$CF"
-sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off noirqdebug mitigations=off /' "$CF"
+sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off noirqdebug mitigations=off /'
+"$CF"
 sed -i 's/kasan\.stacktrace=off/kasan=off/'               "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
@@ -20,7 +21,9 @@ for SYM in PID_NS DEBUG_KINFO \
            NET_SCH_CODEL NET_SCH_FQ_CODEL UBSAN \
            LRU_GEN LRU_GEN_ENABLED NET_SCH_FQ DEBUG_MEMORY_INIT PRINTK_CALLER \
            ZRAM_DEF_COMP_LZORLE ZRAM_DEF_COMP_ZSTD ZRAM_DEF_COMP_LZ4 ZRAM_DEF_COMP_LZO ZRAM_DEF_COMP \
-           SCHED_WALT SCHED_WALT_DEBUG CPU_FREQ_GOV_SCHEDUTIL CPU_FREQ_DEFAULT_GOV_SCHEDUTIL; do
+           SCHED_WALT SCHED_WALT_DEBUG CPU_FREQ_GOV_SCHEDUTIL CPU_FREQ_DEFAULT_GOV_SCHEDUTIL \
+           TCP_CONG_ADVANCED TCP_CONG_BBR TCP_CONG_BBR3 TCP_CONG_WESTWOOD DEFAULT_TCP_CONG \
+           NET_SCH_DEFAULT DEFAULT_NET_SCH; do
   sed -i "/^CONFIG_${SYM}[= ]/d; /^# CONFIG_${SYM} /d" "$CF"
 done
 
@@ -34,6 +37,7 @@ CONFIG_TCP_CONG_ADVANCED=y
 # CONFIG_TCP_CONG_BBR is not set
 CONFIG_TCP_CONG_BBR3=y
 CONFIG_TCP_CONG_WESTWOOD=y
+CONFIG_DEFAULT_TCP_CONG="bbr3"
 CONFIG_NET_SCH_FQ=y
 CONFIG_NET_SCH_FQ_CODEL=y
 CONFIG_NET_SCH_CAKE=y
@@ -86,7 +90,7 @@ EOF
 
 # KSU-Next
 if [ "$KSU_TYPE" = "ksun" ]; then
-  cat >> "$CF" << 'EOF'
+cat >> "$CF" << 'EOF'
 CONFIG_KSU=y
 CONFIG_KSU_SUSFS=y
 CONFIG_KSU_SUSFS_SUS_MAP=y
@@ -130,7 +134,7 @@ CONFIG_KSU_SUSFS_SUS_SU=y
 CONFIG_KPM=y
 EOF
 
-# NoKSU — no extras, common configs above apply
+# NoKSU — no extras, commonvconfigs above apply
 # (only common configs above apply — nothing extra here)
 fi
 
