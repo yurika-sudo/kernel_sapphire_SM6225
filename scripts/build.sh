@@ -68,7 +68,7 @@ echo "[${SOURCE_TYPE^^}] Forcing mq-deadline and stripping BFQ..."
   -d DEFAULT_NONE \
   -e DEFAULT_DEADLINE \
   --set-str DEFAULT_MQ_IOSCHED "mq-deadline"
-echo "[${SOURCE_TYPE^^}] Re-enforcing TCP_CONG=bbr3 after fragment merge"
+echo "[${SOURCE_TYPE^^}] Re-enforcing TCP_CONG=bbr3..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -e TCP_CONG_ADVANCED \
   -d TCP_CONG_BBR \
@@ -77,7 +77,7 @@ echo "[${SOURCE_TYPE^^}] Re-enforcing TCP_CONG=bbr3 after fragment merge"
   --set-str DEFAULT_TCP_CONG "bbr3" \
   -d DEFAULT_BBR \
   -e DEFAULT_BBR3
-echo "[${SOURCE_TYPE^^}] Re-enforcing ZRAM_DEF_COMP=lz4"
+echo "[${SOURCE_TYPE^^}] Re-enforcing ZRAM_DEF_COMP=lz4..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -d ZRAM_DEF_COMP_LZORLE \
   -d ZRAM_DEF_COMP_ZSTD \
