@@ -37,10 +37,10 @@ index 9853ab3a7..fe48128a7 100644
  
 diff --git a/block/adios.c b/block/adios.c
 new file mode 100644
-index 000000000..83b7f58f6
+index 000000000..88b3573ce
 --- /dev/null
 +++ b/block/adios.c
-@@ -0,0 +1,2063 @@
+@@ -0,0 +1,2066 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Adaptive Deadline I/O Scheduler (ADIOS)
@@ -1441,6 +1441,9 @@ index 000000000..83b7f58f6
 +	struct adios_data *ad = rq->q->elevator->elevator_data;
 +	struct adios_rq_data *rd = get_rq_data(rq);
 +	union adios_in_flight_rqs ifr = { .scalar = 0 };
++
++	if (op_is_flush(rq->cmd_flags) || !rd)
++		return;
 +
 +	if (rd->managed) {
 +		union adios_in_flight_rqs ifr_to_sub = {
