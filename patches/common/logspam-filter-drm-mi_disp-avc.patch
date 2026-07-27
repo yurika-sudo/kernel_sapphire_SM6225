@@ -1,0 +1,54 @@
+diff --git a/kernel/printk/printk.c b/kernel/printk/printk.c
+index 49d97f204..f9c1a8f20 100644
+--- a/kernel/printk/printk.c
++++ b/kernel/printk/printk.c
+@@ -31,6 +31,7 @@
+ #include <linux/moduleparam.h>
+ #include <linux/delay.h>
+ #include <linux/smp.h>
++#include <linux/string.h>
+ #include <linux/security.h>
+ #include <linux/memblock.h>
+ #include <linux/syscalls.h>
+@@ -2160,6 +2161,16 @@ int vprintk_store(int facility, int level,
+ 	u16 text_len;
+ 	int ret = 0;
+ 	u64 ts_nsec;
++	char filter_buf[64];
++	enum printk_info_flags filter_flags = 0;
++	va_list args3;
++
++	/* Drop known vendor display-driver logspam before it reaches the ringbuffer */
++	va_copy(args3, args);
++	printk_sprint(filter_buf, sizeof(filter_buf), facility, &filter_flags, fmt, args3);
++	va_end(args3);
++	if (strstr(filter_buf, "[drm") != NULL || strstr(filter_buf, "mi_disp") != NULL)
++		return 0;
+ 
+ 	/*
+ 	 * Since the duration of printk() can vary depending on the message
+diff --git a/security/lsm_audit.c b/security/lsm_audit.c
+index 5a5016ef4..f3fb99bfb 100644
+--- a/security/lsm_audit.c
++++ b/security/lsm_audit.c
+@@ -28,6 +28,10 @@
+ #include <linux/sctp.h>
+ #include <linux/lsm_audit.h>
+ #include <linux/security.h>
++#include <linux/module.h>
++
++static uint __read_mostly disable_audit_log = 1;
++module_param(disable_audit_log, uint, 0644);
+ 
+ /**
+  * ipv4_skb_to_auditdata : fill auditdata from skb
+@@ -451,6 +455,9 @@ void common_lsm_audit(struct common_audit_data *a,
+ {
+ 	struct audit_buffer *ab;
+ 
++	if (disable_audit_log)
++		return;
++
+ 	if (a == NULL)
+ 		return;
+ 	/* we use GFP_ATOMIC so we won't sleep */
