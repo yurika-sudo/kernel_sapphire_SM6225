@@ -88,7 +88,7 @@ echo "[${SOURCE_TYPE^^}] Re-enforcing ZRAM_DEF_COMP=lz4..."
 echo "[${SOURCE_TYPE^^}] Forcing Net Scheduler to FQ..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -e NET_SCH_FQ \
-  -e NET_SCH_FQ_CODEL \
+  -d NET_SCH_FQ_CODEL \
   -e NET_SCH_CAKE \
   -e NET_SCH_PIE \
   -e NET_SCH_DEFAULT \
@@ -136,7 +136,7 @@ if [ -n "${CLO_FRAGMENT:-}" ]; then
   echo "[CLO] Forcing Net Scheduler to FQ and TCP Advanced..."
   ./scripts/config --file "${OUT_DIR}/dist/.config" \
     -e NET_SCH_FQ \
-    -e NET_SCH_FQ_CODEL \
+    -d NET_SCH_FQ_CODEL \
     -e NET_SCH_CAKE \
     -e NET_SCH_PIE \
     -e NET_SCH_DEFAULT \
