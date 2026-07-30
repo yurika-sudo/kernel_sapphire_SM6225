@@ -13,15 +13,19 @@
 
 ## Thanks & Credits
 
+- **[topnotchfreaks](https://github.com/topnotchfreaks)** — workflow reference & early learning
+- **[chkndrp](https://github.com/chkndrp)** — kernel patch reference
+- **[Pzqqt](https://github.com/Pzqqt)** — backport kernel patch reference
+- **[Steambot12](https://github.com/Steambot12)** — backport kernel patch reference
+- **[firelzrd](https://github.com/firelzrd)** — reference for backport kernel
+- **[ZyCromerZ](https://github.com/ZyCromerZ/Clang)** — ZyC-Clang toolchain builds
 - **[The Wild James](https://github.com/TheWildJames)** — kernel patches & build pipeline reference *(used with permission)*
 - **[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next)** — KSU-Next implementation
 - **[SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)** — SukiSU implementation
 - **[simonpunk](https://gitlab.com/simonpunk/susfs4ksu)** — SUSFS4KSU patches
 - **[sidex15](https://github.com/sidex15/susfs4ksu-module)** — SUSFS systemless module
-- **[backslashxx](https://github.com/backslashxx/mountify)** — Mountify module
 - **[ravindu644](https://github.com/ravindu644/droidspaces)** — Droidspaces
 - **[vc-teahouse](https://github.com/vc-teahouse/Baseband-guard)** — Baseband Guard
-- **[topnotchfreaks](https://github.com/topnotchfreaks/clang)** — Clang toolchain
 - **[osm0sis](https://github.com/osm0sis/AnyKernel3)** — AnyKernel3
 - **[CodeLinaro](https://git.codelinaro.org/)** — Qualcomm kernel source upstream
 

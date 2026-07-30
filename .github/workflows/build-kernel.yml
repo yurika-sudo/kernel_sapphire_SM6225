@@ -53,6 +53,7 @@ jobs:
           SOURCE_TYPE:   ${{ inputs.source_type }}
           KSU_TYPE:      ${{ inputs.ksu_type }}
           CLO_CACHE_HIT: ${{ steps.clo-src-cache.outputs.cache-hit }}
+          CLO_FRAGMENT:  ${{ inputs.clo_fragment }}
         run: bash scripts/clone-source.sh
 
       - name: "💾 Save CLO source cache"
@@ -91,6 +92,8 @@ jobs:
             ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-
 
       - name: "🔧 Setup toolchain"
+        env:
+          SOURCE_TYPE: ${{ inputs.source_type }}
         run: bash scripts/setup-toolchain.sh
 
       - name: "🩹 Apply patches"
@@ -132,10 +135,11 @@ jobs:
       - name: "⚙️ Kernel configs"
         uses: ./.github/actions/setup-configs
         with:
-          ksu_type:    ${{ inputs.ksu_type }}
-          source_type: ${{ inputs.source_type }}
-          defconfig:   ${{ env.KERNEL_SRC }}/arch/arm64/configs/${{ inputs.defconfig }}
-          kernel_dir:  ${{ env.KERNEL_SRC }}
+          ksu_type:     ${{ inputs.ksu_type }}
+          source_type:  ${{ inputs.source_type }}
+          defconfig:    ${{ env.KERNEL_SRC }}/arch/arm64/configs/${{ inputs.defconfig }}
+          kernel_dir:   ${{ env.KERNEL_SRC }}
+          clo_fragment: ${{ inputs.clo_fragment }}
 
       - name: "🏷️ Localversion"
         working-directory: ${{ env.KERNEL_SRC }}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # clone-source.sh — clone kernel source (GKI or CLO)
-# env: SOURCE_TYPE, KSU_TYPE, KERNEL_SRC (output dir)
+# env: SOURCE_TYPE, KSU_TYPE, KERNEL_SRC (output dir), CLO_FRAGMENT (optional)
 set -e
 
 : "${SOURCE_TYPE:?}"
@@ -43,8 +43,19 @@ case "$SOURCE_TYPE" in
         sleep 30
       done
     fi
-    ;;
+  ;;
 
+  creek)
+    CREEK_REPO="https://github.com/MiCode/Xiaomi_Kernel_OpenSource"
+    CREEK_BRANCH="creek-v-oss"
+    echo "[CREEK] Cloning $CREEK_BRANCH ..."
+    for attempt in 1 2 3; do
+      git clone --recursive --branch "$CREEK_BRANCH" "$CREEK_REPO" "$KERNEL_SRC" --depth=1 && break
+      echo "⚠️ Attempt $attempt failed, retrying in 30s..."
+      rm -rf "$KERNEL_SRC" && mkdir -p "$KERNEL_SRC"
+      sleep 30
+    done
+    ;;
 
   gki-compat)
     GKI_REPO="https://android.googlesource.com/kernel/common"

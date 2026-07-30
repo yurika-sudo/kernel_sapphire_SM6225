@@ -1,0 +1,39 @@
+--- a/kernel/printk/printk.c
++++ b/kernel/printk/printk.c
+@@ -662,6 +662,10 @@
+ 	return r;
+ }
+ 
++#ifdef CONFIG_SECURITY
++extern uint __read_mostly disable_audit_log;
++#endif
++
+ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
+ {
+ 	char *buf, *line;
+@@ -719,6 +723,14 @@
+ 		}
+ 	}
+ 
++#ifdef CONFIG_SECURITY
++	if (disable_audit_log &&
++	    !strncmp(line, "SELinux: avc:", strlen("SELinux: avc:"))) {
++		kfree(buf);
++		return ret;
++	}
++#endif
++
+ 	devkmsg_emit(facility, level, "%s", line);
+ 	kfree(buf);
+ 	return ret;
+--- a/security/lsm_audit.c
++++ b/security/lsm_audit.c
+@@ -30,7 +30,7 @@
+ #include <linux/security.h>
+ #include <linux/module.h>
+ 
+-static uint __read_mostly disable_audit_log = 1;
++uint __read_mostly disable_audit_log = 1;
+ module_param(disable_audit_log, uint, 0644);
+ 
+ /**
