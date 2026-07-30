@@ -2,7 +2,7 @@
 
 > ⚠️ **Flash via OrangeFox / TWRP only.**
 
-1. Download ZIP from [Releases](https://github.com/yurika-sudo/kernel_sapphire_SM6225/releases)
+1. Download ZIP from [Releases](https://github.com/superuseryu/kernel_sapphire_SM6225/releases)
 2. Boot into recovery
 3. Flash the ZIP
 4. Reboot
