@@ -14,7 +14,41 @@
 | GKI-Compat-SukiSU | AOSP LTS (compat) | SukiSU-Ultra + SUSFS | — |
 | GKI-Compat-NoKSU | AOSP LTS (compat) | Vanilla | — |
 
-All non-compat variants include: **BBRv1 + Westwood TCP** · **IP_SET** · **Thin LTO** · **Droidspaces support**
+**Supported Android versions:** GKI / CLO → Android 15+ · GKI-Compat → Android 13 / 14 only
+
+---
+
+## Core Features
+
+**Scheduler**
+- [BORE](https://github.com/firelzrd/bore-scheduler) — burst-oriented CFS latency tuning
+- CASS — Capacity Aware Superset Scheduler
+- prefer_silver — silver-cluster affinity layer on top of CASS
+- Battery-oriented tuning: WALT early-migration thresholds, `sched_nr_migrate`, `watermark_scale_factor`, `vm_swappiness`
+
+**Memory**
+- MGLRU forced on (`CONFIG_LRU_GEN_ENABLED=y`)
+- [le9uo](https://github.com/firelzrd/le9uo) workingset protection
+- ZRAM multi-comp support baked into the base config (LZ4 default); zram-ir + huge/idle recompression are still in `patches/testing/`, not yet promoted
+
+**I/O**
+- ADIOS (Adaptive Deadline I/O Scheduler) multi-queue scheduler
+
+**CPU governor**
+- [Reflex](https://github.com/firelzrd/reflex) cpufreq governor (backported)
+
+**Network**
+- BBRv3 + Westwood TCP congestion control · FQ default qdisc (CAKE / PIE also available)
+- ntsync (Wine/Proton sync primitives)
+
+**Security / stability**
+- CVE-2026-43499 rtmutex ghostlock UAF fix
+- DRM/mi_disp + AVC logspam filtering
+
+**Other**
+- Thin LTO
+- HZ=300
+- Droidspaces support (see below)
 
 ---
 
@@ -39,5 +73,5 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 | Source | `android.googlesource.com/kernel/common` | `git.codelinaro.org/clo/la/kernel/msm-5.15` |
 | Branch | `android13-5.15-lts` | `kernel.lnx.5.15.r1-rel` |
 | Config fragment | — | `vendor/bengal_GKI.config` |
-| Toolchain | Clang r547379 | Clang r547379 |
+| Toolchain | Clang r450784e | ZyC Clang 14.0.6 |
 | LTO | Thin | Thin |
