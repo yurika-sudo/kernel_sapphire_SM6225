@@ -60,7 +60,7 @@ Enabled configs: `SYSVIPC` · `IPC_NS` · `PID_NS` · `POSIX_MQUEUE` · `DEVTMPF
 
 kABI fix applied for GKI < 6.12 to prevent vendor module crashes on boot.
 
-> **SuSFS users:** disable **"HIDE SUS MOUNTS FOR ALL PROCESSES"** in SuSFS4KSU settings, otherwise containers will fail to start.
+> **SuSFS users:** Droidspaces isn't compatible with SuSFS. Disable SuSFS before using Droidspaces.
 
 Confirmed working on sapphire — see [community-supported devices](https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/community-supported-devices.md).
 
