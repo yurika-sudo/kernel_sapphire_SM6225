@@ -13,6 +13,10 @@
 
 ## Thanks & Credits
 
+- **[topnotchfreaks](https://github.com/topnotchfreaks)** — workflow reference & early learning
+- **[chkndrp](https://github.com/chkndrp)** — kernel patch reference
+- **[Pzqqt](https://github.com/Pzqqt)** — backport kernel patch reference
+- **[Steambot12](https://github.com/Steambot12)** — backport kernel patch reference
 - **[firelzrd](https://github.com/firelzrd)** — reference for backport kernel
 - **[ZyCromerZ](https://github.com/ZyCromerZ/Clang)** — ZyC-Clang toolchain builds
 - **[The Wild James](https://github.com/TheWildJames)** — kernel patches & build pipeline reference *(used with permission)*
