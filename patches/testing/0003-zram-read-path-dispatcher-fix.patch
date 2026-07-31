@@ -1,0 +1,42 @@
+diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
+index a94d5f821..870b21089 100644
+--- a/drivers/block/zram/zram_drv.c
++++ b/drivers/block/zram/zram_drv.c
+@@ -1392,19 +1392,6 @@ static int zram_read_from_zspool(struct zram *zram, struct page *page,
+ 	int ret;
+ 
+ 	zram_slot_lock(zram, index);
+-	if (zram_test_flag(zram, index, ZRAM_WB)) {
+-		struct bio_vec bvec;
+-
+-		zram_slot_unlock(zram, index);
+-
+-		bvec.bv_page = page;
+-		bvec.bv_len = PAGE_SIZE;
+-		bvec.bv_offset = 0;
+-		return read_from_bdev(zram, &bvec,
+-				zram_get_element(zram, index),
+-				bio, partial_io);
+-	}
+-
+ 	handle = zram_get_handle(zram, index);
+ 	if (!handle || zram_test_flag(zram, index, ZRAM_SAME)) {
+ 		unsigned long value;
+@@ -1445,6 +1432,16 @@ static int zram_read_from_zspool(struct zram *zram, struct page *page,
+ 	return ret;
+ }
+ 
++static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
++				struct bio *bio, bool partial_io)
++{
++	if (zram_test_flag(zram, index, ZRAM_WB))
++		return zram_bvec_read_from_bdev(zram, page, index, bio,
++						partial_io);
++
++	return zram_read_from_zspool(zram, page, index);
++}
++
+ static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
+ 				u32 index, int offset, struct bio *bio)
+ {
+ 
