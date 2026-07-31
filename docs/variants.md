@@ -29,7 +29,7 @@
 **Memory**
 - MGLRU forced on (`CONFIG_LRU_GEN_ENABLED=y`)
 - [le9uo](https://github.com/firelzrd/le9uo) workingset protection
-- ZRAM multi-comp support baked into the base config (LZ4 default); zram-ir + huge/idle recompression are still in `patches/testing/`, not yet promoted
+- ZRAM multi-comp support baked into the base config (LZ4 default), with zram-ir tiered compression and huge/idle-page recompression, plus a read-path dispatcher fix
 
 **I/O**
 - ADIOS (Adaptive Deadline I/O Scheduler) multi-queue scheduler
