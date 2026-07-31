@@ -44,6 +44,8 @@ if [ ! -e ${ZRAM_SYS}/disksize ]; then
 	exit 0
 fi
 
+echo "algo=lz4 priority=2" > ${ZRAM_SYS}/recomp_algorithm 2>/dev/null
+
 if [ "$IS_SWAP_ACTIVE" = "1" ]; then
 	# Case (a): restore the swap we tore down above, on the new module.
 	echo ${ORIG_DISKSIZE} > ${ZRAM_SYS}/disksize 2>/dev/null
