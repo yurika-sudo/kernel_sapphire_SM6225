@@ -31,7 +31,12 @@ SUMMARY="${SUMMARY}| | |"$'\n'
 SUMMARY="${SUMMARY}|---|---|"$'\n'
 SUMMARY="${SUMMARY}| **Build** | Run #${GITHUB_RUN_NUMBER} · ${BUILD_LABEL} |"$'\n'
 SUMMARY="${SUMMARY}| **Tag** | \`${RELEASE_TAG}\` |"$'\n'
-SUMMARY="${SUMMARY}| **Kernel base** | \`${KERNEL_VERSION}\` |"$'\n'
+if [ -n "${KERNEL_VERSION_GKI:-}" ] && [ -n "${KERNEL_VERSION_CLO:-}" ]; then
+  SUMMARY="${SUMMARY}| **Kernel base (GKI)** | \`${KERNEL_VERSION_GKI}\` |"$'\n'
+  SUMMARY="${SUMMARY}| **Kernel base (CLO)** | \`${KERNEL_VERSION_CLO}\` |"$'\n'
+else
+  SUMMARY="${SUMMARY}| **Kernel base** | \`${KERNEL_VERSION}\` |"$'\n'
+fi
 SUMMARY="${SUMMARY}| **Commit** | [\`${SHORT_SHA}\`](${COMMIT_URL}) |"$'\n'
 SUMMARY="${SUMMARY}| **Date** | ${DATE_NOW} |"$'\n'
 SUMMARY="${SUMMARY}| **Pack mode** | ${ZIP_MODE:-per-variant} |"$'\n\n'
