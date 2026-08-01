@@ -44,6 +44,11 @@ if [ ! -e ${ZRAM_SYS}/disksize ]; then
 	exit 0
 fi
 
+# Quick fix: synchronous ("immediate") recompression under heavy
+# foreground-app memory pressure triggers reboot -> safe mode.
+# Force deferred recompression until this gets a proper fix.
+[ -e /proc/sys/vm/zram_recomp_immediate ] && echo 0 > /proc/sys/vm/zram_recomp_immediate 2>/dev/null
+
 echo "algo=lz4 priority=2" > ${ZRAM_SYS}/recomp_algorithm 2>/dev/null
 
 if [ "$IS_SWAP_ACTIVE" = "1" ]; then
