@@ -39,7 +39,6 @@
 
 **Network**
 - BBRv3 + Westwood TCP congestion control · FQ default qdisc (CAKE / PIE also available)
-- ntsync (Wine/Proton sync primitives)
 
 **Security / stability**
 - CVE-2026-43499 rtmutex ghostlock UAF fix
@@ -49,6 +48,7 @@
 - Thin LTO
 - HZ=300
 - Droidspaces support (see below)
+- ntsync (Wine/Proton sync primitives)
 
 ---
 
