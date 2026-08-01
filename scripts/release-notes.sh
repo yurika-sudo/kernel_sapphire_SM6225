@@ -14,8 +14,8 @@ BODY=""
 
 # Compat restriction banner
 if [ "$WORKFLOW_TYPE" = "compat" ]; then
-  BODY="${BODY}> [!CAUTION]"$'\n'
-  BODY="${BODY}> GKI-Compat is for **Android 13 / 14 only**. Flashing on A15+ = bootloop. Use main [Seiran-GKI](https://github.com/${REPO}/releases/latest) for A15+."$'\n\n'
+  BODY="${BODY}> [!NOTE]"$'\n'
+  BODY="${BODY}> GKI-Compat targets an older GKI ABI and works across Android 13–17. Use it if your ROM is on **Android 13 or 14**. On Android 15+, use main [Seiran-GKI](https://github.com/${REPO}/releases/latest) instead."$'\n\n'
 fi
 
 # Testing warning banner
