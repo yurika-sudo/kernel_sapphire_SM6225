@@ -42,7 +42,7 @@ if [ "$MODE" = "success" ]; then
   UNAME_STR="${KERNEL_UNAME:-${KERNEL_VERSION:-unknown}}"
 
   [ "$BUILD_TYPE" = "testing" ] && { ICON="🧪"; LABEL="Testing Build"; } \
-    || { ICON="✅"; LABEL="Build Success"; }
+    || { ICON="🎉"; LABEL="Stable Build"; }
 
   MSG="<b>${ICON} ${LABEL}</b>%0A%0A"
   MSG="${MSG}<b>🔄</b> Run #${RUN_NUMBER} · sapphire%0A"
