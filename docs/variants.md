@@ -87,5 +87,5 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 | Source | `android.googlesource.com/kernel/common` | `android.googlesource.com/kernel/common` | `git.codelinaro.org/clo/la/kernel/msm-5.15` |
 | Branch | `android13-5.15-lts` | `deprecated/android13-5.15-2023-10` | `kernel.lnx.5.15.r1-rel` |
 | Config fragment | — | — | `vendor/bengal_GKI.config` |
-| Toolchain | Clang r450784e | resolved from `build.config.constants` at build time — likely differs from GKI's, not confirmed | ZyC Clang 14.0.6 |
+| Toolchain | Clang r450784e | Clang r450784e | ZyC Clang 14.0.6 |
 | LTO | Thin | Thin | Thin |
