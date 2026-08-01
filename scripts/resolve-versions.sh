@@ -57,6 +57,11 @@ KSUN_MANAGER_ARTIFACT_ID=$([ -n "$_kr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}/artifacts" \
   | jq -r '.artifacts[] | select(.name == "manager") | .id // empty' | head -1 || true)
+  
+KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_kr" ] && \
+  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}/artifacts" \
+  | jq -r '.artifacts[] | select(.name == "manager-spoofed") | .id // empty' | head -1 || true)  
 
 _sr=$(curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
@@ -97,13 +102,10 @@ RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${ENCODED_TAG}
   echo "KSUN_MANAGER_URL=$KSUN_MANAGER_URL"
   echo "SUKI_MANAGER_URL=$SUKI_MANAGER_URL"
   echo "KSUN_MANAGER_ARTIFACT_ID=$KSUN_MANAGER_ARTIFACT_ID"
+  echo "KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$KSUN_MANAGER_SPOOFED_ARTIFACT_ID"
   echo "SUKI_MANAGER_ARTIFACT_ID=$SUKI_MANAGER_ARTIFACT_ID"
   echo "KERNEL_VERSION=$KERNEL_VERSION"
   echo "KERNEL_UNAME=$KERNEL_UNAME"
-  echo "KERNEL_VERSION_GKI=$KERNEL_VERSION_GKI"
-  echo "KERNEL_VERSION_CLO=$KERNEL_VERSION_CLO"
-  echo "KERNEL_UNAME_GKI=$KERNEL_UNAME_GKI"
-  echo "KERNEL_UNAME_CLO=$KERNEL_UNAME_CLO"
   echo "SUSFS_VERSION=$SUSFS_VERSION"
   echo "KSUN_TAG=$KSUN_TAG"
   echo "SUKI_TAG=$SUKI_TAG"
