@@ -219,6 +219,7 @@ jobs:
       - name: "📦 Pack ZRAM module"
         env:
           SOURCE_TYPE: ${{ inputs.artifact_name }}
+          COMMIT_SHA:  ${{ github.sha }}
         run: bash scripts/pack-zram-module.sh
 
       - name: "🏷️ Capture uname"
