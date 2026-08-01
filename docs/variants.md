@@ -10,8 +10,8 @@
 | CLO-Ksun | CodeLinaro | KernelSU-Next + SUSFS | BBG |
 | CLO-SukiSU | CodeLinaro | SukiSU-Ultra + SUSFS | KPM |
 | CLO-NoKSU | CodeLinaro | Vanilla | — |
-| GKI-Compat-Ksun | AOSP 2023-10 (deprecated) | KernelSU-Next + SUSFS | — |
-| GKI-Compat-SukiSU | AOSP 2023-10 (deprecated) | SukiSU-Ultra + SUSFS | — |
+| GKI-Compat-Ksun | AOSP 2023-10 (deprecated) | KernelSU-Next + SUSFS | BBG |
+| GKI-Compat-SukiSU | AOSP 2023-10 (deprecated) | SukiSU-Ultra + SUSFS | KPM |
 | GKI-Compat-NoKSU | AOSP 2023-10 (deprecated) | Vanilla | — |
 
 **Supported Android versions:** GKI / CLO → Android 15+ · GKI-Compat → Android 13 / 14 only
@@ -49,6 +49,20 @@
 - Thin LTO
 - HZ=300
 - Droidspaces support (see below)
+
+---
+
+## ZRAM Multi-Comp Module
+
+The kernel ships zram-ir/multi-comp support baked in, but `CONFIG_ZRAM=m` means `zram.ko`/`zsmalloc.ko` build as loadable modules — they don't reach the device via the AK3 kernel-image ZIP alone. A separate KSU/Magisk module carries them.
+
+**What it does:** loads `zram.ko` + `zsmalloc.ko` with multi-comp + zram-ir tiered recompression at `post-fs-data`.
+
+**Get it — 2 ways:**
+- **GitHub Release:** attached as `zram-multicomp-<variant>.zip` alongside the kernel ZIP.
+- **Telegram:** sent automatically to the same channel as build/manager updates — [t.me/tmplogchat](https://t.me/tmplogchat).
+
+> **Must match your flashed variant exactly** (e.g. `zram-multicomp-gki-ksun.zip` for GKI-KSU-Next). Wrong variant safely no-ops — the module just won't load, no harm — but you also won't get multi-comp/zram-ir. Check status via the module's **Action** button after install.
 
 ---
 
