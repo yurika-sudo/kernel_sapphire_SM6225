@@ -22,7 +22,7 @@ Pick whichever fits your setup:
 3. Flash the ZIP
 4. Reboot
 
-**B. ROM's built-in flasher app** — if your ROM ships one, point it at the AnyKernel3 ZIP directly.
+**B. Any flasher app** — Any kernel flasher, it's simple, just follow the menu according to the app you are using.
 
 **C. KSU-Next / SukiSU manager's built-in flash feature** — open the manager app → flash kernel → select the AnyKernel3 ZIP. No recovery needed.
 
