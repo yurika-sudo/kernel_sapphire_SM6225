@@ -200,6 +200,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_TOPIC_ID:  ${{ secrets.TELEGRAM_TOPIC_ID }}
           VARIANT:     ${{ inputs.variant_name }}
           SOURCE_TYPE: ${{ inputs.source_type }}
           BUILD_TYPE:  ${{ inputs.build_type }}
@@ -215,6 +216,12 @@ jobs:
           SOURCE_TYPE: ${{ inputs.source_type }}
         run: bash scripts/pack-zip.sh
 
+      - name: "📦 Pack ZRAM module"
+        env:
+          SOURCE_TYPE: ${{ inputs.artifact_name }}
+          COMMIT_SHA:  ${{ github.sha }}
+        run: bash scripts/pack-zram-module.sh
+
       - name: "🏷️ Capture uname"
         run: |
           UNAME=$(grep UTS_RELEASE \
@@ -229,6 +236,7 @@ jobs:
           name: ${{ inputs.artifact_name }}
           path: |
             ${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}
+            ${{ env.WORK_DIR }}/out/zram-multicomp-${{ inputs.artifact_name }}.zip
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
             ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
             ${{ env.WORK_DIR }}/ksun_tag.txt

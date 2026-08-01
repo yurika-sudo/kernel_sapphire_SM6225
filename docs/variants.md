@@ -10,9 +10,9 @@
 | CLO-Ksun | CodeLinaro | KernelSU-Next + SUSFS | BBG |
 | CLO-SukiSU | CodeLinaro | SukiSU-Ultra + SUSFS | KPM |
 | CLO-NoKSU | CodeLinaro | Vanilla | — |
-| GKI-Compat-Ksun | AOSP LTS (compat) | KernelSU-Next + SUSFS | — |
-| GKI-Compat-SukiSU | AOSP LTS (compat) | SukiSU-Ultra + SUSFS | — |
-| GKI-Compat-NoKSU | AOSP LTS (compat) | Vanilla | — |
+| GKI-Compat-Ksun | AOSP 2023-10 (deprecated) | KernelSU-Next + SUSFS | BBG |
+| GKI-Compat-SukiSU | AOSP 2023-10 (deprecated) | SukiSU-Ultra + SUSFS | KPM |
+| GKI-Compat-NoKSU | AOSP 2023-10 (deprecated) | Vanilla | — |
 
 **Supported Android versions:** GKI / CLO → Android 15+ · GKI-Compat → Android 13 / 14 only
 
@@ -29,7 +29,7 @@
 **Memory**
 - MGLRU forced on (`CONFIG_LRU_GEN_ENABLED=y`)
 - [le9uo](https://github.com/firelzrd/le9uo) workingset protection
-- ZRAM multi-comp support baked into the base config (LZ4 default); zram-ir + huge/idle recompression are still in `patches/testing/`, not yet promoted
+- ZRAM multi-comp support baked into the base config (LZ4 default), with zram-ir tiered compression and huge/idle-page recompression, plus a read-path dispatcher fix
 
 **I/O**
 - ADIOS (Adaptive Deadline I/O Scheduler) multi-queue scheduler
@@ -52,6 +52,20 @@
 
 ---
 
+## ZRAM Multi-Comp Module
+
+The kernel ships zram-ir/multi-comp support baked in, but `CONFIG_ZRAM=m` means `zram.ko`/`zsmalloc.ko` build as loadable modules — they don't reach the device via the AK3 kernel-image ZIP alone. A separate KSU/Magisk module carries them.
+
+**What it does:** loads `zram.ko` + `zsmalloc.ko` with multi-comp + zram-ir tiered recompression at `post-fs-data`.
+
+**Get it — 2 ways:**
+- **GitHub Release:** attached as `zram-multicomp-<variant>.zip` alongside the kernel ZIP.
+- **Telegram:** sent automatically to the same channel as build/manager updates — [t.me/tmplogchat](https://t.me/tmplogchat).
+
+> **Must match your flashed variant exactly** (e.g. `zram-multicomp-gki-ksun.zip` for GKI-KSU-Next). Wrong variant safely no-ops — the module just won't load, no harm — but you also won't get multi-comp/zram-ir. Check status via the module's **Action** button after install.
+
+---
+
 ## Droidspaces Support
 
 This kernel ships with full [Droidspaces](https://github.com/ravindu644/Droidspaces-OSS) container support out of the box.
@@ -68,10 +82,10 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 
 ## Build Details
 
-| | GKI / GKI-Compat | CLO |
-|--|------------------|-----|
-| Source | `android.googlesource.com/kernel/common` | `git.codelinaro.org/clo/la/kernel/msm-5.15` |
-| Branch | `android13-5.15-lts` | `kernel.lnx.5.15.r1-rel` |
-| Config fragment | — | `vendor/bengal_GKI.config` |
-| Toolchain | Clang r450784e | ZyC Clang 14.0.6 |
-| LTO | Thin | Thin |
+| | GKI | GKI-Compat | CLO |
+|--|-----|------------|-----|
+| Source | `android.googlesource.com/kernel/common` | `android.googlesource.com/kernel/common` | `git.codelinaro.org/clo/la/kernel/msm-5.15` |
+| Branch | `android13-5.15-lts` | `deprecated/android13-5.15-2023-10` | `kernel.lnx.5.15.r1-rel` |
+| Config fragment | — | — | `vendor/bengal_GKI.config` |
+| Toolchain | Clang r450784e | resolved from `build.config.constants` at build time — likely differs from GKI's, not confirmed | ZyC Clang 14.0.6 |
+| LTO | Thin | Thin | Thin |

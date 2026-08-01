@@ -24,10 +24,11 @@ if [ "$BUILD_TYPE" = "testing" ]; then
   BODY="${BODY}> Testing build — debug stripped, perf/sched configs non-default. Expect rough edges."$'\n\n'
 fi
 
-BODY="${BODY}**KSU-Next Manager:** [CI Build ↗](${KSUN_MANAGER_URL})"$'\n'
-BODY="${BODY}**SukiSU Manager:** [CI Build ↗](${SUKI_MANAGER_URL})"$'\n'
+BODY="${BODY}**KSU-Next Manager:** [Dev Build ↗](${KSUN_MANAGER_URL})"$'\n'
+BODY="${BODY}**SukiSU Manager:** [Main Build ↗](${SUKI_MANAGER_URL})"$'\n'
 BODY="${BODY}**SUSFS module:** [${SUSFS_VERSION}](${SUSFS_MODULE_URL})"$'\n'
 BODY="${BODY}**Kernel base:** \`${KERNEL_VERSION}\`"$'\n\n'
+BODY="${BODY}**ZRAM Multi-Comp module:** \`zram-multicomp-<variant>.zip\` — attached below & sent via [Telegram](https://t.me/tmplogchat)"$'\n\n'
 
 if [ "$WORKFLOW_TYPE" = "compat" ]; then
   BODY="${BODY}**Variants:** GKI-Compat (KSU-Next · SukiSU · NoKSU)"$'\n'
@@ -41,7 +42,10 @@ BODY="${BODY}**Issues:** [t.me/home_yu_chat](https://t.me/home_yu_chat) · Criti
 
 # Manager version warning — all builds
 BODY="${BODY}> [!IMPORTANT]"$'\n'
-BODY="${BODY}> **Manager version must match kernel version.** Can't grant root / manager shows errors? Use the **CI Build** links above — not stable releases. Mismatch = can't grant root."$'\n\n'
+BODY="${BODY}> **Manager version must match kernel version.** Can't grant root / manager shows errors? Use the manager links above — not stable releases. Mismatch = can't grant root."$'\n\n'
+
+BODY="${BODY}> [!IMPORTANT]"$'\n'
+BODY="${BODY}> **ZRAM module must match your flashed variant exactly** (e.g. \`zram-multicomp-gki-ksun.zip\` for GKI-KSU-Next). Wrong variant safely no-ops — no harm, but multi-comp/zram-ir won't be active."$'\n\n'
 
 BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
 BODY="${BODY}📋 **Per-build details:** [Run #${GITHUB_RUN_NUMBER} summary](${RUN_URL})"$'\n'

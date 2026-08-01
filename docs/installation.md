@@ -14,23 +14,24 @@
 ## Known Issues
 
 **KSU / SukiSU manager shows "Failed to update App Profile"**
-Affects older stable manager builds. Update to the latest CI manager build — [get it here](https://t.me/tmplogchat/310).
+Affects older stable manager builds. Update to the latest manager build — [get it here](https://t.me/tmplogchat/310).
 
 ## Manager
 
 The kernel embeds a specific KSU version code (shown in release notes, e.g. `33169`).
 Your manager APK must match that code — a mismatch means apps can't be granted root.
 
-**Use the CI Build links in the release notes, not the stable release.**
-
+**Use the manager links in the release notes, not the stable release:**
+- **KSU-Next Manager:** Dev Build ↗
+- **SukiSU Manager:** Main Build ↗
 - If it shows `Failed to update App Profile` → wrong manager version.
 - Correct manager build is always linked directly in the release body.
 
 > This applies to both KSU-Next and SukiSU variants, on Android 13, 14, and 15+.
 
-### Finding the Manager in CI Artifacts
+### Finding the Manager in the Build Artifacts
 
-Click the CI Build link → download the artifact ZIP → look for the file named `manager` or `manager-spoofed` (depending on variant). Unzip and install the APK.
+Click the Dev/Main Build link above → download the artifact ZIP → look for the file named `manager` or `manager-spoofed` (depending on variant). Unzip and install the APK.
 
 If you see "absolute gibberish" on the artifacts page: you're looking at the raw artifact list. Just grab any ZIP and extract it — the `manager` APK is inside.
 
@@ -44,6 +45,6 @@ Force reboot: Hold **Power** until screen goes black (~5s), then immediately hol
 
 ### Splash Screen Loop (5 Second Restart Cycle)
 
-Indicates a module conflict or incompatible root hook. fix: go to fastboot and flash the ROM boot.img.
+Usually means you're on a **testing/pre-release** build — flash the latest **stable** release instead. Could also be ROM-specific behavior in rarer cases. Fix: boot to fastboot and reflash the ROM's stock `boot.img`.
 
 **If you need help:** You must have a **PC**, respond in **English** (minimal), and respond **fast**. DM [@superuseryu](https://t.me/home_yu_chat) directly — slow response = dropped support. This is a personal project; debug sessions are time-sensitive.

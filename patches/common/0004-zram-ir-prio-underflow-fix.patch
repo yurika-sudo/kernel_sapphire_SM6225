@@ -1,0 +1,16 @@
+diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
+index 870b21089..e21d60c98 100644
+--- a/drivers/block/zram/zram_drv.c
++++ b/drivers/block/zram/zram_drv.c
+@@ -1529,6 +1529,11 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
+ 	if (!zstrm) {
+ 		if (prio >= zram->num_active_comps)
+ 			flags = ZRAM_INCOMPRESSIBLE;
++		if (prio == 0) {
++			pr_err("zram-ir: no compressor stream available (num_active_comps=%d)\n",
++				zram->num_active_comps);
++			return -EINVAL;
++		}
+ 		prio--;
+ 		comp_len = PAGE_SIZE;
+ 		zstrm = zcomp_stream_get(zram->comps[prio]);

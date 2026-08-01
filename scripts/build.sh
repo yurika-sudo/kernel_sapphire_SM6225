@@ -145,8 +145,8 @@ if [ -n "${CLO_FRAGMENT:-}" ]; then
   make "${MAKE_FLAGS[@]}" olddefconfig
  fi
 
-echo "[${SOURCE_TYPE^^}] Building Image..."
-if ! make "${MAKE_FLAGS[@]}" Image 2>&1 | tee "$LOG"; then
+echo "[${SOURCE_TYPE^^}] Building Image + modules..."
+if ! make "${MAKE_FLAGS[@]}" Image modules 2>&1 | tee "$LOG"; then
   echo "[FAIL] ${SOURCE_TYPE^^} build failed:"
   tail -100 "$LOG"
   exit 1
@@ -158,6 +158,28 @@ if [ -f "${OUT_DIR}/dist/arch/arm64/boot/Image" ]; then
 else
   echo "[FAIL] Image file not found in build directory!"
   exit 1
+fi
+
+echo "[${SOURCE_TYPE^^}] Installing modules..."
+MODULES_OUT="${OUT_DIR}/modules-${SOURCE_TYPE}"
+rm -rf "$MODULES_OUT"
+mkdir -p "$MODULES_OUT"
+make "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$MODULES_OUT" INSTALL_MOD_STRIP=1 modules_install
+
+echo "[${SOURCE_TYPE^^}] Collecting zram.ko / zsmalloc.ko..."
+KO_OUT="${OUT_DIR}/dist/ko"
+mkdir -p "$KO_OUT"
+ZRAM_KO=$(find "$MODULES_OUT" -name 'zram.ko' | head -1)
+ZSMALLOC_KO=$(find "$MODULES_OUT" -name 'zsmalloc.ko' | head -1)
+if [ -n "$ZRAM_KO" ]; then
+  cp "$ZRAM_KO" "$KO_OUT/zram.ko"
+else
+  echo "[WARN] zram.ko not found after modules_install — module packaging will be skipped for ${SOURCE_TYPE}"
+fi
+if [ -n "$ZSMALLOC_KO" ]; then
+  cp "$ZSMALLOC_KO" "$KO_OUT/zsmalloc.ko"
+else
+  echo "[WARN] zsmalloc.ko not found after modules_install — module packaging will be skipped for ${SOURCE_TYPE}"
 fi
 
 DURATION=$(( $(date +%s) - START ))

@@ -61,4 +61,8 @@ if [ "$ZIP_MODE" = "per-variant" ] || [ "$ZIP_MODE" = "both" ]; then
   echo "Collected per-variant ZIPs:"
 fi
 
+# Attach zram module zip(s) to the release as-is, independent of ZIP_MODE —
+# it's a standalone Magisk/KSU module, not part of the kernel Image bundle.
+find ./artifacts -name "zram-multicomp-*.zip" -exec cp {} ./release_zips/ \;
+
 ls -lh ./release_zips/
