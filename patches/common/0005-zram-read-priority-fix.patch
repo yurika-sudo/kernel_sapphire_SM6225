@@ -1,0 +1,20 @@
+--- /home/yu/gki-common/drivers/block/zram/zram_drv.c.prefix.bak	2026-07-31 17:54:25.832549682 -0900
++++ /home/yu/gki-common/drivers/block/zram/zram_drv.c	2026-07-31 17:40:40.319134111 -0900
+@@ -1408,7 +1408,7 @@
+ 	size = zram_get_obj_size(zram, index);
+ 
+ 	if (size != PAGE_SIZE)
+-		zstrm = zcomp_stream_get(zram->comps[ZRAM_PRIMARY_COMP]);
++		zstrm = zcomp_stream_get(zram->comps[zram_get_priority(zram, index)]);
+ 
+ 	src = zs_map_object(zram->mem_pool, handle, ZS_MM_RO);
+ 	if (size == PAGE_SIZE) {
+@@ -1420,7 +1420,7 @@
+ 		dst = kmap_atomic(page);
+ 		ret = zcomp_decompress(zstrm, src, size, dst);
+ 		kunmap_atomic(dst);
+-		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
++		zcomp_stream_put(zram->comps[zram_get_priority(zram, index)]);
+ 	}
+ 	zs_unmap_object(zram->mem_pool, handle);
+ 	zram_slot_unlock(zram, index);
