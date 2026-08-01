@@ -3,7 +3,7 @@
 > ⚠️ **Back up first — always.**
 > Back up anything you don't want to lose, and keep a copy of your current ROM's `boot.img` on hand before you start. Custom-ROM behavior on this device isn't always predictable, so treat these as precautions, not optional steps — especially if you're new to this.
 >
-> Not strictly mandatory, but if you're unsure: from recovery, delete the `/data/adb` folder (path: `/data/adb`) before flashing, particularly if you're coming from a different kernel or root setup.
+> Not strictly mandatory, but if you're unsure: from recovery, delete the `/adb` folder (path: `/data/adb`) before flashing, particularly if you're coming from a different kernel or root setup.
 
 ## Which variant do I flash?
 
