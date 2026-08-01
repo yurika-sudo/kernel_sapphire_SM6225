@@ -11,6 +11,25 @@ KERNEL_VERSION=$([ -f "$VERSION_FILE" ] && cat "$VERSION_FILE" || echo "5.15.x")
 UNAME_FILE=$(find ./artifacts -name "kernel_uname.txt" | head -1)
 KERNEL_UNAME=$([ -f "$UNAME_FILE" ] && cat "$UNAME_FILE" || echo "$KERNEL_VERSION")
 
+# GKI and CLO pin different upstream sublevels (see sources/source-pins.json), so an
+# aio release (both sources bundled together) actually has two distinct kernel bases,
+# not one. KERNEL_VERSION/KERNEL_UNAME above collapse to whichever artifact `find`
+# happens to list first (alphabetically "clo-*" beats "gki-*"), which silently hid
+# the GKI side. Resolve each source independently here so downstream scripts can show
+# both. Artifact dirs are named "gki-<ksu>" / "clo-<ksu>" (see build-aio.yml matrix);
+# GKI-Compat artifacts are "gkicompat-<ksu>", which doesn't match "gki-*", so on a
+# compat build these two just come back empty and callers fall back to the single
+# KERNEL_VERSION/KERNEL_UNAME above — no separate compat-specific branch needed.
+GKI_VERSION_FILE=$(find ./artifacts -path "*gki-*" -name "kernel_version.txt" | head -1)
+CLO_VERSION_FILE=$(find ./artifacts -path "*clo-*" -name "kernel_version.txt" | head -1)
+GKI_UNAME_FILE=$(find ./artifacts -path "*gki-*" -name "kernel_uname.txt" | head -1)
+CLO_UNAME_FILE=$(find ./artifacts -path "*clo-*" -name "kernel_uname.txt" | head -1)
+
+KERNEL_VERSION_GKI=$([ -f "$GKI_VERSION_FILE" ] && cat "$GKI_VERSION_FILE" || echo "")
+KERNEL_VERSION_CLO=$([ -f "$CLO_VERSION_FILE" ] && cat "$CLO_VERSION_FILE" || echo "")
+KERNEL_UNAME_GKI=$([ -f "$GKI_UNAME_FILE" ] && cat "$GKI_UNAME_FILE" || echo "$KERNEL_VERSION_GKI")
+KERNEL_UNAME_CLO=$([ -f "$CLO_UNAME_FILE" ] && cat "$CLO_UNAME_FILE" || echo "$KERNEL_VERSION_CLO")
+
 # NOTE: pipeline exit code is from last cmd (tr), so jq failures are swallowed
 # without pipefail. Use two-step fetch + explicit fallback instead.
 _susfs_raw=$(curl -sf "https://api.github.com/repos/sidex15/susfs4ksu-module/tags" 2>/dev/null \
@@ -38,11 +57,6 @@ KSUN_MANAGER_ARTIFACT_ID=$([ -n "$_kr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}/artifacts" \
   | jq -r '.artifacts[] | select(.name == "manager") | .id // empty' | head -1 || true)
-  
-KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_kr" ] && \
-  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name == "manager-spoofed") | .id // empty' | head -1 || true)  
 
 _sr=$(curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
@@ -83,10 +97,13 @@ RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${ENCODED_TAG}
   echo "KSUN_MANAGER_URL=$KSUN_MANAGER_URL"
   echo "SUKI_MANAGER_URL=$SUKI_MANAGER_URL"
   echo "KSUN_MANAGER_ARTIFACT_ID=$KSUN_MANAGER_ARTIFACT_ID"
-  echo "KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$KSUN_MANAGER_SPOOFED_ARTIFACT_ID"
   echo "SUKI_MANAGER_ARTIFACT_ID=$SUKI_MANAGER_ARTIFACT_ID"
   echo "KERNEL_VERSION=$KERNEL_VERSION"
   echo "KERNEL_UNAME=$KERNEL_UNAME"
+  echo "KERNEL_VERSION_GKI=$KERNEL_VERSION_GKI"
+  echo "KERNEL_VERSION_CLO=$KERNEL_VERSION_CLO"
+  echo "KERNEL_UNAME_GKI=$KERNEL_UNAME_GKI"
+  echo "KERNEL_UNAME_CLO=$KERNEL_UNAME_CLO"
   echo "SUSFS_VERSION=$SUSFS_VERSION"
   echo "KSUN_TAG=$KSUN_TAG"
   echo "SUKI_TAG=$SUKI_TAG"
@@ -99,7 +116,12 @@ RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${ENCODED_TAG}
 } >> "${GITHUB_ENV:-/dev/null}"
 
 echo "[OK] Versions resolved"
-echo "  Kernel  : $KERNEL_VERSION"
+if [ -n "$KERNEL_UNAME_GKI" ] && [ -n "$KERNEL_UNAME_CLO" ]; then
+  echo "  GKI base: $KERNEL_UNAME_GKI"
+  echo "  CLO base: $KERNEL_UNAME_CLO"
+else
+  echo "  Kernel  : $KERNEL_VERSION"
+fi
 echo "  SUSFS   : $SUSFS_VERSION"
 echo "  KSU-Next: $KSUN_TAG"
 echo "  SukiSU  : $SUKI_TAG"
