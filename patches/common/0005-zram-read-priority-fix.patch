@@ -1,6 +1,7 @@
---- /home/yu/gki-common/drivers/block/zram/zram_drv.c.prefix.bak	2026-07-31 17:54:25.832549682 -0900
-+++ /home/yu/gki-common/drivers/block/zram/zram_drv.c	2026-07-31 17:40:40.319134111 -0900
-@@ -1408,7 +1408,7 @@
+diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
+--- a/drivers/block/zram/zram_drv.c
++++ b/drivers/block/zram/zram_drv.c
+@@ -1408,7 +1408,7 @@ static int zram_read_from_zspool(struct zram *zram, struct page *page,
  	size = zram_get_obj_size(zram, index);
  
  	if (size != PAGE_SIZE)
@@ -9,7 +10,7 @@
  
  	src = zs_map_object(zram->mem_pool, handle, ZS_MM_RO);
  	if (size == PAGE_SIZE) {
-@@ -1420,7 +1420,7 @@
+@@ -1420,7 +1420,7 @@ static int zram_read_from_zspool(struct zram *zram, struct page *page,
  		dst = kmap_atomic(page);
  		ret = zcomp_decompress(zstrm, src, size, dst);
  		kunmap_atomic(dst);
