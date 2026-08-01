@@ -10,6 +10,8 @@ set -e
 
 : "${SOURCE_TYPE:?}"
 : "${WORK_DIR:?}"
+: "${COMMIT_SHA:=unknown}"
+SHORT_SHA="${COMMIT_SHA:0:8}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE_DIR="${TEMPLATE_DIR:-$SCRIPT_DIR/module_template}"
@@ -28,7 +30,7 @@ mkdir -p "$STAGE_DIR/module"
 # Copy template, substituting @VARIANT@ with the actual variant name.
 cp -r "$TEMPLATE_DIR"/. "$STAGE_DIR"/
 mv "$STAGE_DIR/module.prop.template" "$STAGE_DIR/module.prop"
-sed -i "s/@VARIANT@/${SOURCE_TYPE}/g" "$STAGE_DIR/module.prop" "$STAGE_DIR/customize.sh"
+sed -i "s/@VARIANT@/${SOURCE_TYPE}/g; s/@COMMIT@/${SHORT_SHA}/g" "$STAGE_DIR/module.prop" "$STAGE_DIR/customize.sh"
 
 cp "${KO_DIR}/zram.ko" "$STAGE_DIR/module/zram.ko"
 cp "${KO_DIR}/zsmalloc.ko" "$STAGE_DIR/module/zsmalloc.ko"
