@@ -151,3 +151,35 @@
  
  	if (!moved_count)
  		return false;
+@@ -1370,8 +1398,11 @@
+ 	 */
+ 	if (eval_adios_state(ad, ADIOS_STATE_BP)) {
+ 		bool barrier_released = false;
+-		scoped_guard(spinlock_irqsave, &ad->lock)
+-			barrier_released = release_barrier_requests(ad);
++		unsigned long flags;
++
++		spin_lock_irqsave(&ad->lock, flags);
++		barrier_released = release_barrier_requests(ad);
++		spin_unlock_irqrestore(&ad->lock, flags);
+ 		if (barrier_released)
+ 			goto retry;
+ 	}
+@@ -1855,14 +1886,16 @@
+ 	struct adios_data *ad = e->elevator_data;
+ 	int prio;
+ 	int ret;
++	unsigned long flags;
+ 
+ 	ret = kstrtoint(page, 10, &prio);
+ 	if (ret || prio < -20 || prio > 19)
+ 		return -EINVAL;
+ 
+-	guard(spinlock_irqsave)(&ad->lock);
++	spin_lock_irqsave(&ad->lock, flags);
+ 	ad->dl_prio[0] = prio;
+ 	ad->dl_bias = 0;
++	spin_unlock_irqrestore(&ad->lock, flags);
+ 
+ 	return count;
+ }
