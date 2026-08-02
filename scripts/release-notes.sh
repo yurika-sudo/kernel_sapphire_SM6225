@@ -14,8 +14,8 @@ BODY=""
 
 # Compat restriction banner
 if [ "$WORKFLOW_TYPE" = "compat" ]; then
-  BODY="${BODY}> [!CAUTION]"$'\n'
-  BODY="${BODY}> GKI-Compat is for **Android 13 / 14 only**. Flashing on A15+ = bootloop. Use main [Seiran-GKI](https://github.com/${REPO}/releases/latest) for A15+."$'\n\n'
+  BODY="${BODY}> [!NOTE]"$'\n'
+  BODY="${BODY}> GKI-Compat targets an older GKI ABI and works across Android 13–17. Use it if your ROM is on **Android 13 or 14**. On Android 15+, use main [Seiran-GKI](https://github.com/${REPO}/releases/latest) instead."$'\n\n'
 fi
 
 # Testing warning banner
@@ -28,11 +28,17 @@ BODY="${BODY}**KSU-Next Manager:** [Dev Build ↗](${KSUN_MANAGER_URL})"$'\n'
 BODY="${BODY}**SukiSU Manager:** [Main Build ↗](${SUKI_MANAGER_URL})"$'\n'
 BODY="${BODY}**SUSFS module:** [${SUSFS_VERSION}](${SUSFS_MODULE_URL})"$'\n'
 BODY="${BODY}**Kernel base:** \`${KERNEL_VERSION}\`"$'\n\n'
+if [ -n "${KERNEL_VERSION_GKI:-}" ] && [ -n "${KERNEL_VERSION_CLO:-}" ]; then
+  BODY="${BODY}**Kernel base (GKI):** \`${KERNEL_VERSION_GKI}\`"$'\n'
+  BODY="${BODY}**Kernel base (CLO):** \`${KERNEL_VERSION_CLO}\`"$'\n\n'
+else
+  BODY="${BODY}**Kernel base:** \`${KERNEL_VERSION}\`"$'\n\n'
+fi
 BODY="${BODY}**ZRAM Multi-Comp module:** \`zram-multicomp-<variant>.zip\` — attached below & sent via [Telegram](https://t.me/tmplogchat)"$'\n\n'
 
 if [ "$WORKFLOW_TYPE" = "compat" ]; then
   BODY="${BODY}**Variants:** GKI-Compat (KSU-Next · SukiSU · NoKSU)"$'\n'
-  BODY="${BODY}**Supported:** Android 13 / 14"$'\n'
+  BODY="${BODY}**Supported:** Android 13+ (recommended if your ROM is A13/A14)"$'\n'
 else
   BODY="${BODY}**Variants:** GKI (KSU-Next · SukiSU · NoKSU) · CLO (KSU-Next · SukiSU · NoKSU)"$'\n'
   BODY="${BODY}**Supported:** Android 15+"$'\n'
@@ -44,8 +50,8 @@ BODY="${BODY}**Issues:** [t.me/home_yu_chat](https://t.me/home_yu_chat) · Criti
 BODY="${BODY}> [!IMPORTANT]"$'\n'
 BODY="${BODY}> **Manager version must match kernel version.** Can't grant root / manager shows errors? Use the manager links above — not stable releases. Mismatch = can't grant root."$'\n\n'
 
-BODY="${BODY}> [!IMPORTANT]"$'\n'
-BODY="${BODY}> **ZRAM module must match your flashed variant exactly** (e.g. \`zram-multicomp-gki-ksun.zip\` for GKI-KSU-Next). Wrong variant safely no-ops — no harm, but multi-comp/zram-ir won't be active."$'\n\n'
+BODY="${BODY}> [!NOTE]"$'\n'
+BODY="${BODY}> **ZRAM module should match your flashed variant** (e.g. \`zram-multicomp-gki-ksun.zip\` for GKI-KSU-Next). Wrong variant safely no-ops — no harm, but multi-comp/zram-ir won't be active."$'\n\n'
 
 BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
 BODY="${BODY}📋 **Per-build details:** [Run #${GITHUB_RUN_NUMBER} summary](${RUN_URL})"$'\n'

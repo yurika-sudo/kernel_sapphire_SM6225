@@ -42,12 +42,20 @@ if [ "$MODE" = "success" ]; then
   UNAME_STR="${KERNEL_UNAME:-${KERNEL_VERSION:-unknown}}"
 
   [ "$BUILD_TYPE" = "testing" ] && { ICON="🧪"; LABEL="Testing Build"; } \
-    || { ICON="✅"; LABEL="Build Success"; }
+    || { ICON="🎉"; LABEL="Stable Build"; }
 
   MSG="<b>${ICON} ${LABEL}</b>%0A%0A"
   MSG="${MSG}<b>🔄</b> Run #${RUN_NUMBER} · sapphire%0A"
   MSG="${MSG}<b>🏷️</b> <code>${DISPLAY_TAG}</code>%0A"
-  MSG="${MSG}<b>🐧</b> <code>${UNAME_STR}</code>%0A"
+  # aio releases bundle GKI + CLO, which pin different sublevels — show both bases
+  # when we have them, fall back to the single collapsed one otherwise (compat, or
+  # KERNEL_UNAME_GKI/CLO not passed in).
+  if [ -n "${KERNEL_UNAME_GKI:-}" ] && [ -n "${KERNEL_UNAME_CLO:-}" ]; then
+    MSG="${MSG}<b>🐧</b> GKI <code>${KERNEL_UNAME_GKI}</code>%0A"
+    MSG="${MSG}<b>🐧</b> CLO <code>${KERNEL_UNAME_CLO}</code>%0A"
+  else
+    MSG="${MSG}<b>🐧</b> <code>${UNAME_STR}</code>%0A"
+  fi
   MSG="${MSG}<b>⏱️</b> $((DURATION/60))m $((DURATION%60))s%0A"
   MSG="${MSG}<b>🔨</b> <a href='https://github.com/${GITHUB_REPOSITORY}/commit/${SHA}'>${SHORT_SHA}</a>%0A%0A"
 

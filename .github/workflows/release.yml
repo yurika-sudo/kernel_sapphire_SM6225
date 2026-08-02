@@ -116,4 +116,6 @@ jobs:
           SHA:           ${{ github.sha }}
           START_TIME:    ${{ inputs.start_time }}
           KERNEL_UNAME:  ${{ env.KERNEL_UNAME }}
+          KERNEL_UNAME_GKI: ${{ env.KERNEL_UNAME_GKI }}
+          KERNEL_UNAME_CLO: ${{ env.KERNEL_UNAME_CLO }}
         run: bash scripts/notify.sh success

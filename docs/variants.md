@@ -14,7 +14,7 @@
 | GKI-Compat-SukiSU | AOSP 2023-10 (deprecated) | SukiSU-Ultra + SUSFS | KPM |
 | GKI-Compat-NoKSU | AOSP 2023-10 (deprecated) | Vanilla | — |
 
-**Supported Android versions:** GKI / CLO → Android 15+ · GKI-Compat → Android 13 / 14 only
+**Supported Android versions:** GKI-Compat targets an older GKI ABI and works across Android 13–17 — use it if your ROM is on Android 13 or 14. Main **GKI / CLO** target the newer interfaces and are for Android 15+ ROMs.
 
 ---
 
@@ -39,7 +39,6 @@
 
 **Network**
 - BBRv3 + Westwood TCP congestion control · FQ default qdisc (CAKE / PIE also available)
-- ntsync (Wine/Proton sync primitives)
 
 **Security / stability**
 - CVE-2026-43499 rtmutex ghostlock UAF fix
@@ -49,6 +48,7 @@
 - Thin LTO
 - HZ=300
 - Droidspaces support (see below)
+- ntsync (Wine/Proton sync primitives)
 
 ---
 
