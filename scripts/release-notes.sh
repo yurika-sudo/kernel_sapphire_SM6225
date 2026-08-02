@@ -27,7 +27,6 @@ fi
 BODY="${BODY}**KSU-Next Manager:** [Dev Build ↗](${KSUN_MANAGER_URL})"$'\n'
 BODY="${BODY}**SukiSU Manager:** [Main Build ↗](${SUKI_MANAGER_URL})"$'\n'
 BODY="${BODY}**SUSFS module:** [${SUSFS_VERSION}](${SUSFS_MODULE_URL})"$'\n'
-BODY="${BODY}**Kernel base:** \`${KERNEL_VERSION}\`"$'\n\n'
 if [ -n "${KERNEL_VERSION_GKI:-}" ] && [ -n "${KERNEL_VERSION_CLO:-}" ]; then
   BODY="${BODY}**Kernel base (GKI):** \`${KERNEL_VERSION_GKI}\`"$'\n'
   BODY="${BODY}**Kernel base (CLO):** \`${KERNEL_VERSION_CLO}\`"$'\n\n'

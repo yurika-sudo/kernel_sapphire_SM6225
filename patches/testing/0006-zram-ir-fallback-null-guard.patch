@@ -1,0 +1,15 @@
+diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
+--- a/drivers/block/zram/zram_drv.c
++++ b/drivers/block/zram/zram_drv.c
+@@ -1535,6 +1535,11 @@
+ 			return -EINVAL;
+ 		}
+ 		prio--;
++		if (!zram->comps[prio]) {
++			pr_err("zram-ir: no compressor registered at fallback prio=%u (num_active_comps=%d)\n",
++				prio, zram->num_active_comps);
++			return -EINVAL;
++		}
+ 		comp_len = PAGE_SIZE;
+ 		zstrm = zcomp_stream_get(zram->comps[prio]);
+ 	}
