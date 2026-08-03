@@ -1,0 +1,263 @@
+diff --git a/include/linux/mmzone.h b/include/linux/mmzone.h
+index cfda5468f..13b2c1e32 100644
+--- a/include/linux/mmzone.h
++++ b/include/linux/mmzone.h
+@@ -22,6 +22,7 @@
+ #include <linux/page-flags.h>
+ #include <linux/local_lock.h>
+ #include <linux/android_kabi.h>
++#include <linux/kfifo.h>
+ #include <asm/page.h>
+ 
+ /* Free memory management - zoned buddy allocator.  */
+@@ -1072,6 +1073,12 @@ typedef struct pglist_data {
+ 
+ 	int kswapd_failures;		/* Number of 'reclaimed == 0' runs */
+ 
++#define KCOMPRESS_FIFO_SIZE 256
++	wait_queue_head_t kcompressd_wait;
++	struct task_struct *kcompressd;
++	struct kfifo kcompress_fifo;
++	spinlock_t kcompress_fifo_lock;
++
+ 	ANDROID_OEM_DATA(1);
+ #ifdef CONFIG_COMPACTION
+ 	int kcompactd_max_order;
+diff --git a/include/linux/swap.h b/include/linux/swap.h
+index fa17b770b..683e559cb 100644
+--- a/include/linux/swap.h
++++ b/include/linux/swap.h
+@@ -788,5 +788,7 @@ static inline bool mem_cgroup_swap_full(struct page *page)
+ }
+ #endif
+ 
++extern int vm_kcompressd;
++
+ #endif /* __KERNEL__*/
+ #endif /* _LINUX_SWAP_H */
+diff --git a/kernel/sysctl.c b/kernel/sysctl.c
+index ab19acc07..db2543149 100644
+--- a/kernel/sysctl.c
++++ b/kernel/sysctl.c
+@@ -2662,6 +2662,9 @@ static struct ctl_table kern_table[] = {
+ 	{ }
+ };
+ 
++int vm_kcompressd = 24;
++static int SYSCTL_KCOMPRESS_FIFO_SIZE = KCOMPRESS_FIFO_SIZE;
++
+ static struct ctl_table vm_table[] = {
+ 	{
+ 		.procname	= "overcommit_memory",
+@@ -2783,6 +2786,15 @@ static struct ctl_table vm_table[] = {
+ 		.extra1		= SYSCTL_ZERO,
+ 		.extra2		= SYSCTL_TWO_HUNDRED,
+ 	},
++	{
++		.procname	= "kcompressd",
++		.data		= &vm_kcompressd,
++		.maxlen		= sizeof(int),
++		.mode		= 0644,
++		.proc_handler	= proc_dointvec_minmax,
++		.extra1		= SYSCTL_ZERO,
++		.extra2		= &SYSCTL_KCOMPRESS_FIFO_SIZE,
++	},
+ #ifdef CONFIG_NUMA
+ 	{
+ 		.procname	= "numa_stat",
+diff --git a/mm/page_alloc.c b/mm/page_alloc.c
+index a5fb0cedb..d56d11ee3 100644
+--- a/mm/page_alloc.c
++++ b/mm/page_alloc.c
+@@ -7880,6 +7880,7 @@ static void __meminit pgdat_init_internals(struct pglist_data *pgdat)
+ 	pgdat_init_kcompactd(pgdat);
+ 
+ 	init_waitqueue_head(&pgdat->kswapd_wait);
++	init_waitqueue_head(&pgdat->kcompressd_wait);
+ 	init_waitqueue_head(&pgdat->pfmemalloc_wait);
+ 
+ 	pgdat_page_ext_init(pgdat);
+diff --git a/mm/vmscan.c b/mm/vmscan.c
+index ddb2772e5..11f770ed8 100644
+--- a/mm/vmscan.c
++++ b/mm/vmscan.c
+@@ -7328,10 +7328,13 @@ unsigned long shrink_all_memory(unsigned long nr_to_reclaim)
+  * This kswapd start function will be called by init and node-hot-add.
+  * On node-hot-add, kswapd will moved to proper cpus if cpus are hot-added.
+  */
++extern int kcompressd(void *p);
++
+ void kswapd_run(int nid)
+ {
+ 	pg_data_t *pgdat = NODE_DATA(nid);
+ 	bool skip = false;
++	int ret;
+ 
+ 	if (pgdat->kswapd)
+ 		return;
+@@ -7346,6 +7349,24 @@ void kswapd_run(int nid)
+ 		pr_err("Failed to start kswapd on node %d\n", nid);
+ 		pgdat->kswapd = NULL;
+ 	}
++
++	ret = kfifo_alloc(&pgdat->kcompress_fifo,
++			KCOMPRESS_FIFO_SIZE * sizeof(struct page *), GFP_KERNEL);
++	if (ret) {
++		pr_err("%s: fail to kfifo_alloc\n", __func__);
++		return;
++	}
++	spin_lock_init(&pgdat->kcompress_fifo_lock);
++	pgdat->kcompressd = kthread_create_on_node(kcompressd, pgdat, nid,
++			"kcompressd%d", nid);
++	if (IS_ERR(pgdat->kcompressd)) {
++		pr_err("Failed to start kcompressd on node %d, ret=%ld\n",
++				nid, PTR_ERR(pgdat->kcompressd));
++		pgdat->kcompressd = NULL;
++		kfifo_free(&pgdat->kcompress_fifo);
++	} else {
++		wake_up_process(pgdat->kcompressd);
++	}
+ }
+ 
+ /*
+@@ -7354,6 +7375,7 @@ void kswapd_run(int nid)
+  */
+ void kswapd_stop(int nid)
+ {
++	pg_data_t *pgdat = NODE_DATA(nid);
+ 	struct task_struct *kswapd = NODE_DATA(nid)->kswapd;
+ 	bool skip = false;
+ 
+@@ -7364,6 +7386,11 @@ void kswapd_stop(int nid)
+ 		kthread_stop(kswapd);
+ 		NODE_DATA(nid)->kswapd = NULL;
+ 	}
++	if (pgdat->kcompressd) {
++		kthread_stop(pgdat->kcompressd);
++		pgdat->kcompressd = NULL;
++		kfifo_free(&pgdat->kcompress_fifo);
++	}
+ }
+ 
+ static int __init kswapd_init(void)
+diff --git a/mm/page_io.c b/mm/page_io.c
+index df9e90588..6e554421d 100644
+--- a/mm/page_io.c
++++ b/mm/page_io.c
+@@ -27,2 +27,3 @@
+ #include <linux/sched/task.h>
++#include <linux/kfifo.h>
+ 
+@@ -177,2 +178,105 @@ int generic_swapfile_activate(struct swap_info_struct *sis,
+ 
++/*
++ * do_swapout() - Write a page to swap space (used by kcompressd)
++ * @page: The page to write out
++ *
++ * Mirrors the frontswap/synchronous fallback branches already in
++ * swap_writepage(), then drops the extra reference kcompressd_store()
++ * took when it enqueued this page.
++ */
++static void kcompressd_do_swapout(struct page *page)
++{
++	struct writeback_control wbc = {
++		.sync_mode	= WB_SYNC_NONE,
++		.nr_to_write	= SWAP_CLUSTER_MAX,
++		.range_start	= 0,
++		.range_end	= LLONG_MAX,
++		.for_reclaim	= 1,
++	};
++
++	if (frontswap_store(page) == 0) {
++		set_page_writeback(page);
++		unlock_page(page);
++		end_page_writeback(page);
++	} else {
++		__swap_writepage(page, &wbc, end_swap_bio_write);
++	}
++	put_page(page);
++}
++
++/*
++ * kcompressd_store() - Off-load page compression/writeout to kcompressd
++ * @page: The page to compress
++ *
++ * Only called from kswapd context. Gates on kcompressd being enabled
++ * and running, and on the page being anonymous. Unlike the upstream
++ * folio-based reference, this tree has no zswap_is_enabled() /
++ * mem_cgroup_zswap_writeback_enabled() to gate on -- that's fine
++ * because kcompressd_do_swapout() falls back to synchronous
++ * __swap_writepage() whenever frontswap_store() doesn't succeed.
++ */
++static bool kcompressd_store(struct page *page)
++{
++	pg_data_t *pgdat = NODE_DATA(numa_node_id());
++	unsigned int ret, sysctl_kcompressd = vm_kcompressd;
++	struct page *head = NULL;
++	unsigned long flags;
++
++	if (!current_is_kswapd())
++		return false;
++
++	if (!sysctl_kcompressd || unlikely(!pgdat->kcompressd))
++		return false;
++
++	if (!PageAnon(page))
++		return false;
++
++	/*
++	 * If the fifo is full, synchronously swap out the head page
++	 * currently queued to make room for this one.
++	 */
++	spin_lock_irqsave(&pgdat->kcompress_fifo_lock, flags);
++	if (kfifo_len(&pgdat->kcompress_fifo) >= sysctl_kcompressd * sizeof(page) &&
++			unlikely(!kfifo_out(&pgdat->kcompress_fifo, &head, sizeof(page)))) {
++		spin_unlock_irqrestore(&pgdat->kcompress_fifo_lock, flags);
++		return false;
++	}
++	spin_unlock_irqrestore(&pgdat->kcompress_fifo_lock, flags);
++
++	get_page(page);
++
++	ret = kfifo_in(&pgdat->kcompress_fifo, &page, sizeof(page));
++	if (likely(ret))
++		wake_up_interruptible(&pgdat->kcompressd_wait);
++	else
++		put_page(page);
++
++	if (head)
++		kcompressd_do_swapout(head);
++
++	return ret;
++}
++
++/*
++ * kcompressd() - Kernel thread offloading page compression from kswapd
++ * @p: pg_data_t pointer for this node
++ */
++int kcompressd(void *p)
++{
++	pg_data_t *pgdat = (pg_data_t *)p;
++	struct page *page;
++
++	current->flags |= PF_MEMALLOC | PF_KSWAPD;
++
++	while (!kthread_should_stop()) {
++		wait_event_interruptible(pgdat->kcompressd_wait,
++				!kfifo_is_empty(&pgdat->kcompress_fifo));
++
++		while (kfifo_out_locked(&pgdat->kcompress_fifo,
++				&page, sizeof(page), &pgdat->kcompress_fifo_lock))
++			kcompressd_do_swapout(page);
++	}
++	return 0;
++}
++
+ /*
+@@ -201,2 +305,6 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
+ 	}
++
++	if (kcompressd_store(page))
++		return 0;
++
+ 	if (frontswap_store(page) == 0) {
