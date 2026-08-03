@@ -277,7 +277,7 @@
 + *
 + * Turn off to get the upstream shr_bound() relaxation.
 + */
-+SCHED_FEAT(LB_STRICT_BUDGET, true)
++SCHED_FEAT(LB_STRICT_BUDGET, false)
 +
  SCHED_FEAT(WA_IDLE, true)
  SCHED_FEAT(WA_WEIGHT, true)
