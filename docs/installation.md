@@ -84,6 +84,6 @@ Force reboot: Hold **Power** until screen goes black (~5s), then immediately hol
 
 ### Splash Screen Loop (5 Second Restart Cycle)
 
-Indicates a module conflict or incompatible root hook. fix: go to fastboot and flash the ROM boot.img.
+You're cooked if you didn't back up your ROM's `boot.img` (see the backup note at the top). Flash it back: `fastboot flash boot path-to-boot.img`. Root cause isn't always obvious, but if you jumped straight to a **testing build**, that's usually it — stick to the **stable build** in [Releases](https://github.com/superuseryu/kernel_sapphire_SM6225/releases).
 
 **If you need help:** You must have a **PC**, respond in **English** (minimal), and respond **fast**. DM [@superuseryu](https://t.me/home_yu_chat) directly — slow response = dropped support. This is a personal project; debug sessions are time-sensitive.
