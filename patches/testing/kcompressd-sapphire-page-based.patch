@@ -1,5 +1,5 @@
 diff --git a/include/linux/mmzone.h b/include/linux/mmzone.h
-index cfda5468f..9ac8daf87 100644
+index cfda5468f..4db47ab83 100644
 --- a/include/linux/mmzone.h
 +++ b/include/linux/mmzone.h
 @@ -24,6 +24,8 @@
@@ -11,19 +11,42 @@ index cfda5468f..9ac8daf87 100644
  /* Free memory management - zoned buddy allocator.  */
  #ifndef CONFIG_FORCE_MAX_ZONEORDER
  #define MAX_ORDER 11
-@@ -1072,6 +1074,12 @@ typedef struct pglist_data {
- 
- 	int kswapd_failures;		/* Number of 'reclaimed == 0' runs */
+@@ -1132,6 +1134,35 @@ typedef struct pglist_data {
+ 	atomic_long_t		vm_stat[NR_VM_NODE_STAT_ITEMS];
+ } pg_data_t;
  
 +#define KCOMPRESS_FIFO_SIZE 256
++
++struct kcompressd_data {
 +	wait_queue_head_t kcompressd_wait;
 +	struct task_struct *kcompressd;
 +	struct kfifo *kcompress_fifo;
 +	spinlock_t kcompress_fifo_lock;
++};
 +
- 	ANDROID_OEM_DATA(1);
- #ifdef CONFIG_COMPACTION
- 	int kcompactd_max_order;
++/*
++ * kcompressd state lives outside pglist_data on purpose: this tree's
++ * pg_data_t has exactly one spare slot (android_oem_data1, a plain
++ * pointer-sized u64), unlike struct zone's four dedicated
++ * ANDROID_KABI_RESERVE slots. Adding fields directly here would shift
++ * the offset of every field declared after them. Stash a heap pointer
++ * in the existing slot instead, so sizeof(pg_data_t) and every other
++ * field's offset stay identical to the unpatched tree.
++ */
++static inline struct kcompressd_data *pgdat_kcompressd(struct pglist_data *pgdat)
++{
++	return (struct kcompressd_data *)(unsigned long)pgdat->android_oem_data1;
++}
++
++static inline void pgdat_set_kcompressd(struct pglist_data *pgdat,
++		struct kcompressd_data *kcd)
++{
++	pgdat->android_oem_data1 = (u64)(unsigned long)kcd;
++}
++
+ #define node_present_pages(nid)	(NODE_DATA(nid)->node_present_pages)
+ #define node_spanned_pages(nid)	(NODE_DATA(nid)->node_spanned_pages)
+ #ifdef CONFIG_FLATMEM
 diff --git a/include/linux/swap.h b/include/linux/swap.h
 index fa17b770b..683e559cb 100644
 --- a/include/linux/swap.h
@@ -66,20 +89,8 @@ index ab19acc07..db2543149 100644
  #ifdef CONFIG_NUMA
  	{
  		.procname	= "numa_stat",
-diff --git a/mm/page_alloc.c b/mm/page_alloc.c
-index a5fb0cedb..d56d11ee3 100644
---- a/mm/page_alloc.c
-+++ b/mm/page_alloc.c
-@@ -7880,6 +7880,7 @@ static void __meminit pgdat_init_internals(struct pglist_data *pgdat)
- 	pgdat_init_kcompactd(pgdat);
- 
- 	init_waitqueue_head(&pgdat->kswapd_wait);
-+	init_waitqueue_head(&pgdat->kcompressd_wait);
- 	init_waitqueue_head(&pgdat->pfmemalloc_wait);
- 
- 	pgdat_page_ext_init(pgdat);
 diff --git a/mm/vmscan.c b/mm/vmscan.c
-index ddb2772e5..b30baf1a1 100644
+index ddb2772e5..2b5e2f86f 100644
 --- a/mm/vmscan.c
 +++ b/mm/vmscan.c
 @@ -18,6 +18,7 @@
@@ -104,39 +115,49 @@ index ddb2772e5..b30baf1a1 100644
  
  	if (pgdat->kswapd)
  		return;
-@@ -7346,6 +7350,31 @@ void kswapd_run(int nid)
+@@ -7346,6 +7350,41 @@ void kswapd_run(int nid)
  		pr_err("Failed to start kswapd on node %d\n", nid);
  		pgdat->kswapd = NULL;
  	}
 +
-+	pgdat->kcompress_fifo = kzalloc(sizeof(struct kfifo), GFP_KERNEL);
-+	if (!pgdat->kcompress_fifo)
-+		return;
-+	ret = kfifo_alloc(pgdat->kcompress_fifo,
-+			KCOMPRESS_FIFO_SIZE * sizeof(struct page *), GFP_KERNEL);
-+	if (ret) {
-+		pr_err("%s: fail to kfifo_alloc\n", __func__);
-+		kfree(pgdat->kcompress_fifo);
-+		pgdat->kcompress_fifo = NULL;
-+		return;
-+	}
-+	spin_lock_init(&pgdat->kcompress_fifo_lock);
-+	pgdat->kcompressd = kthread_create_on_node(kcompressd, pgdat, nid,
-+			"kcompressd%d", nid);
-+	if (IS_ERR(pgdat->kcompressd)) {
-+		pr_err("Failed to start kcompressd on node %d, ret=%ld\n",
-+				nid, PTR_ERR(pgdat->kcompressd));
-+		pgdat->kcompressd = NULL;
-+		kfifo_free(pgdat->kcompress_fifo);
-+		kfree(pgdat->kcompress_fifo);
-+		pgdat->kcompress_fifo = NULL;
-+	} else {
-+		wake_up_process(pgdat->kcompressd);
++	{
++		struct kcompressd_data *kcd;
++
++		kcd = kzalloc(sizeof(*kcd), GFP_KERNEL);
++		if (!kcd)
++			return;
++		init_waitqueue_head(&kcd->kcompressd_wait);
++		kcd->kcompress_fifo = kzalloc(sizeof(struct kfifo), GFP_KERNEL);
++		if (!kcd->kcompress_fifo) {
++			kfree(kcd);
++			return;
++		}
++		ret = kfifo_alloc(kcd->kcompress_fifo,
++				KCOMPRESS_FIFO_SIZE * sizeof(struct page *), GFP_KERNEL);
++		if (ret) {
++			pr_err("%s: fail to kfifo_alloc\n", __func__);
++			kfree(kcd->kcompress_fifo);
++			kfree(kcd);
++			return;
++		}
++		spin_lock_init(&kcd->kcompress_fifo_lock);
++		kcd->kcompressd = kthread_create_on_node(kcompressd, pgdat, nid,
++				"kcompressd%d", nid);
++		if (IS_ERR(kcd->kcompressd)) {
++			pr_err("Failed to start kcompressd on node %d, ret=%ld\n",
++					nid, PTR_ERR(kcd->kcompressd));
++			kfifo_free(kcd->kcompress_fifo);
++			kfree(kcd->kcompress_fifo);
++			kfree(kcd);
++			return;
++		}
++		pgdat_set_kcompressd(pgdat, kcd);
++		wake_up_process(kcd->kcompressd);
 +	}
  }
  
  /*
-@@ -7354,6 +7383,7 @@ void kswapd_run(int nid)
+@@ -7354,6 +7393,7 @@ void kswapd_run(int nid)
   */
  void kswapd_stop(int nid)
  {
@@ -144,29 +165,36 @@ index ddb2772e5..b30baf1a1 100644
  	struct task_struct *kswapd = NODE_DATA(nid)->kswapd;
  	bool skip = false;
  
-@@ -7364,6 +7394,13 @@ void kswapd_stop(int nid)
+@@ -7364,6 +7404,20 @@ void kswapd_stop(int nid)
  		kthread_stop(kswapd);
  		NODE_DATA(nid)->kswapd = NULL;
  	}
-+	if (pgdat->kcompressd) {
-+		kthread_stop(pgdat->kcompressd);
-+		pgdat->kcompressd = NULL;
-+		kfifo_free(pgdat->kcompress_fifo);
-+		kfree(pgdat->kcompress_fifo);
-+		pgdat->kcompress_fifo = NULL;
++	{
++		struct kcompressd_data *kcd = pgdat_kcompressd(pgdat);
++
++		if (kcd) {
++			if (kcd->kcompressd)
++				kthread_stop(kcd->kcompressd);
++			if (kcd->kcompress_fifo) {
++				kfifo_free(kcd->kcompress_fifo);
++				kfree(kcd->kcompress_fifo);
++			}
++			pgdat_set_kcompressd(pgdat, NULL);
++			kfree(kcd);
++		}
 +	}
  }
  
  static int __init kswapd_init(void)
 diff --git a/mm/page_io.c b/mm/page_io.c
-index df9e90588..df242d3c5 100644
+index df9e90588..c3762097e 100644
 --- a/mm/page_io.c
 +++ b/mm/page_io.c
 @@ -27,2 +27,3 @@
  #include <linux/sched/task.h>
 +#include <linux/kfifo.h>
  
-@@ -177,2 +178,105 @@ int generic_swapfile_activate(struct swap_info_struct *sis,
+@@ -177,2 +178,107 @@ int generic_swapfile_activate(struct swap_info_struct *sis,
  
 +/*
 + * do_swapout() - Write a page to swap space (used by kcompressd)
@@ -210,6 +238,7 @@ index df9e90588..df242d3c5 100644
 +static bool kcompressd_store(struct page *page)
 +{
 +	pg_data_t *pgdat = NODE_DATA(numa_node_id());
++	struct kcompressd_data *kcd = pgdat_kcompressd(pgdat);
 +	unsigned int ret, sysctl_kcompressd = vm_kcompressd;
 +	struct page *head = NULL;
 +	unsigned long flags;
@@ -217,7 +246,7 @@ index df9e90588..df242d3c5 100644
 +	if (!current_is_kswapd())
 +		return false;
 +
-+	if (!sysctl_kcompressd || unlikely(!pgdat->kcompressd))
++	if (!sysctl_kcompressd || unlikely(!kcd) || unlikely(!kcd->kcompressd))
 +		return false;
 +
 +	if (!PageAnon(page))
@@ -227,19 +256,19 @@ index df9e90588..df242d3c5 100644
 +	 * If the fifo is full, synchronously swap out the head page
 +	 * currently queued to make room for this one.
 +	 */
-+	spin_lock_irqsave(&pgdat->kcompress_fifo_lock, flags);
-+	if (kfifo_len(pgdat->kcompress_fifo) >= sysctl_kcompressd * sizeof(page) &&
-+			unlikely(!kfifo_out(pgdat->kcompress_fifo, &head, sizeof(page)))) {
-+		spin_unlock_irqrestore(&pgdat->kcompress_fifo_lock, flags);
++	spin_lock_irqsave(&kcd->kcompress_fifo_lock, flags);
++	if (kfifo_len(kcd->kcompress_fifo) >= sysctl_kcompressd * sizeof(page) &&
++			unlikely(!kfifo_out(kcd->kcompress_fifo, &head, sizeof(page)))) {
++		spin_unlock_irqrestore(&kcd->kcompress_fifo_lock, flags);
 +		return false;
 +	}
-+	spin_unlock_irqrestore(&pgdat->kcompress_fifo_lock, flags);
++	spin_unlock_irqrestore(&kcd->kcompress_fifo_lock, flags);
 +
 +	get_page(page);
 +
-+	ret = kfifo_in(pgdat->kcompress_fifo, &page, sizeof(page));
++	ret = kfifo_in(kcd->kcompress_fifo, &page, sizeof(page));
 +	if (likely(ret))
-+		wake_up_interruptible(&pgdat->kcompressd_wait);
++		wake_up_interruptible(&kcd->kcompressd_wait);
 +	else
 +		put_page(page);
 +
@@ -256,23 +285,24 @@ index df9e90588..df242d3c5 100644
 +int kcompressd(void *p)
 +{
 +	pg_data_t *pgdat = (pg_data_t *)p;
++	struct kcompressd_data *kcd = pgdat_kcompressd(pgdat);
 +	struct page *page;
 +
 +	current->flags |= PF_MEMALLOC | PF_KSWAPD;
 +
 +	while (!kthread_should_stop()) {
-+		wait_event_interruptible(pgdat->kcompressd_wait,
-+				!kfifo_is_empty(pgdat->kcompress_fifo));
++		wait_event_interruptible(kcd->kcompressd_wait,
++				!kfifo_is_empty(kcd->kcompress_fifo));
 +
-+		while (kfifo_out_locked(pgdat->kcompress_fifo,
-+				&page, sizeof(page), &pgdat->kcompress_fifo_lock))
++		while (kfifo_out_locked(kcd->kcompress_fifo,
++				&page, sizeof(page), &kcd->kcompress_fifo_lock))
 +			kcompressd_do_swapout(page);
 +	}
 +	return 0;
 +}
 +
  /*
-@@ -201,2 +305,6 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
+@@ -201,2 +307,6 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
  	}
 +
 +	if (kcompressd_store(page))
