@@ -130,6 +130,15 @@ elif [ "$MODE" = "check" ]; then
   fi
 
   MSG="${MSG}%0A%0A<b>🔗</b> <a href='${RUN_URL}'>Run details</a>"
+
+  if [ -n "${CHECK_FAILED:-}" ]; then
+    MSG="${MSG}%0A%0A<b>⚠️ Couldn't fetch this run (kept last known pin, not treated as an update):</b>%0A"
+    while IFS= read -r LINE; do
+      [ -z "$LINE" ] && continue
+      MSG="${MSG}▸ ${LINE}%0A"
+    done <<< "$CHECK_FAILED"
+  fi
+
   _tg_msg "$MSG"
 
 elif [ "$MODE" = "variant-failure" ]; then
