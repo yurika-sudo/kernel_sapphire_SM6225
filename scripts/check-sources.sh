@@ -59,11 +59,49 @@ PIN_SUKI=$(_pin "suki_tag")
 PIN_SUSFS=$(_pin "susfs_tag")
 
 UPDATES=()
-[ "$GKI_SUB"  != "$PIN_GKI"   ] && UPDATES+=("GKI: ${PIN_GKI} → ${GKI_SUB}")
-[ "$CLO_SUB"  != "$PIN_CLO"   ] && UPDATES+=("CLO: ${PIN_CLO} → ${CLO_SUB}")
-[ "$KSUN_TAG" != "$PIN_KSUN"  ] && UPDATES+=("KSU-Next: ${PIN_KSUN} → ${KSUN_TAG}")
-[ "$SUKI_TAG" != "$PIN_SUKI"  ] && UPDATES+=("SukiSU: ${PIN_SUKI} → ${SUKI_TAG}")
-[ "$SUSFS_TAG" != "$PIN_SUSFS" ] && UPDATES+=("SUSFS: ${PIN_SUSFS} → ${SUSFS_TAG}")
+FAILED=()
+
+# A fetch that failed reports the literal string "unknown" (see _curl/awk fallbacks
+# above) — that's a signal this run couldn't reach upstream, not a real version.
+# Comparing it against the pin as if it were a legitimate value caused false
+# "update available" notifications, and — since the workflow unconditionally commits
+# CHECK_<X> whenever HAS_UPDATE=true — could push "unknown" into source-pins.json for
+# real on a bad run. On failure, keep the last known-good pin and report the failure
+# separately instead, so it's visible without being treated as an update.
+if [ "$GKI_SUB" = "unknown" ]; then
+  FAILED+=("GKI"); GKI_SUB="$PIN_GKI"
+elif [ "$GKI_SUB" != "$PIN_GKI" ]; then
+  UPDATES+=("GKI: ${PIN_GKI} → ${GKI_SUB}")
+fi
+
+if [ "$CLO_SUB" = "unknown" ]; then
+  FAILED+=("CLO"); CLO_SUB="$PIN_CLO"
+elif [ "$CLO_SUB" != "$PIN_CLO" ]; then
+  UPDATES+=("CLO: ${PIN_CLO} → ${CLO_SUB}")
+fi
+
+if [ "$KSUN_TAG" = "unknown" ]; then
+  FAILED+=("KSU-Next"); KSUN_TAG="$PIN_KSUN"
+elif [ "$KSUN_TAG" != "$PIN_KSUN" ]; then
+  UPDATES+=("KSU-Next: ${PIN_KSUN} → ${KSUN_TAG}")
+fi
+
+if [ "$SUKI_TAG" = "unknown" ]; then
+  FAILED+=("SukiSU"); SUKI_TAG="$PIN_SUKI"
+elif [ "$SUKI_TAG" != "$PIN_SUKI" ]; then
+  UPDATES+=("SukiSU: ${PIN_SUKI} → ${SUKI_TAG}")
+fi
+
+if [ "$SUSFS_TAG" = "unknown" ]; then
+  FAILED+=("SUSFS"); SUSFS_TAG="$PIN_SUSFS"
+elif [ "$SUSFS_TAG" != "$PIN_SUSFS" ]; then
+  UPDATES+=("SUSFS: ${PIN_SUSFS} → ${SUSFS_TAG}")
+fi
+
+if [ ${#FAILED[@]} -gt 0 ]; then
+  echo "[WARN] Could not fetch (kept last known-good pin): ${FAILED[*]}"
+fi
+FAILED_DETAIL=$(printf '%s\n' "${FAILED[@]}")
 
 if [ ${#UPDATES[@]} -gt 0 ]; then
   echo "Updates detected:"
@@ -86,6 +124,9 @@ fi
   # Multi-line value for GITHUB_ENV
   echo "UPDATE_DETAIL<<EOF"
   echo "$UPDATE_DETAIL"
+  echo "EOF"
+  echo "CHECK_FAILED<<EOF"
+  echo "$FAILED_DETAIL"
   echo "EOF"
 } >> "${GITHUB_ENV:-/dev/null}"
 
