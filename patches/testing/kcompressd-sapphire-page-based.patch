@@ -1,23 +1,24 @@
 diff --git a/include/linux/mmzone.h b/include/linux/mmzone.h
-index cfda5468f..13b2c1e32 100644
+index cfda5468f..9ac8daf87 100644
 --- a/include/linux/mmzone.h
 +++ b/include/linux/mmzone.h
-@@ -22,6 +22,7 @@
- #include <linux/page-flags.h>
- #include <linux/local_lock.h>
+@@ -24,6 +24,8 @@
  #include <linux/android_kabi.h>
-+#include <linux/kfifo.h>
  #include <asm/page.h>
  
++struct kfifo;
++
  /* Free memory management - zoned buddy allocator.  */
-@@ -1072,6 +1073,12 @@ typedef struct pglist_data {
+ #ifndef CONFIG_FORCE_MAX_ZONEORDER
+ #define MAX_ORDER 11
+@@ -1072,6 +1074,12 @@ typedef struct pglist_data {
  
  	int kswapd_failures;		/* Number of 'reclaimed == 0' runs */
  
 +#define KCOMPRESS_FIFO_SIZE 256
 +	wait_queue_head_t kcompressd_wait;
 +	struct task_struct *kcompressd;
-+	struct kfifo kcompress_fifo;
++	struct kfifo *kcompress_fifo;
 +	spinlock_t kcompress_fifo_lock;
 +
  	ANDROID_OEM_DATA(1);
@@ -78,10 +79,18 @@ index a5fb0cedb..d56d11ee3 100644
  
  	pgdat_page_ext_init(pgdat);
 diff --git a/mm/vmscan.c b/mm/vmscan.c
-index ddb2772e5..11f770ed8 100644
+index ddb2772e5..b30baf1a1 100644
 --- a/mm/vmscan.c
 +++ b/mm/vmscan.c
-@@ -7328,10 +7328,13 @@ unsigned long shrink_all_memory(unsigned long nr_to_reclaim)
+@@ -18,6 +18,7 @@
+ #include <linux/gfp.h>
+ #include <linux/kernel_stat.h>
+ #include <linux/swap.h>
++#include <linux/kfifo.h>
+ #include <linux/pagemap.h>
+ #include <linux/init.h>
+ #include <linux/highmem.h>
+@@ -7328,10 +7329,13 @@ unsigned long shrink_all_memory(unsigned long nr_to_reclaim)
   * This kswapd start function will be called by init and node-hot-add.
   * On node-hot-add, kswapd will moved to proper cpus if cpus are hot-added.
   */
@@ -95,15 +104,20 @@ index ddb2772e5..11f770ed8 100644
  
  	if (pgdat->kswapd)
  		return;
-@@ -7346,6 +7349,24 @@ void kswapd_run(int nid)
+@@ -7346,6 +7350,31 @@ void kswapd_run(int nid)
  		pr_err("Failed to start kswapd on node %d\n", nid);
  		pgdat->kswapd = NULL;
  	}
 +
-+	ret = kfifo_alloc(&pgdat->kcompress_fifo,
++	pgdat->kcompress_fifo = kzalloc(sizeof(struct kfifo), GFP_KERNEL);
++	if (!pgdat->kcompress_fifo)
++		return;
++	ret = kfifo_alloc(pgdat->kcompress_fifo,
 +			KCOMPRESS_FIFO_SIZE * sizeof(struct page *), GFP_KERNEL);
 +	if (ret) {
 +		pr_err("%s: fail to kfifo_alloc\n", __func__);
++		kfree(pgdat->kcompress_fifo);
++		pgdat->kcompress_fifo = NULL;
 +		return;
 +	}
 +	spin_lock_init(&pgdat->kcompress_fifo_lock);
@@ -113,14 +127,16 @@ index ddb2772e5..11f770ed8 100644
 +		pr_err("Failed to start kcompressd on node %d, ret=%ld\n",
 +				nid, PTR_ERR(pgdat->kcompressd));
 +		pgdat->kcompressd = NULL;
-+		kfifo_free(&pgdat->kcompress_fifo);
++		kfifo_free(pgdat->kcompress_fifo);
++		kfree(pgdat->kcompress_fifo);
++		pgdat->kcompress_fifo = NULL;
 +	} else {
 +		wake_up_process(pgdat->kcompressd);
 +	}
  }
  
  /*
-@@ -7354,6 +7375,7 @@ void kswapd_run(int nid)
+@@ -7354,6 +7383,7 @@ void kswapd_run(int nid)
   */
  void kswapd_stop(int nid)
  {
@@ -128,20 +144,22 @@ index ddb2772e5..11f770ed8 100644
  	struct task_struct *kswapd = NODE_DATA(nid)->kswapd;
  	bool skip = false;
  
-@@ -7364,6 +7386,11 @@ void kswapd_stop(int nid)
+@@ -7364,6 +7394,13 @@ void kswapd_stop(int nid)
  		kthread_stop(kswapd);
  		NODE_DATA(nid)->kswapd = NULL;
  	}
 +	if (pgdat->kcompressd) {
 +		kthread_stop(pgdat->kcompressd);
 +		pgdat->kcompressd = NULL;
-+		kfifo_free(&pgdat->kcompress_fifo);
++		kfifo_free(pgdat->kcompress_fifo);
++		kfree(pgdat->kcompress_fifo);
++		pgdat->kcompress_fifo = NULL;
 +	}
  }
  
  static int __init kswapd_init(void)
 diff --git a/mm/page_io.c b/mm/page_io.c
-index df9e90588..6e554421d 100644
+index df9e90588..df242d3c5 100644
 --- a/mm/page_io.c
 +++ b/mm/page_io.c
 @@ -27,2 +27,3 @@
@@ -210,8 +228,8 @@ index df9e90588..6e554421d 100644
 +	 * currently queued to make room for this one.
 +	 */
 +	spin_lock_irqsave(&pgdat->kcompress_fifo_lock, flags);
-+	if (kfifo_len(&pgdat->kcompress_fifo) >= sysctl_kcompressd * sizeof(page) &&
-+			unlikely(!kfifo_out(&pgdat->kcompress_fifo, &head, sizeof(page)))) {
++	if (kfifo_len(pgdat->kcompress_fifo) >= sysctl_kcompressd * sizeof(page) &&
++			unlikely(!kfifo_out(pgdat->kcompress_fifo, &head, sizeof(page)))) {
 +		spin_unlock_irqrestore(&pgdat->kcompress_fifo_lock, flags);
 +		return false;
 +	}
@@ -219,7 +237,7 @@ index df9e90588..6e554421d 100644
 +
 +	get_page(page);
 +
-+	ret = kfifo_in(&pgdat->kcompress_fifo, &page, sizeof(page));
++	ret = kfifo_in(pgdat->kcompress_fifo, &page, sizeof(page));
 +	if (likely(ret))
 +		wake_up_interruptible(&pgdat->kcompressd_wait);
 +	else
@@ -244,9 +262,9 @@ index df9e90588..6e554421d 100644
 +
 +	while (!kthread_should_stop()) {
 +		wait_event_interruptible(pgdat->kcompressd_wait,
-+				!kfifo_is_empty(&pgdat->kcompress_fifo));
++				!kfifo_is_empty(pgdat->kcompress_fifo));
 +
-+		while (kfifo_out_locked(&pgdat->kcompress_fifo,
++		while (kfifo_out_locked(pgdat->kcompress_fifo,
 +				&page, sizeof(page), &pgdat->kcompress_fifo_lock))
 +			kcompressd_do_swapout(page);
 +	}
