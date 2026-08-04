@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build-summary.sh — write detailed build summary to Runner + save to file for audit zip
 # env: BUILD_TYPE, ZIP_MODE, REPO, SHA, RELEASE_TAG, RELEASE_URL,
-#      KSUN_TAG, SUKI_TAG, SUSFS_VERSION, SUSFS_MODULE_URL,
+#      KSUN_TAG, SUKI_TAG, KSUN_MANAGER_URL, SUKI_MANAGER_URL, SUSFS_VERSION, SUSFS_MODULE_URL,
 #      KERNEL_VERSION, GITHUB_RUN_NUMBER, GITHUB_STEP_SUMMARY
 set -e
 
@@ -44,8 +44,8 @@ SUMMARY="${SUMMARY}| **Pack mode** | ${ZIP_MODE:-per-variant} |"$'\n\n'
 SUMMARY="${SUMMARY}## 📦 KSU / SUSFS Versions"$'\n\n'
 SUMMARY="${SUMMARY}| Component | Version | Link |"$'\n'
 SUMMARY="${SUMMARY}|-----------|---------|------|"$'\n'
-SUMMARY="${SUMMARY}| KSU-Next | \`${KSUN_TAG}\` | [Releases](https://github.com/KernelSU-Next/KernelSU-Next/releases/tag/${KSUN_TAG}) |"$'\n'
-SUMMARY="${SUMMARY}| SukiSU-Ultra | \`${SUKI_TAG}\` | [Releases](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases/tag/${SUKI_TAG}) |"$'\n'
+SUMMARY="${SUMMARY}| KSU-Next | \`${KSUN_TAG}\` | [Dev Build ↗](${KSUN_MANAGER_URL}) |"$'\n'
+SUMMARY="${SUMMARY}| SukiSU-Ultra | \`${SUKI_TAG}\` | [Main Build ↗](${SUKI_MANAGER_URL}) |"$'\n'
 SUMMARY="${SUMMARY}| SUSFS module | \`${SUSFS_VERSION}\` | [Download](${SUSFS_MODULE_URL}) |"$'\n\n'
 
 SUMMARY="${SUMMARY}## ✨ Features"$'\n\n'
@@ -55,7 +55,7 @@ SUMMARY="${SUMMARY}- ADIOS I/O scheduler"$'\n'
 SUMMARY="${SUMMARY}- Reflex cpufreq governor"$'\n'
 SUMMARY="${SUMMARY}- BBRv3 + Westwood TCP (BBRv3 default)"$'\n'
 SUMMARY="${SUMMARY}- ntsync"$'\n'
-SUMMARY="${SUMMARY}- ZRAM multi-comp (base); zram-ir in \`patches/testing/\`"$'\n'
+SUMMARY="${SUMMARY}- ZRAM multi-comp + zram-ir — **optional**, requires flashing the matching \`zram-multicomp-<variant>.zip\` module (\`CONFIG_ZRAM=m\`, doesn't ship inside the AnyKernel3 zip)"$'\n'
 SUMMARY="${SUMMARY}- BBG (Ksun variants)"$'\n'
 SUMMARY="${SUMMARY}- KPM support (SukiSU variants)"$'\n'
 SUMMARY="${SUMMARY}- Thin LTO · HZ=300 · Droidspaces"$'\n\n'
