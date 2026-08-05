@@ -42,16 +42,16 @@ jobs:
 
           - name:      "GKI-Compat-SukiSU"
             source:    "gki-compat"
-            ksu:       "suki"
+            ksu:       "sksu"
             prefix:    "GKIC_SukiSU"
-            artifact:  "gkicompat-suki"
+            artifact:  "gkicompat-sksu"
             defconfig: "gki_defconfig"
 
           - name:      "GKI-Compat-NoKSU"
             source:    "gki-compat"
             ksu:       "none"
             prefix:    "GKIC_NoKSU"
-            artifact:  "gkicompat-noksu"
+            artifact:  "gkicompat-nksu"
             defconfig: "gki_defconfig"
 
     uses: ./.github/workflows/build-kernel.yml
