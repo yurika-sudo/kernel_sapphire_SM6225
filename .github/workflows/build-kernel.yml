@@ -5,7 +5,7 @@ on:
     inputs:
       variant_name:  { type: string, required: true }
       source_type:   { type: string, required: true }   # gki | clo
-      ksu_type:      { type: string, required: true }   # ksun | suki | none
+      ksu_type:      { type: string, required: true }   # ksun | sksu | none
       zip_prefix:    { type: string, required: true }
       artifact_name: { type: string, required: true }
       defconfig:     { type: string, required: true }
@@ -177,7 +177,7 @@ jobs:
         run: bash scripts/verify-kernel.sh
 
       - name: "💉 KPM patch"
-        if: inputs.ksu_type == 'suki'
+        if: inputs.ksu_type == 'sksu'
         working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
           curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" \
