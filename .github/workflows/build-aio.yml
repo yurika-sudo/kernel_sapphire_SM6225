@@ -50,16 +50,16 @@ jobs:
 
           - name:      "GKI-SukiSU"
             source:    "gki"
-            ksu:       "suki"
+            ksu:       "sksu"
             prefix:    "GKI_SukiSU"
-            artifact:  "gki-suki"
+            artifact:  "gki-sksu"
             defconfig: "gki_defconfig"
 
           - name:      "GKI-NoKSU"
             source:    "gki"
             ksu:       "none"
             prefix:    "GKI_NoKSU"
-            artifact:  "gki-noksu"
+            artifact:  "gki-nksu"
             defconfig: "gki_defconfig"
 
           - name:      "CLO-Ksun"
@@ -72,9 +72,9 @@ jobs:
 
           - name:      "CLO-SukiSU"
             source:    "clo"
-            ksu:       "suki"
+            ksu:       "sksu"
             prefix:    "CLO_SukiSU"
-            artifact:  "clo-suki"
+            artifact:  "clo-sksu"
             defconfig: "gki_defconfig"
             clo_fragment: "vendor/bengal_GKI.config"
 
@@ -82,7 +82,7 @@ jobs:
             source:    "clo"
             ksu:       "none"
             prefix:    "CLO_NoKSU"
-            artifact:  "clo-noksu"
+            artifact:  "clo-nksu"
             defconfig: "gki_defconfig"
             clo_fragment: "vendor/bengal_GKI.config"
 
