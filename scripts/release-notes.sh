@@ -54,7 +54,7 @@ BODY="${BODY}> **ZRAM module should match your flashed variant** (e.g. \`zram-mu
 
 BODY="${BODY}**Commit:** [\`${SHORT_SHA}\`](${COMMIT_URL})"$'\n'
 BODY="${BODY}📋 **Per-build details:** [Run #${GITHUB_RUN_NUMBER} summary](${RUN_URL})"$'\n'
-BODY="${BODY}> Full build logs in \`build-audit-logs-*.zip\` below."
+BODY="${BODY}> Full build logs in \`build-log-run*.zip\` below."
 
 {
   echo "RELEASE_BODY<<EOREL"
