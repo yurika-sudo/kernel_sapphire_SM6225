@@ -13,7 +13,7 @@ _SUSFS_COMMIT="${SUSFS_COMMIT:-latest}"
 
 case "$KSU_TYPE" in
   ksun) KSU_LABEL="KSU-Next";      BBG="✅"; KPM="❌";                       SUSFS_NOTE="simonpunk/susfs4ksu @ $_SUSFS_COMMIT" ;;
-  suki) KSU_LABEL="SukiSU-Ultra";  BBG="❌"; KPM="✅ KPM binary + CONFIG_KPM"; SUSFS_NOTE="ShirkNeko/susfs4ksu @ $_SUSFS_COMMIT" ;;
+  sksu) KSU_LABEL="SukiSU-Ultra";  BBG="❌"; KPM="✅ KPM binary + CONFIG_KPM"; SUSFS_NOTE="ShirkNeko/susfs4ksu @ $_SUSFS_COMMIT" ;;
   none) KSU_LABEL="None (vanilla)"; BBG="❌"; KPM="❌";                       SUSFS_NOTE="—" ;;
 esac
 
@@ -30,7 +30,7 @@ echo "  Kernel   : $KV"
 echo "  Source   : $SOURCE_TYPE"
 echo "  KSU      : $KSU_LABEL"
 [ "$KSU_TYPE" = "ksun" ] && echo "  KSU-Next : $KSUN_V"
-[ "$KSU_TYPE" = "suki" ] && echo "  Suki ver : $SUKI_V"
+[ "$KSU_TYPE" = "sksu" ] && echo "  Suki ver : $SUKI_V"
 echo "  SUSFS    : $SUSFS_NOTE"
 echo "  BBG      : $BBG"
 echo "  KPM      : $KPM"
