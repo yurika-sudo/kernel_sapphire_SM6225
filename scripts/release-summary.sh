@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-summary.sh — write detailed build summary to Runner + save to file for audit zip
+# build-summary.sh — write detailed build summary to Runner + save to file for the build log zip
 # env: BUILD_TYPE, ZIP_MODE, REPO, SHA, RELEASE_TAG, RELEASE_URL,
 #      KSUN_TAG, SUKI_TAG, KSUN_MANAGER_URL, SUKI_MANAGER_URL, SUSFS_VERSION, SUSFS_MODULE_URL,
 #      KERNEL_VERSION, GITHUB_RUN_NUMBER, GITHUB_STEP_SUMMARY
@@ -68,13 +68,13 @@ SUMMARY="${SUMMARY}🔗 [Release page](${RELEASE_URL})"$'\n\n'
 
 SUMMARY="${SUMMARY}---"$'\n'
 SUMMARY="${SUMMARY}> ⏳ This Runner summary expires in **~1 day** (retention policy)."$'\n'
-SUMMARY="${SUMMARY}> 📥 Full details preserved in \`build-audit-logs-*.zip\` → extract \`build_summary.md\`."
+SUMMARY="${SUMMARY}> 📥 Full details preserved in \`build-log-run*.zip\` → extract \`build_summary.md\`."
 
 # Write to Runner summary
 echo "$SUMMARY" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 
-# Save copy for audit zip (picked up by audit-logs.sh)
-mkdir -p ./audit_logs
-echo "$SUMMARY" > ./audit_logs/build_summary.md
+# Save copy for the build log zip (picked up by build-logs.sh)
+mkdir -p ./logs
+echo "$SUMMARY" > ./logs/build_summary.md
 
 echo "[OK] Build summary written"
