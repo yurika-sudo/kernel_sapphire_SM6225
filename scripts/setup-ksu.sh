@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # setup-ksu.sh — integrate KSU variant + SUSFS into kernel source
-# env: KSU_TYPE (ksun|suki|none), KERNEL_DIR, WORK_DIR
+# env: KSU_TYPE (ksun|sksu|none), KERNEL_DIR, WORK_DIR
 set -e
 
 : "${KSU_TYPE:?}"
@@ -111,7 +111,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   rm -rf susfs4ksu
 
 # SukiSU-Ultra
-elif [ "$KSU_TYPE" = "suki" ]; then
+elif [ "$KSU_TYPE" = "sksu" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu
   curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" \
     | bash -s builtin
