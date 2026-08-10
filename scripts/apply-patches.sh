@@ -28,7 +28,6 @@ apply_patch "$BASE/disable_cache_hot_buddy.patch"                  "disable_cach
 apply_patch "$BASE/f2fs_enlarge_min_fsync_blocks.patch"            "f2fs_enlarge_min_fsync_blocks"
 apply_patch "$BASE/f2fs_reduce_congestion.patch"                   "f2fs_reduce_congestion"
 apply_patch "$BASE/file_struct_8bytes_align.patch"                 "file_struct_8bytes_align"
-apply_patch "$BASE/force_tcp_nodelay.patch"                        "force_tcp_nodelay"
 apply_patch "$BASE/increase_ext4_default_commit_age.patch"         "increase_ext4_default_commit_age"
 apply_patch "$BASE/increase_sk_mem_packets.patch"                  "increase_sk_mem_packets"
 apply_patch "$BASE/int_sqrt.patch"                                 "int_sqrt"
