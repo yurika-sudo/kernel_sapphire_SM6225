@@ -64,10 +64,10 @@ index 000000000..798c8d541
 +CFLAGS_REMOVE_nap_fpu.o += -mgeneral-regs-only
 diff --git a/drivers/cpuidle/governors/nap/nap.c b/drivers/cpuidle/governors/nap/nap.c
 new file mode 100644
-index 000000000..a4a086c57
+index 000000000..b3c4b7bdd
 --- /dev/null
 +++ b/drivers/cpuidle/governors/nap/nap.c
-@@ -0,0 +1,587 @@
+@@ -0,0 +1,594 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * nap.c — Neural Adaptive Predictor cpuidle governor
@@ -119,6 +119,16 @@ index 000000000..a4a086c57
 +#define NAP_DEFAULT_INTERVAL      4     /* learn every 4 reflects */
 +#define NAP_DEFAULT_CLAMP_MILLTHS 1000  /* 1.0 = 1000 millths */
 +#define NAP_DEFAULT_CONF_MILLTHS  500   /* 0.5 = balanced survival confidence */
++
++/*
++ * Minimum target_residency for stop_tick=true, i.e. worth leaving the
++ * periodic tick stopped for.  Missing from the upstream v0.5.0 source
++ * (referenced but never defined -- confirmed absent from the full
++ * upstream patch, not just this tree).  Reuses TICK_NSEC, the same
++ * threshold menu.c/teo.c already use for their own stop_tick == false
++ * short-circuit (predicted_ns < TICK_NSEC) on this tree.
++ */
++#define RESIDENCY_THRESHOLD_NS    TICK_NSEC
 +
 +/* ================================================================
 + * Per-CPU data
@@ -592,15 +602,12 @@ index 000000000..a4a086c57
 +
 +int nap_sysfs_init(void)
 +{
-+	struct device *dev_root;
 +	int ret;
 +
-+	dev_root = bus_get_dev_root(&cpu_subsys);
-+	if (!dev_root)
++	if (!cpu_subsys.dev_root)
 +		return -ENODEV;
 +
-+	cpuidle_kobj = kobject_create_and_add("nap", &dev_root->kobj);
-+	put_device(dev_root);
++	cpuidle_kobj = kobject_create_and_add("nap", &cpu_subsys.dev_root->kobj);
 +	if (!cpuidle_kobj)
 +		return -ENOMEM;
 +
