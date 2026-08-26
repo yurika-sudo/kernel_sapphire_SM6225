@@ -104,6 +104,12 @@ jobs:
           DEFCONFIG:   ${{ inputs.defconfig }}
         run: bash scripts/apply-patches.sh
 
+      - name: 
+        working-directory: ${{ env.KERNEL_SRC }}
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh" \
+            | bash -s dev
+
       - name: "🛡️ Setup BBG"
         if: inputs.ksu_type == 'ksun'
         working-directory: ${{ env.KERNEL_SRC }}
