@@ -1,38 +1,46 @@
 diff --git a/include/linux/sched.h b/include/linux/sched.h
-index f12a13bee..a0d76de9e 100644
+index f12a13bee..cf2600d12 100644
 --- a/include/linux/sched.h
 +++ b/include/linux/sched.h
-@@ -584,6 +584,13 @@ struct sched_entity {
+@@ -582,6 +582,12 @@ struct sched_entity {
+ 	ANDROID_KABI_RESERVE(3);
+ 	ANDROID_KABI_RESERVE(4);
  #endif // CONFIG_SCHED_BORE
++
++        /* EEVDF fields — appended after BORE/KABI to preserve KMI */
++        u64                             eevdf_deadline;
++        u64                             eevdf_min_dl;
++        s64                             eevdf_vlag;
++        u64                             eevdf_slice;
  };
  
-+	/* EEVDF fields — appended after BORE/KABI to preserve KMI */
-+	u64				deadline;
-+	u64				min_deadline;
-+	s64				vlag;
-+	u64				slice;
-+
-+
  struct sched_rt_entity {
- 	struct list_head		run_list;
- 	unsigned long			timeout;
+@@ -627,7 +633,7 @@ struct sched_dl_entity {
+ 	 * the remaining runtime could be < 0 in case we are in overrun.
+ 	 */
+ 	s64				runtime;	/* Remaining runtime for this instance	*/
+-	u64				deadline;	/* Absolute deadline for this instance	*/
++	u64                             deadline;	/* Absolute deadline for this instance	*/
+ 	unsigned int			flags;		/* Specifying the scheduler behaviour	*/
+ 
+ 	/*
 diff --git a/kernel/sched/core.c b/kernel/sched/core.c
-index 90d974cd0..6fd494081 100644
+index 90d974cd0..ed9cd8144 100644
 --- a/kernel/sched/core.c
 +++ b/kernel/sched/core.c
 @@ -4503,6 +4503,10 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
  	p->se.prev_sum_exec_runtime	= 0;
  	p->se.nr_migrations		= 0;
  	p->se.vruntime			= 0;
-+	p->se.vlag			= 0;
-+	p->se.slice			= sysctl_sched_min_granularity;
-+	p->se.deadline			= 0;
-+	p->se.min_deadline		= 0;
++	p->se.eevdf_vlag			= 0;
++	p->se.eevdf_slice			= sysctl_sched_min_granularity;
++	p->se.eevdf_deadline			= 0;
++	p->se.eevdf_min_dl		= 0;
  #ifdef CONFIG_SCHED_BORE
  	sched_fork_bore(p);
  #endif // CONFIG_SCHED_BORE
 diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
-index 7001f69e2..436c0d493 100644
+index 7001f69e2..521f7afc5 100644
 --- a/kernel/sched/fair.c
 +++ b/kernel/sched/fair.c
 @@ -25,6 +25,7 @@
@@ -172,24 +180,24 @@ index 7001f69e2..436c0d493 100644
 +	if (node) {
 +		struct sched_entity *rse = __node_2_se(node);
 +		if (deadline_gt(min_deadline, se, rse))
-+			se->min_deadline = rse->min_deadline;
++			se->eevdf_min_dl = rse->eevdf_min_dl;
 +	}
 +}
 +
 +/*
-+ * se->min_deadline = min(se->deadline, left->min_deadline, right->min_deadline)
++ * se->eevdf_min_dl = min(se->eevdf_deadline, left->eevdf_min_dl, right->eevdf_min_dl)
 + * Returns true (early exit) when min_deadline hasn't changed.
 + */
 +static inline bool min_deadline_update(struct sched_entity *se, bool exit)
 +{
-+	u64 old_min_deadline = se->min_deadline;
++	u64 old_min_deadline = se->eevdf_min_dl;
 +	struct rb_node *node = &se->run_node;
 +
-+	se->min_deadline = se->deadline;
++	se->eevdf_min_dl = se->eevdf_deadline;
 +	__update_min_deadline(se, node->rb_right);
 +	__update_min_deadline(se, node->rb_left);
 +
-+	return exit && se->min_deadline == old_min_deadline;
++	return exit && se->eevdf_min_dl == old_min_deadline;
 +}
 +
 +RB_DECLARE_CALLBACKS(static, min_deadline_cb,
@@ -223,14 +231,14 @@ index 7001f69e2..436c0d493 100644
 +	 */
 +	key = entity_key(cfs_rq, se);
 +	if (unlikely(key > (1LL << 40) || key < -(1LL << 40))) {
-+		s64 offset = se->deadline - se->vruntime;
++		s64 offset = se->eevdf_deadline - se->vruntime;
 +
 +		se->vruntime = cfs_rq->min_vruntime;
-+		se->deadline = se->vruntime + (offset > 0 ? offset : 0);
++		se->eevdf_deadline = se->vruntime + (offset > 0 ? offset : 0);
 +	}
 +
 +	avg_vruntime_add(cfs_rq, se);
-+	se->min_deadline = se->deadline;
++	se->eevdf_min_dl = se->eevdf_deadline;
 +
 +	/*
 +	 * Find the right place in the rbtree:
@@ -308,15 +316,15 @@ index 7001f69e2..436c0d493 100644
 + */
 +static void update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
 +{
-+	if ((s64)(se->vruntime - se->deadline) < 0)
++	if ((s64)(se->vruntime - se->eevdf_deadline) < 0)
 +		return;
 +
 +	/*
 +	 * For EEVDF the virtual time slice is determined by the scheduling
 +	 * period — the same sched_slice() CFS already uses.
 +	 */
-+	se->slice = sched_slice(cfs_rq, se);
-+	se->deadline = se->vruntime + calc_delta_fair(se->slice, se);
++	se->eevdf_slice = sched_slice(cfs_rq, se);
++	se->eevdf_deadline = se->vruntime + calc_delta_fair(se->eevdf_slice, se);
 +
 +	/*
 +	 * The task has consumed its slice; if there are other runnable
@@ -376,8 +384,8 @@ index 7001f69e2..436c0d493 100644
 +	SCHED_WARN_ON(!se->on_rq);
 +	lag = avg_vruntime(cfs_rq) - se->vruntime;
 +
-+	limit = calc_delta_fair(max_t(u64, 2 * se->slice, TICK_NSEC), se);
-+	se->vlag = clamp(lag, -limit, limit);
++	limit = calc_delta_fair(max_t(u64, 2 * se->eevdf_slice, TICK_NSEC), se);
++	se->eevdf_vlag = clamp(lag, -limit, limit);
 +}
 +
  static inline bool entity_is_long_sleeper(struct sched_entity *se)
@@ -403,8 +411,8 @@ index 7001f69e2..436c0d493 100644
 +	u64 vslice, vruntime = avg_vruntime(cfs_rq);
 +	s64 lag = 0;
 +
-+	se->slice = sched_slice(cfs_rq, se);
-+	vslice = calc_delta_fair(se->slice, se);
++	se->eevdf_slice = sched_slice(cfs_rq, se);
++	vslice = calc_delta_fair(se->eevdf_slice, se);
  
  	/*
 -	 * The 'current' period is already promised to the current tasks,
@@ -423,7 +431,7 @@ index 7001f69e2..436c0d493 100644
 -	/* sleeps up to a single latency don't count. */
 -	if (!initial) {
 -		unsigned long thresh = sysctl_sched_latency;
-+		lag = se->vlag;
++		lag = se->eevdf_vlag;
  
  		/*
 -		 * Halve their sleep time's effect, to allow
@@ -480,7 +488,7 @@ index 7001f69e2..436c0d493 100644
 +	/*
 +	 * EEVDF virtual deadline: vd_i = ve_i + r_i / w_i
 +	 */
-+	se->deadline = se->vruntime + vslice;
++	se->eevdf_deadline = se->vruntime + vslice;
 +
  	trace_android_rvh_place_entity(cfs_rq, se, initial, &vruntime);
  }
@@ -492,7 +500,7 @@ index 7001f69e2..436c0d493 100644
 -	if (renorm && curr)
 +	if (renorm && curr) {
  		se->vruntime += cfs_rq->min_vruntime;
-+		se->deadline += cfs_rq->min_vruntime;
++		se->eevdf_deadline += cfs_rq->min_vruntime;
 +	}
  
  	update_curr(cfs_rq);
@@ -504,7 +512,7 @@ index 7001f69e2..436c0d493 100644
 -	if (renorm && !curr)
 +	if (renorm && !curr) {
  		se->vruntime += cfs_rq->min_vruntime;
-+		se->deadline += cfs_rq->min_vruntime;
++		se->eevdf_deadline += cfs_rq->min_vruntime;
 +	}
  
  	/*
@@ -532,7 +540,7 @@ index 7001f69e2..436c0d493 100644
 -	if (!(flags & DEQUEUE_SLEEP))
 +	if (!(flags & DEQUEUE_SLEEP)) {
  		se->vruntime -= cfs_rq->min_vruntime;
-+		se->deadline -= cfs_rq->min_vruntime;
++		se->eevdf_deadline -= cfs_rq->min_vruntime;
 +	}
  
  	/* return excess runtime on last dequeue */
@@ -617,7 +625,7 @@ index 7001f69e2..436c0d493 100644
 +	 * vlag == deadline to detect "deadline hasn't changed since pick",
 +	 * meaning the entity hasn't exhausted its slice yet.
 +	 */
-+	se->vlag = se->deadline;
++	se->eevdf_vlag = se->eevdf_deadline;
  }
  EXPORT_SYMBOL_GPL(set_next_entity);
  
@@ -662,7 +670,7 @@ index 7001f69e2..436c0d493 100644
 -	if (!left || (curr && entity_before(curr, left)))
 -		left = curr;
 +	if (sched_feat(RUN_TO_PARITY) && curr &&
-+	    curr->vlag == curr->deadline)
++	    curr->eevdf_vlag == curr->eevdf_deadline)
 +		return curr;
 +
 +	while (node) {
@@ -695,12 +703,12 @@ index 7001f69e2..436c0d493 100644
 +			 * the earliest-deadline entity is in the left subtree
 +			 * where all nodes are eligible. Switch to phase 2.
 +			 */
-+			if (left->min_deadline == se->min_deadline)
++			if (left->eevdf_min_dl == se->eevdf_min_dl)
 +				break;
 +		}
 +
 +		/* min_deadline is at this node itself. */
-+		if (se->deadline == se->min_deadline)
++		if (se->eevdf_deadline == se->eevdf_min_dl)
 +			break;
 +
 +		/* min_deadline is in the right subtree. */
@@ -716,7 +724,7 @@ index 7001f69e2..436c0d493 100644
 -	if (cfs_rq->skip && cfs_rq->skip == se) {
 -		struct sched_entity *second;
 +	if (!best_left ||
-+	    (s64)(best_left->min_deadline - best->deadline) > 0)
++	    (s64)(best_left->eevdf_min_dl - best->eevdf_deadline) > 0)
 +		return best;
  
 -		if (se == curr) {
@@ -733,12 +741,12 @@ index 7001f69e2..436c0d493 100644
 +	while (node) {
 +		struct sched_entity *se = __node_2_se(node);
 +
-+		if (se->deadline == se->min_deadline)
++		if (se->eevdf_deadline == se->eevdf_min_dl)
 +			return se;
 +
 +		if (node->rb_left &&
-+		    __node_2_se(node->rb_left)->min_deadline ==
-+		    se->min_deadline) {
++		    __node_2_se(node->rb_left)->eevdf_min_dl ==
++		    se->eevdf_min_dl) {
 +			node = node->rb_left;
 +			continue;
  		}
@@ -778,7 +786,7 @@ index 7001f69e2..436c0d493 100644
 +				cfs_rq->avg_load,
 +				cfs_rq->min_vruntime,
 +				left->vruntime,
-+				left->deadline,
++				left->eevdf_deadline,
 +				entity_eligible(cfs_rq, left),
 +				c ? c->on_rq : -1);
 +			return left;
@@ -819,7 +827,7 @@ index 7001f69e2..436c0d493 100644
  #endif
  
  		se->vruntime -= min_vruntime;
-+		se->deadline -= min_vruntime;
++		se->eevdf_deadline -= min_vruntime;
  	}
  
  	if (p->on_rq == TASK_ON_RQ_MIGRATING) {
@@ -914,7 +922,7 @@ index 7001f69e2..436c0d493 100644
 +	 *    vendor check_preempt_wakeup hook (AOSP, LineageOS, PixelExperience).
 +	 *    Guard: wakee must be eligible, gap must exceed wakeup_granularity.
 +	 */
-+	if ((s64)(pse->deadline - se->deadline) < 0) {
++	if ((s64)(pse->eevdf_deadline - se->eevdf_deadline) < 0) {
 +		if (!next_buddy_marked)
 +			set_next_buddy(pse);
 +		goto preempt;
@@ -930,7 +938,7 @@ index 7001f69e2..436c0d493 100644
  		se->vruntime = curr->vruntime;
  	}
 +	/* EEVDF: new task starts with zero lag. */
-+	se->vlag = 0;
++	se->eevdf_vlag = 0;
  #ifdef CONFIG_SCHED_BORE
  	update_burst_score(se);
  #endif // CONFIG_SCHED_BORE
@@ -938,12 +946,12 @@ index 7001f69e2..436c0d493 100644
  		 * 'current' within the tree based on its new key value.
  		 */
  		swap(curr->vruntime, se->vruntime);
-+		swap(curr->deadline, se->deadline);
++		swap(curr->eevdf_deadline, se->eevdf_deadline);
  		resched_curr(rq);
  	}
  
  	se->vruntime -= cfs_rq->min_vruntime;
-+	se->deadline -= cfs_rq->min_vruntime;
++	se->eevdf_deadline -= cfs_rq->min_vruntime;
  	rq_unlock(rq, &rf);
  }
  
@@ -951,7 +959,7 @@ index 7001f69e2..436c0d493 100644
  		 */
  		place_entity(cfs_rq, se, 0);
  		se->vruntime -= cfs_rq->min_vruntime;
-+		se->deadline -= cfs_rq->min_vruntime;
++		se->eevdf_deadline -= cfs_rq->min_vruntime;
  	}
  
  	detach_entity_cfs_rq(se);
@@ -962,7 +970,7 @@ index 7001f69e2..436c0d493 100644
 -	if (!vruntime_normalized(p))
 +	if (!vruntime_normalized(p)) {
  		se->vruntime += cfs_rq->min_vruntime;
-+		se->deadline += cfs_rq->min_vruntime;
++		se->eevdf_deadline += cfs_rq->min_vruntime;
 +	}
  }
  
