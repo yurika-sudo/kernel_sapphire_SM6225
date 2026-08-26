@@ -104,7 +104,7 @@ jobs:
           DEFCONFIG:   ${{ inputs.defconfig }}
         run: bash scripts/apply-patches.sh
 
-      - name: 
+      - name: "🚫 Setup NoMount"
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           curl -LSs "https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh" \
