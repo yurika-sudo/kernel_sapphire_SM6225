@@ -953,18 +953,16 @@ index 7f8dace09..1cc57e181 100644
  /*
   * Prefer to schedule the task we woke last (assuming it failed
 diff --git a/kernel/sched/sched.h b/kernel/sched/sched.h
-index 509643bd0..6c6712cb1 100644
+index 509643bd0..75342e3c0 100644
 --- a/kernel/sched/sched.h
 +++ b/kernel/sched/sched.h
-@@ -1137,6 +1137,11 @@ struct rq {
- 	ANDROID_KABI_RESERVE(2);
- 	ANDROID_KABI_RESERVE(3);
- 	ANDROID_KABI_RESERVE(4);
-+
-+
+@@ -631,6 +631,9 @@ struct cfs_rq {
+ 	struct list_head	throttled_list;
+ #endif /* CONFIG_CFS_BANDWIDTH */
+ #endif /* CONFIG_FAIR_GROUP_SCHED */
 +	/* EEVDF fields — appended at end to preserve KMI/ABI layout */
 +	s64			eevdf_avg_vruntime;
 +	long			eevdf_avg_load;
  };
  
- #ifdef CONFIG_FAIR_GROUP_SCHED
+ static inline int rt_bandwidth_enabled(void)
