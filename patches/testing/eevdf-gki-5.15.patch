@@ -1,21 +1,20 @@
 diff --git a/include/linux/sched.h b/include/linux/sched.h
-index f12a13bee..dd4b8e769 100644
+index f12a13bee..ba689d1d2 100644
 --- a/include/linux/sched.h
 +++ b/include/linux/sched.h
-@@ -584,6 +584,13 @@ struct sched_entity {
+@@ -582,6 +582,12 @@ struct sched_entity {
+ 	ANDROID_KABI_RESERVE(3);
+ 	ANDROID_KABI_RESERVE(4);
  #endif // CONFIG_SCHED_BORE
- };
- 
++
 +	/* EEVDF fields — appended after BORE/KABI to preserve KMI */
 +	u64				eevdf_deadline;
 +	u64				eevdf_min_dl;
 +	s64				eevdf_vlag;
 +	u64				eevdf_slice;
-+
-+
+ };
+ 
  struct sched_rt_entity {
- 	struct list_head		run_list;
- 	unsigned long			timeout;
 diff --git a/kernel/sched/core.c b/kernel/sched/core.c
 index 90d974cd0..91edf6896 100644
 --- a/kernel/sched/core.c
