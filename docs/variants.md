@@ -56,11 +56,17 @@
 
 The kernel ships zram-ir/multi-comp support baked in, but `CONFIG_ZRAM=m` means `zram.ko`/`zsmalloc.ko` build as loadable modules — they don't reach the device via the AK3 kernel-image ZIP alone. A separate KSU/Magisk module carries them.
 
+> ⚠️ **Kernel ZIP alone = no ZRAM at all**, on every variant. This isn't "multi-comp missing" — `zram0` doesn't come up at all until this module loads `zram.ko`/`zsmalloc.ko` for you. Flashing just the kernel and expecting ZRAM/swap to work is the single most common source of "why is my RAM management worse than before" reports.
+
 **What it does:** loads `zram.ko` + `zsmalloc.ko` with multi-comp + zram-ir tiered recompression at `post-fs-data`.
 
 **Get it — 2 ways:**
 - **GitHub Release:** attached as `zram-multicomp-<variant>.zip` alongside the kernel ZIP.
 - **Telegram:** sent automatically to the same channel as build/manager updates — [t.me/tmplogchat](https://t.me/tmplogchat).
+
+**Requires a module manager** — it's a KSU/Magisk module, installed through the manager app, not flashed from recovery.
+- **GKI-Ksun/SukiSU or CLO-Ksun/SukiSU:** you already need the matching manager APK for root (see [Manager](./installation.md#manager)) — install the zram module the same way.
+- **NoKSU:** the kernel has no root/manager baked in. Root separately first — Magisk (patch `boot.img`) or a boot.img-patched KSU-Next/SukiSU-Ultra — then install this module from that manager's Modules tab.
 
 > **Must match your flashed variant exactly** (e.g. `zram-multicomp-gki-ksun.zip` for GKI-KSU-Next). Wrong variant safely no-ops — the module just won't load, no harm — but you also won't get multi-comp/zram-ir. Check status via the module's **Action** button after install.
 
