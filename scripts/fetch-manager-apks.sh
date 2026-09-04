@@ -15,11 +15,23 @@ _fetch() {
   local tmp="/tmp/mgr_${label}"
   mkdir -p "$tmp"
 
-  curl -sfL --max-time 60 --location \
-    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-    -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/repos/${repo}/actions/artifacts/${artifact_id}/zip" \
-    -o "${tmp}/artifact.zip" || { echo "[WARN] Fetch failed for $label — skipping"; return 0; }
+  local attempt ok=0
+  for attempt in 1 2 3; do
+    if curl -sfL --max-time 60 --location \
+      -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+      -H "Accept: application/vnd.github+json" \
+      "https://api.github.com/repos/${repo}/actions/artifacts/${artifact_id}/zip" \
+      -o "${tmp}/artifact.zip"; then
+      ok=1
+      break
+    fi
+    echo "[WARN] Fetch attempt ${attempt}/3 failed for $label — retrying in 5s"
+    sleep 5
+  done
+  if [ "$ok" -ne 1 ]; then
+    echo "[WARN] Fetch failed for $label after 3 attempts — skipping"
+    return 0
+  fi
 
   unzip -j "${tmp}/artifact.zip" "*.apk" -d "${tmp}/" 2>/dev/null \
     || { echo "[WARN] No APK in $label artifact — skipping"; return 0; }
@@ -31,6 +43,7 @@ _fetch() {
   # Keep upstream's own Gradle-generated filename (e.g.
   # KernelSU_Next_v3.3.0_33214-release.apk) instead of inventing ours.
   local dest="./manager_apks/$(basename "$apk")"
+  
   if [ -e "$dest" ]; then
     echo "[WARN] Filename collision for $label: $(basename "$apk") already fetched — skipping to avoid overwrite."
     return 0
