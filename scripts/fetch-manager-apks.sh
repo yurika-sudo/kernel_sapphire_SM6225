@@ -43,3 +43,4 @@ _fetch() {
 _fetch "KernelSU-Next/KernelSU-Next" "${KSUN_MANAGER_ARTIFACT_ID:-}"         "ksun"
 _fetch "KernelSU-Next/KernelSU-Next" "${KSUN_MANAGER_SPOOFED_ARTIFACT_ID:-}" "ksun-spoofed"
 _fetch "SukiSU-Ultra/SukiSU-Ultra"   "${SUKI_MANAGER_ARTIFACT_ID:-}"         "sksu"
+_fetch "SukiSU-Ultra/SukiSU-Ultra"   "${SUKI_MANAGER_SPOOFED_ARTIFACT_ID:-}" "sksu-spoofed"
