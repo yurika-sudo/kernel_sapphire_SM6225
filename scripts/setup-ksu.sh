@@ -81,6 +81,41 @@ print("[OK] namespace.c: hunk#1 applied manually")
 EOF
 }
 
+_fix_ksu_umount_missing_set() {
+  # SukiSU-Ultra `builtin` sync commit d13e8a75 (2026-09-01, "Sync with the
+  # official KernelSU main repo") dropped kernel_umount_feature_set()'s
+  # definition but left the struct reference to it -- breaks compile.
+  # Still unfixed on builtin HEAD as of 2026-09-04. Self-deactivates once
+  # upstream restores the definition (grep guard below).
+  local KU_C="$1"
+  [ -f "$KU_C" ] || return 0
+  grep -q "kernel_umount_feature_set" "$KU_C" || return 0
+  grep -q "static int kernel_umount_feature_set" "$KU_C" && return 0
+  python3 - "$KU_C" <<'EOF'
+import sys
+path = sys.argv[1]
+txt = open(path).read()
+marker = "static int kernel_umount_feature_get(u64 *value)"
+idx = txt.find(marker)
+if idx == -1:
+    print("[WARN] kernel_umount.c: get_handler anchor not found, skipping umount fix")
+    sys.exit(0)
+end = txt.find("\n}\n", idx) + 3
+insert = (
+    "\nstatic int kernel_umount_feature_set(u64 value)\n"
+    "{\n"
+    "    bool enable = value != 0;\n"
+    "    ksu_kernel_umount_enabled = enable;\n"
+    "    pr_info(\"kernel_umount: set to %d\\n\", enable);\n"
+    "    return 0;\n"
+    "}\n"
+)
+txt = txt[:end] + insert + txt[end:]
+open(path, "w").write(txt)
+print("[OK] kernel_umount.c: restored missing kernel_umount_feature_set")
+EOF
+}
+
 # Checkout an exact tag/ref in the given dir if a pin override was supplied.
 # Hard-fails (not falls back) — this path is only used by the verify gate,
 # so a bad pin should surface loudly rather than silently building HEAD.
@@ -147,6 +182,7 @@ elif [ "$KSU_TYPE" = "sksu" ]; then
   | awk 'NR==1{print $NF}' | tr -d '[:space:]')
   echo "${_suki_ver:-}" > "$WORK_DIR/suki_version.txt"
   cd ..
+  _fix_ksu_umount_missing_set "KernelSU/kernel/feature/kernel_umount.c"
 
   # SUSFS — (ShirkNeko fork from simonpunk main branch)
   git clone --depth=1 https://github.com/ShirkNeko/susfs4ksu.git -b gki-android13-5.15
