@@ -40,10 +40,21 @@ _fetch() {
   apk=$(find "${tmp}" -name "*.apk" | head -1)
   [ -z "$apk" ] && { echo "[WARN] APK not found post-extract for $label"; return 0; }
 
+  local apk_name
+  apk_name=$(basename "$apk")
+
+  # SukiSU-Ultra's manager artifact ships with a bare "Manager.apk" /
+  # "Spoofed-Manager.apk" — no version/commit baked in like KSUN's does.
+  # Prefix so it's identifiable in the release asset list at a glance.
+  case "$(echo "$apk_name" | tr '[:upper:]' '[:lower:]')" in
+    manager.apk|spoofed-manager.apk)
+      apk_name="SukiSU-${apk_name}"
+      ;;
+  esac
+
   # Keep upstream's own Gradle-generated filename (e.g.
   # KernelSU_Next_v3.3.0_33214-release.apk) instead of inventing ours.
-  local dest="./manager_apks/$(basename "$apk")"
-  
+  local dest="./manager_apks/${apk_name}"
   if [ -e "$dest" ]; then
     echo "[WARN] Filename collision for $label: $(basename "$apk") already fetched — skipping to avoid overwrite."
     return 0
