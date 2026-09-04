@@ -71,7 +71,12 @@ SUKI_MANAGER_URL="${SUKI_MANAGER_URL:-https://github.com/SukiSU-Ultra/SukiSU-Ult
 SUKI_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name == "manager") | .id // empty' | head -1 || true)
+  | jq -r '.artifacts[] | select(.name | ascii_downcase == "manager") | .id // empty' | head -1 || true)
+
+SUKI_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_sr" ] && \
+  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}/artifacts" \
+  | jq -r '.artifacts[] | select(.name | ascii_downcase == "spoofed-manager") | .id // empty' | head -1 || true)
 
 DATE_TAG=$(date +'%Y%m%d')
 
@@ -104,6 +109,7 @@ RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${ENCODED_TAG}
   echo "KSUN_MANAGER_ARTIFACT_ID=$KSUN_MANAGER_ARTIFACT_ID"
   echo "KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$KSUN_MANAGER_SPOOFED_ARTIFACT_ID"
   echo "SUKI_MANAGER_ARTIFACT_ID=$SUKI_MANAGER_ARTIFACT_ID"
+  echo "SUKI_MANAGER_SPOOFED_ARTIFACT_ID=$SUKI_MANAGER_SPOOFED_ARTIFACT_ID"
   echo "KERNEL_VERSION=$KERNEL_VERSION"
   echo "KERNEL_UNAME=$KERNEL_UNAME"
   echo "KERNEL_VERSION_GKI=$KERNEL_VERSION_GKI"
