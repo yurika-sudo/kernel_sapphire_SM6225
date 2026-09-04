@@ -19,6 +19,10 @@ on:
         type: choice
         options: [stable, testing]
         default: stable
+      nuke_release:
+        description: "Nuke ALL existing assets on this release before uploading (opt-in)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
