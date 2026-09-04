@@ -158,6 +158,10 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 1
+
       - name: "📣 Telegram"
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
