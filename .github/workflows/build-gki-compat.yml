@@ -11,6 +11,10 @@ on:
         type: choice
         options: [stable, testing]
         default: testing
+      nuke_release:
+        description: "Nuke ALL existing assets on this release before uploading (opt-in)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -76,6 +80,7 @@ jobs:
       build_type: ${{ inputs.build_type || 'stable' }}
       start_time: ${{ needs.setup.outputs.start_time }}
       workflow_type: compat
+      nuke_release: ${{ inputs.nuke_release || true }}
     secrets: inherit
 
   notify-failure:
