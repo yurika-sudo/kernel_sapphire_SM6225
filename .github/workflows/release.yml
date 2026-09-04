@@ -7,10 +7,11 @@ env:
 on:
   workflow_call:
     inputs:
-      zip_mode:   { type: string, required: true }   # per-variant | aio
-      build_type: { type: string, required: true }   # stable | testing
+      zip_mode:   { type: string, required: true }
+      build_type: { type: string, required: true }
       start_time: { type: string, required: true }
       workflow_type: { type: string, default: aio }
+      nuke_release: { type: boolean, default: true }
 
 permissions:
   contents: write
@@ -77,6 +78,17 @@ jobs:
           SHA:         ${{ github.sha }}
           RUN_NUMBER:  ${{ github.run_number }}
         run: bash scripts/release-notes.sh
+
+      - name: "☢️ Nuke ALL existing release assets (opt-in)"
+        if: ${{ inputs.nuke_release == true }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "[NUKE] nuke_release=true — clearing all existing assets on $RELEASE_TAG"
+          gh release view "$RELEASE_TAG" --json assets \
+            -q '.assets[].name' 2>/dev/null \
+            | xargs -r -I{} gh release delete-asset \
+                "$RELEASE_TAG" {} --yes 2>/dev/null || true
 
       - name: "🧹 Purge old AK3 assets"
         env:
