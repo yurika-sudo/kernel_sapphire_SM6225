@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # setup-ksu.sh — integrate KSU variant + SUSFS into kernel source
 # env: KSU_TYPE (ksun|sksu|none), KERNEL_DIR, WORK_DIR
+# optional env: KSUN_TAG_PIN, SUKI_TAG_PIN — if set, checkout that exact tag
+#   instead of floating branch HEAD. Used only by check-updates.yml's verify
+#   gate to test a specific candidate tag before it's committed to
+#   source-pins.json. Normal builds never set these, so day-to-day behavior
+#   (float + record detected tag) is unchanged.
 set -e
 
 : "${KSU_TYPE:?}"
@@ -76,6 +81,18 @@ print("[OK] namespace.c: hunk#1 applied manually")
 EOF
 }
 
+# Checkout an exact tag/ref in the given dir if a pin override was supplied.
+# Hard-fails (not falls back) — this path is only used by the verify gate,
+# so a bad pin should surface loudly rather than silently building HEAD.
+_checkout_pin() {
+  local DIR="$1" PIN="$2" LABEL="$3"
+  [ -z "$PIN" ] && return 0
+  echo "[PIN] ${LABEL}: checking out ${PIN} (override)"
+  git -C "$DIR" checkout -q "$PIN" || {
+    echo "[ERROR] ${LABEL}: failed to checkout pinned ref '${PIN}'"; exit 1;
+  }
+}
+
 if [ "$KSU_TYPE" = "ksun" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu ./KernelSU-Next
   curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" \
@@ -84,6 +101,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
 
   cd KernelSU-Next
   git fetch --tags 2>/dev/null || true
+  _checkout_pin "." "${KSUN_TAG_PIN:-}" "KSU-Next"
   KSUN_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
   echo "KSUN_TAG=$KSUN_TAG"    >> "${GITHUB_ENV:-/dev/null}"
   echo "$KSUN_TAG"                  > "$WORK_DIR/ksun_tag.txt"
@@ -119,6 +137,7 @@ elif [ "$KSU_TYPE" = "sksu" ]; then
 
   cd KernelSU
   git fetch --tags 2>/dev/null || true
+  _checkout_pin "." "${SUKI_TAG_PIN:-}" "SukiSU-Ultra"
   SUKI_TAG=$(git describe --tags --abbrev=0 2>/dev/null || \
     curl -sf "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest" \
     | jq -r '.tag_name' 2>/dev/null || echo "unknown")
