@@ -11,6 +11,8 @@ on:
       defconfig:     { type: string, required: true }
       clo_fragment:  { type: string, required: false }  # e.g. vendor/bengal_GKI.config (CLO only)
       build_type:    { type: string, required: true }   # stable | testing
+      ksun_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
+      suki_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
 
 env:
   OUT_DIR: "out"
@@ -128,9 +130,11 @@ jobs:
         if: inputs.ksu_type != 'none'
         uses: ./.github/actions/setup-ksu
         with:
-          ksu_type:   ${{ inputs.ksu_type }}
-          kernel_dir: ${{ env.KERNEL_SRC }}
-          work_dir:   ${{ env.WORK_DIR }}
+          ksu_type:     ${{ inputs.ksu_type }}
+          kernel_dir:   ${{ env.KERNEL_SRC }}
+          work_dir:     ${{ env.WORK_DIR }}
+          ksun_tag_pin: ${{ inputs.ksun_tag_pin }}
+          suki_tag_pin: ${{ inputs.suki_tag_pin }}
 
       - name: "🐳 Droidspaces"
         working-directory: ${{ env.KERNEL_SRC }}
