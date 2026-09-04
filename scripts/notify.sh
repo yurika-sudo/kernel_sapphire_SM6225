@@ -139,6 +139,14 @@ elif [ "$MODE" = "check" ]; then
     done <<< "$CHECK_FAILED"
   fi
 
+  if [ -n "${HELD_BACK:-}" ]; then
+    MSG="${MSG}%0A%0A<b>🛑 Held back (verify build failed, pin not bumped):</b>%0A"
+    while IFS= read -r LINE; do
+      [ -z "$LINE" ] && continue
+      MSG="${MSG}▸ ${LINE}%0A"
+    done <<< "$HELD_BACK"
+  fi
+
   _tg_msg "$MSG"
 
 elif [ "$MODE" = "variant-failure" ]; then
