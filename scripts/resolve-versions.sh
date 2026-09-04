@@ -71,12 +71,12 @@ SUKI_MANAGER_URL="${SUKI_MANAGER_URL:-https://github.com/SukiSU-Ultra/SukiSU-Ult
 SUKI_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name | ascii_downcase == "manager") | .id // empty' | head -1 || true)
+  | jq -r '.artifacts[] | select(.name | ascii_downcase == "manager") | select(.expired == false) | .id // empty' | head -1 || true)
 
 SUKI_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name | ascii_downcase == "spoofed-manager") | .id // empty' | head -1 || true)
+  | jq -r '.artifacts[] | select(.name | ascii_downcase == "spoofed-manager") | select(.expired == false) | .id // empty' | head -1 || true)
 
 DATE_TAG=$(date +'%Y%m%d')
 
