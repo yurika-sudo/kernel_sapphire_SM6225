@@ -112,6 +112,7 @@ jobs:
       build_type: ${{ inputs.build_type || 'stable' }}
       start_time: ${{ needs.setup.outputs.start_time }}
       workflow_type: aio
+      nuke_release: ${{ inputs.nuke_release || true }}
     secrets: inherit
 
   notify-failure:
