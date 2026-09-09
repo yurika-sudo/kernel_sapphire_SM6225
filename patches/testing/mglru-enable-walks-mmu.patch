@@ -1,0 +1,27 @@
+diff --git a/arch/arm64/Kconfig b/arch/arm64/Kconfig
+index 9b4a1830d..3eecdd6f1 100644
+--- a/arch/arm64/Kconfig
++++ b/arch/arm64/Kconfig
+@@ -34,6 +34,7 @@ config ARM64
+ 	select ARCH_HAS_NON_OVERLAPPING_ADDRESS_SPACE
+ 	select ARCH_HAS_PTE_DEVMAP
+ 	select ARCH_HAS_PTE_SPECIAL
++	select ARCH_HAS_HW_PTE_YOUNG
+ 	select ARCH_HAS_SETUP_DMA_OPS
+ 	select ARCH_HAS_SET_DIRECT_MAP
+ 	select ARCH_HAS_SET_MEMORY
+diff --git a/mm/Kconfig b/mm/Kconfig
+index fb3cfd168..061bc0228 100644
+--- a/mm/Kconfig
++++ b/mm/Kconfig
+@@ -944,6 +944,10 @@ config LRU_GEN_STATS
+ 	  from evicted generations for debugging purpose.
+ 
+ 	  This option has a per-memcg and per-node memory overhead.
++
++config LRU_GEN_WALKS_MMU
++	def_bool y
++	depends on LRU_GEN && ARCH_HAS_HW_PTE_YOUNG
+ # }
+ 
+ source "mm/damon/Kconfig"
