@@ -7,7 +7,6 @@
 **superuseryu** — kernel maintainer for sapphire/n (Snapdragon 685 / SM6225)
 
 - Telegram: [t.me/home_yu_chat](https://t.me/home_yu_chat)
-- Ko-fi: [ko-fi.com/superuseryu](https://ko-fi.com/superuseryu)
 
 ---
 
