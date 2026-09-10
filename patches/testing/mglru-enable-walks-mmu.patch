@@ -24,6 +24,19 @@ index 9b4a1830d..3eecdd6f1 100644
  	select ARCH_HAS_SETUP_DMA_OPS
  	select ARCH_HAS_SET_DIRECT_MAP
  	select ARCH_HAS_SET_MEMORY
+diff --git a/arch/arm64/include/asm/pgtable.h b/arch/arm64/include/asm/pgtable.h
+index 46b1fda88..8c9fe46e0 100644
+--- a/arch/arm64/include/asm/pgtable.h
++++ b/arch/arm64/include/asm/pgtable.h
+@@ -1016,7 +1016,7 @@ static inline void update_mmu_cache(struct vm_area_struct *vma,
+  * page after fork() + CoW for pfn mappings. We don't always have a
+  * hardware-managed access flag on arm64.
+  */
+-#define arch_has_hw_pte_young		cpu_has_hw_af
++#define arch_has_hw_pte_young		(true) /* Seiran: force HW AF for MGLRU MM walk on SM6225 */
+ 
+ /*
+  * Experimentally, it's cheap to set the access flag in hardware and we
 diff --git a/mm/Kconfig b/mm/Kconfig
 index fb3cfd168..061bc0228 100644
 --- a/mm/Kconfig
