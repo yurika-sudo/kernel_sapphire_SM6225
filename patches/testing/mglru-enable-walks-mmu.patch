@@ -52,3 +52,18 @@ index fb3cfd168..061bc0228 100644
  # }
  
  source "mm/damon/Kconfig"
+diff --git a/mm/vmscan.c b/mm/vmscan.c
+index ddb2772e5..4c1f629a1 100644
+--- a/mm/vmscan.c
++++ b/mm/vmscan.c
+@@ -5735,6 +5735,10 @@ static int __init init_lru_gen(void)
+ 	debugfs_create_file("lru_gen", 0644, NULL, NULL, &lru_gen_rw_fops);
+ 	debugfs_create_file("lru_gen_full", 0444, NULL, NULL, &lru_gen_ro_fops);
+ 
++	/* Seiran: auto-enable MM walk cap at boot on archs with HW PTE young */
++	if (arch_has_hw_pte_young())
++		static_branch_enable(&lru_gen_caps[LRU_GEN_MM_WALK]);
++
+ 	return 0;
+ };
+ late_initcall(init_lru_gen);
