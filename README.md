@@ -42,3 +42,4 @@ Questions, issues, or feedback? [t.me/home_yu_chat](https://t.me/home_yu_chat) i
 > **Kind note:** A donation is truly just a gift — not a payment for support, features, or priority. It doesn't unlock anything extra and doesn't change how I help you; everyone gets the same support whether you donate or not. Think of it as a kind "thank you" to help keep development going — not a transaction. Never feel obligated.
 
 - Ko-fi: [ko-fi.com/superuseryu](https://ko-fi.com/superuseryu)
+- SociaBuzz: [sociabuzz.com/superuseryu](https://sociabuzz.com/superuseryu/tribe)
