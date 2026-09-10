@@ -3,6 +3,7 @@
 # excerpt around the first error line for any job that failed.
 # env: GH_TOKEN, BUILD_TYPE, KERNEL_VERSION, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_NUMBER
 set -e
+set -o pipefail
 
 : "${BUILD_TYPE:-stable}"
 
