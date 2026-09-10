@@ -19,6 +19,7 @@
 - **[firelzrd](https://github.com/firelzrd)** — reference for backport kernel
 - **[ZyCromerZ](https://github.com/ZyCromerZ/Clang)** — ZyC-Clang toolchain builds
 - **[The Wild James](https://github.com/TheWildJames)** — kernel patches & build pipeline reference *(used with permission)*
+- **[maxsteeel](https://github.com/maxsteeel/nomount)** — NoMount
 - **[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next)** — KSU-Next implementation
 - **[SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)** — SukiSU implementation
 - **[simonpunk](https://gitlab.com/simonpunk/susfs4ksu)** — SUSFS4KSU patches
