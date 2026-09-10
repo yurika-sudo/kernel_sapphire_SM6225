@@ -1,3 +1,17 @@
+diff --git a/arch/Kconfig b/arch/Kconfig
+index 97e62dcb2..88b4eb0a0 100644
+--- a/arch/Kconfig
++++ b/arch/Kconfig
+@@ -253,6 +253,9 @@ config ARCH_HAS_KEEPINITRD
+ config ARCH_HAS_SET_MEMORY
+ 	bool
+ 
++config ARCH_HAS_HW_PTE_YOUNG
++	bool
++
+ # Select if arch has all set_direct_map_invalid/default() functions
+ config ARCH_HAS_SET_DIRECT_MAP
+ 	bool
 diff --git a/arch/arm64/Kconfig b/arch/arm64/Kconfig
 index 9b4a1830d..3eecdd6f1 100644
 --- a/arch/arm64/Kconfig
