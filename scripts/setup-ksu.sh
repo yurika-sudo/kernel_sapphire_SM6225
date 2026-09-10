@@ -125,34 +125,27 @@ _fix_susfs_exec_suki() {
   local EXEC_C="fs/exec.c"
   [ -f "$EXEC_C" ] || return 0
   grep -q "ksu_install_su_fd\|ksu_handle_execveat" "$EXEC_C" || return 0
-  python3 - "$EXEC_C" <<\'PYEOF\'
+  python3 - <<PYEOF "$EXEC_C"
 import sys, re
 path = sys.argv[1]
 txt = open(path).read()
 
-# Remove extern block (ksu_su_compat_enabled .. ksu_install_su_fd)
 txt = re.sub(
     r'#ifdef CONFIG_KSU_SUSFS\nextern struct static_key_true ksu_su_compat_enabled;.*?#endif\n\n',
     '', txt, count=1, flags=re.DOTALL)
-
-# Remove is_su_session declaration
 txt = re.sub(
     r'#ifdef CONFIG_KSU_SUSFS\n\s*bool is_su_session = false;\n#endif[^\n]*\n',
     '', txt, count=1, flags=re.DOTALL)
-
-# Remove execveat hook + orig_flow block
 txt = re.sub(
-    r'#ifdef CONFIG_KSU_SUSFS\n\s*if \(likely\(susfs_is_current_proc_no_su.*?#endif\n',
+    r'#ifdef CONFIG_KSU_SUSFS\n\s*if [(]likely[(]susfs_is_current_proc_no_su.*?#endif\n',
     '', txt, count=1, flags=re.DOTALL)
-
-# Remove ksu_install_su_fd call block
 txt = re.sub(
-    r'#ifdef CONFIG_KSU_SUSFS\n\s*if \(unlikely\(is_su_session.*?#endif[^\n]*\n',
+    r'#ifdef CONFIG_KSU_SUSFS\n\s*if [(]unlikely[(]is_su_session.*?#endif[^\n]*\n',
     '', txt, count=1, flags=re.DOTALL)
 
 open(path, 'w').write(txt)
 print("[OK] exec.c: stripped SukiSU-incompatible SUSFS hooks")
-\'PYEOF\'
+PYEOF
 }
 
 # Checkout an exact tag/ref in the given dir if a pin override was supplied.
