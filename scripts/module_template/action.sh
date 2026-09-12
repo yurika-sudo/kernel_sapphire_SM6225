@@ -9,3 +9,4 @@ else
 fi
 sleep 1s
 
+echo "- cpuidle governor: $(cat /sys/devices/system/cpu/cpuidle/current_governor 2>/dev/null || echo unknown)"

@@ -233,11 +233,11 @@ jobs:
           SOURCE_TYPE: ${{ inputs.source_type }}
         run: bash scripts/pack-zip.sh
 
-      - name: "📦 Pack ZRAM module"
+      - name: "📦 Pack Seiran Core module"
         env:
           SOURCE_TYPE: ${{ inputs.artifact_name }}
           COMMIT_SHA:  ${{ github.sha }}
-        run: bash scripts/pack-zram-module.sh
+        run: bash scripts/pack-module.sh
 
       - name: "🏷️ Capture uname"
         run: |

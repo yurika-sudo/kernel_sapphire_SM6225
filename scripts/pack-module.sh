@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pack-zram-module.sh — build a per-variant KSU/Magisk module zip carrying
+# pack-module.sh — build a per-variant KSU/Magisk module zip carrying
 # zram.ko + zsmalloc.ko, so the multi-comp/zram-ir build actually reaches
 # the device (CONFIG_ZRAM=m means it never ships via the Image-only
 # AnyKernel3 zip built by pack-zip.sh).
