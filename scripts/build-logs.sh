@@ -37,14 +37,41 @@ _extract_excerpt() {
   fi
 }
 
+# Fetch one job's log with retry/backoff. GitHub's log storage can lag a few
+# seconds behind job completion, so a single failed attempt is not proof the
+# log doesn't exist yet — but repeated failure after backoff is a real error
+# and must not be papered over with a placeholder file.
+# Returns 0 on success (log written to $2), 1 if all attempts failed (raw
+# stderr from the last attempt written to $3 for audit purposes).
+_fetch_job_log() {
+  local job_id="$1" out="$2" errout="$3"
+  local attempt raw_err
+  for attempt in 1 2 3 4 5; do
+    raw_err=$(mktemp)
+    if gh api "/repos/${GITHUB_REPOSITORY}/actions/jobs/${job_id}/logs" 2>"$raw_err" | _clean_log > "$out"; then
+      rm -f "$raw_err"
+      return 0
+    fi
+    if [ "$attempt" -lt 5 ]; then
+      sleep $(( attempt * 5 ))
+    fi
+  done
+  cp "$raw_err" "$errout"
+  rm -f "$raw_err"
+  return 1
+}
+
+FETCH_FAILED=0
+
 while IFS=$'\t' read -r JOB_ID JOB_NAME CONCLUSION; do
   # Extract variant part after " / " — e.g. "🔨 GKI-Wild / GKI-Wild" → "GKI-Wild"
   SAFE=$(echo "$JOB_NAME" | sed 's|.* / ||' | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g; s/^_//; s/_$//')
-  gh api /repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs \
-    2>/dev/null \
-    | _clean_log \
-    > "./logs/${SAFE}.log" \
-    || echo "[WARN] could not fetch: $JOB_NAME" > "./logs/${SAFE}.log"
+
+  if ! _fetch_job_log "$JOB_ID" "./logs/${SAFE}.log" "./logs/${SAFE}.fetch-error.log"; then
+    echo "[ERROR] could not fetch log for job: $JOB_NAME (id=$JOB_ID) after 5 attempts — see ${SAFE}.fetch-error.log" >&2
+    FETCH_FAILED=1
+    continue
+  fi
 
   if [ "$CONCLUSION" = "failure" ]; then
     _extract_excerpt "./logs/${SAFE}.log" "./logs/${SAFE}-excerpt.log"
@@ -67,4 +94,12 @@ LOG_SIZE_MB=$(echo "scale=2; $(stat -c%s "$LOG_ZIP") / 1024 / 1024" | bc | sed '
 
 echo "LOG_ZIP=$LOG_ZIP"           >> "${GITHUB_ENV:-/dev/null}"
 echo "LOG_SIZE_MB=$LOG_SIZE_MB"   >> "${GITHUB_ENV:-/dev/null}"
+
+if [ "$FETCH_FAILED" -ne 0 ]; then
+  echo "[FAIL] One or more job logs could not be fetched after retries." >&2
+  echo "[FAIL] Zip was still written to $LOG_ZIP for inspection, but this run should NOT be treated as a complete audit trail." >&2
+  exit 1
+fi
+
 echo "[OK] Build log: $LOG_ZIP ($LOG_SIZE_MB MB)"
+
