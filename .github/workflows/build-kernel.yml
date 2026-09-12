@@ -234,6 +234,7 @@ jobs:
         run: bash scripts/pack-zip.sh
 
       - name: "📦 Pack Seiran Core module"
+        if: inputs.artifact_name == 'gki-ksun'
         env:
           SOURCE_TYPE: ${{ inputs.artifact_name }}
           COMMIT_SHA:  ${{ github.sha }}
@@ -253,7 +254,7 @@ jobs:
           name: ${{ inputs.artifact_name }}
           path: |
             ${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}
-            ${{ env.WORK_DIR }}/out/zram-multicomp-${{ inputs.artifact_name }}.zip
+            ${{ env.WORK_DIR }}/out/seiran-core.zip
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
             ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
             ${{ env.WORK_DIR }}/ksun_tag.txt

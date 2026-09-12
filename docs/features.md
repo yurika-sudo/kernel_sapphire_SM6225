@@ -46,7 +46,7 @@ The kernel ships zram-ir/multi-comp support baked in, but `CONFIG_ZRAM=m` means 
 **What it does:** loads `zram.ko` + `zsmalloc.ko` with multi-comp + zram-ir tiered recompression, then sets NAP as cpuidle governor, ADIOS as I/O scheduler, and Reflex as cpufreq governor — all at `post-fs-data`.
 
 **Get it — 2 ways:**
-- **GitHub Release:** attached as `seiran-core-<variant>.zip` alongside the kernel ZIP.
+- **GitHub Release:** attached as `seiran-core.zip` alongside the kernel ZIP.
 - **Telegram:** sent automatically to the same channel as build/manager updates — [t.me/tmplogchat](https://t.me/tmplogchat).
 
 **Requires a module manager** — it's a KSU/Magisk module, installed through the manager app, not flashed from recovery.
@@ -54,7 +54,7 @@ The kernel ships zram-ir/multi-comp support baked in, but `CONFIG_ZRAM=m` means 
 - **NoKSU:** the kernel has no root/manager baked in. Root separately first — Magisk (patch `boot.img`) or a boot.img-patched KSU-Next/SukiSU-Ultra — then install this module from that manager's Modules tab.
 
 > [!NOTE]
-> Must match your flashed variant exactly (e.g. `seiran-core-gki-ksun.zip` for GKI-KSU-Next). Wrong variant safely no-ops — the module just won't load, no harm — but you also won't get multi-comp/zram-ir. Check status via the module's **Action** button after install.
+> Must match your flashed variant exactly (e.g. `seiran-core.zip`). Universal — works across all variants (GKI/CLO × KSU-Next/SukiSU/NoKSU) as long as kernel version matches. Check status via the module's **Action** button after install.
 
 ---
 

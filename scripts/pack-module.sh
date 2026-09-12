@@ -16,8 +16,8 @@ SHORT_SHA="${COMMIT_SHA:0:8}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE_DIR="${TEMPLATE_DIR:-$SCRIPT_DIR/module_template}"
 KO_DIR="${WORK_DIR}/out/dist/ko"
-STAGE_DIR="${WORK_DIR}/out/seiran-core-${SOURCE_TYPE}"
-OUT_ZIP="${OUT_ZIP:-${WORK_DIR}/out/seiran-core-${SOURCE_TYPE}.zip}"
+STAGE_DIR="${WORK_DIR}/out/seiran-core"
+OUT_ZIP="${OUT_ZIP:-${WORK_DIR}/out/seiran-core.zip}"
 
 if [ ! -f "${KO_DIR}/zram.ko" ] || [ ! -f "${KO_DIR}/zsmalloc.ko" ]; then
   echo "[SKIP] ${SOURCE_TYPE}: zram.ko/zsmalloc.ko not found in ${KO_DIR} — did build.sh's modules step run and succeed?"
