@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # pack-module.sh — build a per-variant KSU/Magisk module zip carrying
-# zram.ko + zsmalloc.ko, so the multi-comp/zram-ir build actually reaches
-# the device (CONFIG_ZRAM=m means it never ships via the Image-only
-# AnyKernel3 zip built by pack-zip.sh).
+# zram.ko + zsmalloc.ko + runtime tweaks (NAP cpuidle, ADIOS I/O, Reflex
+# cpufreq), so the full seiran_core feature set reaches the device
+# (CONFIG_ZRAM=m means it never ships via the Image-only AnyKernel3 zip).
 #
 # env: SOURCE_TYPE (e.g. gki-ksun), WORK_DIR, TEMPLATE_DIR (defaults to
 # scripts/module_template relative to this script), OUT_ZIP (optional)
@@ -16,8 +16,8 @@ SHORT_SHA="${COMMIT_SHA:0:8}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE_DIR="${TEMPLATE_DIR:-$SCRIPT_DIR/module_template}"
 KO_DIR="${WORK_DIR}/out/dist/ko"
-STAGE_DIR="${WORK_DIR}/out/zram-module-${SOURCE_TYPE}"
-OUT_ZIP="${OUT_ZIP:-${WORK_DIR}/out/zram-multicomp-${SOURCE_TYPE}.zip}"
+STAGE_DIR="${WORK_DIR}/out/seiran-core-${SOURCE_TYPE}"
+OUT_ZIP="${OUT_ZIP:-${WORK_DIR}/out/seiran-core-${SOURCE_TYPE}.zip}"
 
 if [ ! -f "${KO_DIR}/zram.ko" ] || [ ! -f "${KO_DIR}/zsmalloc.ko" ]; then
   echo "[SKIP] ${SOURCE_TYPE}: zram.ko/zsmalloc.ko not found in ${KO_DIR} — did build.sh's modules step run and succeed?"

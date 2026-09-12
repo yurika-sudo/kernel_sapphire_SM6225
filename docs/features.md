@@ -36,17 +36,17 @@
 
 ---
 
-## ZRAM Multi-Comp Module
+## Seiran Core Module
 
 The kernel ships zram-ir/multi-comp support baked in, but `CONFIG_ZRAM=m` means `zram.ko`/`zsmalloc.ko` build as loadable modules — they don't reach the device via the AK3 kernel-image ZIP alone. A separate KSU/Magisk module carries them.
 
 > [!WARNING]
 > **Kernel ZIP alone = no ZRAM at all**, on every variant. This isn't "multi-comp missing" — `zram0` doesn't come up at all until this module loads `zram.ko`/`zsmalloc.ko` for you. Flashing just the kernel and expecting ZRAM/swap to work is the single most common source of "why is my RAM management worse than before" reports.
 
-**What it does:** loads `zram.ko` + `zsmalloc.ko` with multi-comp + zram-ir tiered recompression at `post-fs-data`.
+**What it does:** loads `zram.ko` + `zsmalloc.ko` with multi-comp + zram-ir tiered recompression, then sets NAP as cpuidle governor, ADIOS as I/O scheduler, and Reflex as cpufreq governor — all at `post-fs-data`.
 
 **Get it — 2 ways:**
-- **GitHub Release:** attached as `zram-multicomp-<variant>.zip` alongside the kernel ZIP.
+- **GitHub Release:** attached as `seiran-core-<variant>.zip` alongside the kernel ZIP.
 - **Telegram:** sent automatically to the same channel as build/manager updates — [t.me/tmplogchat](https://t.me/tmplogchat).
 
 **Requires a module manager** — it's a KSU/Magisk module, installed through the manager app, not flashed from recovery.
@@ -54,7 +54,7 @@ The kernel ships zram-ir/multi-comp support baked in, but `CONFIG_ZRAM=m` means 
 - **NoKSU:** the kernel has no root/manager baked in. Root separately first — Magisk (patch `boot.img`) or a boot.img-patched KSU-Next/SukiSU-Ultra — then install this module from that manager's Modules tab.
 
 > [!NOTE]
-> Must match your flashed variant exactly (e.g. `zram-multicomp-gki-ksun.zip` for GKI-KSU-Next). Wrong variant safely no-ops — the module just won't load, no harm — but you also won't get multi-comp/zram-ir. Check status via the module's **Action** button after install.
+> Must match your flashed variant exactly (e.g. `seiran-core-gki-ksun.zip` for GKI-KSU-Next). Wrong variant safely no-ops — the module just won't load, no harm — but you also won't get multi-comp/zram-ir. Check status via the module's **Action** button after install.
 
 ---
 
@@ -105,6 +105,10 @@ Applied to all variants (GKI, CLO, GKI-Compat).
 | `qcom-logbuf-print-caller-arity-fix` | Qcom logbuf print caller arity fix |
 | `cve-2026-64560-posix-cpu-timers-uaf` | CVE-2026-64560 posix CPU timers UAF fix |
 | `rtmutex-ghostlock-cve-2026-43499-uaf-fix` | CVE-2026-43499 rtmutex ghostlock UAF fix |
+| `cass-5.15-sapphire-updated` | CASS scheduler |
+| `0001-cpuidle-nap-governor-arm64-scalar-gki` | cpuidle NAP governor (arm64 scalar) |
+| `kcompressd-sapphire-page-based` | kcompressd async compression daemon (page-based backport) |
+| `mglru-enable-walks-mmu` | MGLRU MMU notifier walks enable |
 
 ### GKI-Compat only (`patches/gki-compat-only/`)
 
@@ -118,15 +122,7 @@ Compatibility shims applied on top of `patches/common/` for the GKI-Compat tree 
 
 ### Under Testing (`patches/testing/`)
 
-> [!WARNING]
-> Patches in this section are not yet promoted to stable. They may be incomplete, unstable, or pending boot verification. Flash at your own risk — stick to a stable release if you're unsure.
-
-| Patch | Description |
-|---|---|
-| `cass-5.15-sapphire-updated` | CASS scheduler |
-| `0001-cpuidle-nap-governor-arm64-scalar-gki` | cpuidle NAP governor (arm64 scalar) |
-| `kcompressd-sapphire-page-based` | kcompressd async compression daemon (page-based backport) |
-| `mglru-enable-walks-mmu` | MGLRU MMU notifier walks enable |
+No patches currently under testing.
 
 ---
 
