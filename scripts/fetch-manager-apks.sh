@@ -47,8 +47,13 @@ _fetch() {
   # "Spoofed-Manager.apk" — no version/commit baked in like KSUN's does.
   # Prefix so it's identifiable in the release asset list at a glance.
   case "$(echo "$apk_name" | tr '[:upper:]' '[:lower:]')" in
-    manager.apk|spoofed-manager.apk)
-      apk_name="SukiSU-${apk_name}"
+    manager.apk)
+      _ver="${SUKI_VERSION:-}"
+      apk_name="SukiSU-Manager${_ver:+-${_ver}}.apk"
+      ;;
+    spoofed-manager.apk)
+      _ver="${SUKI_VERSION:-}"
+      apk_name="SukiSU-Spoofed-Manager${_ver:+-${_ver}}.apk"
       ;;
   esac
 
