@@ -10,3 +10,6 @@ fi
 sleep 1s
 
 echo "- cpuidle governor: $(cat /sys/devices/system/cpu/cpuidle/current_governor 2>/dev/null || echo unknown)"
+echo "- I/O scheduler (sda): $(cat /sys/block/sda/queue/scheduler 2>/dev/null | grep -o '[.*]' | tr -d '[]' || echo unknown)"
+echo "- cpufreq governor (policy0): $(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null || echo unknown)"
+echo "- cpufreq governor (policy4): $(cat /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null || echo unknown)"

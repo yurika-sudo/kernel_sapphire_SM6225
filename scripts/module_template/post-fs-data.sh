@@ -66,4 +66,13 @@ fi
 # post-suspend, so a one-shot write here is permanent until next reboot.
 echo nap > /sys/devices/system/cpu/cpuidle/current_governor 2>/dev/null
 
+# ADIOS I/O scheduler — storage devices only (dm/loop/ram don't support schedulers)
+for dev in /sys/block/sd*/queue/scheduler; do
+	echo adios > "$dev" 2>/dev/null
+done
+
+# Reflex cpufreq governor — SM6225 has 2 fixed clusters (little: policy0, big: policy4)
+echo reflex > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
+echo reflex > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null
+
 sync
