@@ -63,8 +63,6 @@ fi
 
 # Attach zram module zip(s) to the release as-is, independent of ZIP_MODE —
 # it's a standalone Magisk/KSU module, not part of the kernel Image bundle.
-echo "[DEBUG] artifacts tree:"
-find ./artifacts -type f | sort
 find ./artifacts -name "seiran-core.zip" -exec cp {} ./release_zips/ \;
 
 ls -lh ./release_zips/

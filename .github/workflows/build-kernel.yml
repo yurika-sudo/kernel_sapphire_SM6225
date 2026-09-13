@@ -240,7 +240,6 @@ jobs:
           COMMIT_SHA:  ${{ github.sha }}
         run: |
           bash scripts/pack-module.sh
-          ls -lh "${{ env.WORK_DIR }}/out/seiran-core.zip" || echo '[ERROR] seiran-core.zip missing after pack'
 
       - name: "🏷️ Capture uname"
         run: |
