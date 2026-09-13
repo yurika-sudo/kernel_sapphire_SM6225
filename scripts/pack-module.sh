@@ -36,6 +36,7 @@ cp "${KO_DIR}/zram.ko" "$STAGE_DIR/module/zram.ko"
 cp "${KO_DIR}/zsmalloc.ko" "$STAGE_DIR/module/zsmalloc.ko"
 
 chmod +x "$STAGE_DIR/customize.sh" "$STAGE_DIR/post-fs-data.sh" "$STAGE_DIR/action.sh"
+[ -f "$STAGE_DIR/service.sh" ] && chmod +x "$STAGE_DIR/service.sh"
 
 rm -f "$OUT_ZIP"
 (cd "$STAGE_DIR" && zip -r9 -q "$OUT_ZIP" . -x ".*")
