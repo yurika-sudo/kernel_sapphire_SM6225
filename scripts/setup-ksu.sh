@@ -210,7 +210,7 @@ elif [ "$KSU_TYPE" = "sksu" ]; then
     | jq -r '.tag_name' 2>/dev/null || echo "unknown")
   echo "SUKI_TAG=$SUKI_TAG"      >> "${GITHUB_ENV:-/dev/null}"
   echo "$SUKI_TAG"                > "$WORK_DIR/suki_ksu_tag.txt"
-  _suki_ver=$(grep -rh "^#define KSU_VERSION\b" KernelSU/kernel/ 2>/dev/null \
+  _suki_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
   | awk 'NR==1{print $NF}' | tr -d '[:space:]')
   echo "${_suki_ver:-}" > "$WORK_DIR/suki_version.txt"
   cd ..
