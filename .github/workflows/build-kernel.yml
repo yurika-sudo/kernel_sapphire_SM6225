@@ -238,6 +238,7 @@ jobs:
         env:
           SOURCE_TYPE: ${{ inputs.artifact_name }}
           COMMIT_SHA:  ${{ github.sha }}
+          BUILD_NUM:   ${{ github.run_number }}
         run: |
           bash scripts/pack-module.sh
 

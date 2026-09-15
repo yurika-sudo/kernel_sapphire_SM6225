@@ -1,6 +1,6 @@
 id=seiran_core
 name=Seiran Core
-version=v1.0.0
-versionCode=001
+version=r@BUILD_NUM@-@COMMIT@
+versionCode=@BUILD_NUM@
 author=superuseryu
 banner=banner.webp
