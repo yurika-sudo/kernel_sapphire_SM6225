@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
-# build-logs.sh — assemble per-variant build logs from artifacts uploaded
-# by each build-kernel.yml job, then zip for release.
-#
-# No GitHub API log-fetch: each variant uploads its own raw-log-<variant>
-# artifact during the build job (if: always()), so logs are always available
-# regardless of API endpoint reliability.
-#
+# build-logs.sh — assemble per-variant build logs from uploaded artifacts,
+# then enrich each with the full job log fetched via GitHub API.
 # env: GH_TOKEN, BUILD_TYPE, GITHUB_REPOSITORY, GITHUB_RUN_ID,
 #      GITHUB_RUN_NUMBER, GITHUB_SHA
 set -e
@@ -15,40 +10,25 @@ set -o pipefail
 
 mkdir -p ./logs
 
-# Strip ANSI escape codes and GitHub Actions group markers
+# Strip ANSI escape codes, GitHub Actions group markers, and ISO timestamp prefix
 _clean_log() {
-  sed 's/\x1b\[[0-9;]*[mGKHF]//g; s/\x1b(B//g' \
+  sed 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}\.[0-9]*Z //' \
+  | sed 's/\x1b\[[0-9;]*[mGKHF]//g; s/\x1b(B//g' \
   | sed '/^##\[group\]/d; /^##\[endgroup\]/d'
 }
 
-# Error excerpt — pull context around first known-bad pattern
-_extract_excerpt() {
-  local log="$1" out="$2"
-  local hit
-  hit=$(grep -n -m1 -E 'error:|FAILED|recipe for target .* failed|\*\*\* \[' "$log" | cut -d: -f1 || true)
-  if [ -n "$hit" ]; then
-    local start=$(( hit > 60 ? hit - 60 : 1 ))
-    local end=$(( hit + 40 ))
-    { echo "# excerpt: lines ${start}-${end} around first error match (line ${hit})";
-      sed -n "${start},${end}p" "$log"; } > "$out"
-  else
-    { echo "# no known error pattern matched — tail of log follows";
-      tail -n 150 "$log"; } > "$out"
-  fi
-}
+# Build job ID → name map from API
+gh api /repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs \
+  --jq '.jobs[] | select(.name | test("GKI|CLO")) | [.id, .name] | @tsv' \
+  > /tmp/build_jobs.tsv
 
-MISSING=0
-
-# Each build job uploaded: raw-log-<variant_name>/apply-patches.log
-#                                                  build.log
-#                                                  verify.log
-# download-artifact placed them at ./artifacts/raw-log-*/
+# Per-variant: combine tee'd step logs (fast, always present) +
+# full API log (complete, may be slower or unavailable — graceful fallback)
 for log_dir in ./artifacts/raw-log-*/; do
   [ -d "$log_dir" ] || continue
   variant=$(basename "$log_dir" | sed 's/^raw-log-//')
   outfile="./logs/${variant}.log"
 
-  # Combine step logs into one file with section headers
   {
     for step_log in \
         "$log_dir/apply-patches.log" \
@@ -56,35 +36,33 @@ for log_dir in ./artifacts/raw-log-*/; do
         "$log_dir/verify.log"; do
       [ -f "$step_log" ] || continue
       step=$(basename "$step_log" .log)
-      printf '=%.0s' {1..60}; echo
+      printf '=%.0s' $(seq 1 60); echo
       echo "## ${step}"
-      printf '=%.0s' {1..60}; echo
+      printf '=%.0s' $(seq 1 60); echo
       _clean_log < "$step_log"
       echo
     done
   } > "$outfile"
-
-  # Error excerpt (only written when a known-bad pattern is found)
-  _extract_excerpt "$outfile" "./logs/${variant}-excerpt.log"
 done
 
-# Fail loudly if no log artifacts were found at all
+# Enrich each variant log with full API-fetched job log (appended as extra section)
+while IFS=$'\t' read -r JOB_ID JOB_NAME; do
+  SAFE=$(echo "$JOB_NAME" | sed 's|.* / ||' | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g; s/^_//; s/_$//')
+  outfile="./logs/${SAFE}.log"
+  {
+    printf '=%.0s' $(seq 1 60); echo
+    echo "## full-api-log"
+    printf '=%.0s' $(seq 1 60); echo
+    gh api /repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs \
+      2>/dev/null \
+      | _clean_log \
+      || echo "[WARN] API log unavailable for: $JOB_NAME"
+  } >> "$outfile"
+done < /tmp/build_jobs.tsv
+
 ACTUAL=$(ls -d ./artifacts/raw-log-*/ 2>/dev/null | wc -l)
 if [ "$ACTUAL" -eq 0 ]; then
-  echo "[FAIL] No raw-log-* artifacts found." \
-       "Did build-kernel.yml upload them?" >&2
-  exit 1
-fi
-
-# Cross-check against how many GKI/CLO jobs actually ran in this run.
-# This API call (listing jobs) is reliable — only the per-job /logs
-# endpoint was unreliable; that endpoint is no longer used.
-EXPECTED=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" \
-  --jq '[.jobs[] | select(.name | test("GKI|CLO"))] | length' 2>/dev/null || echo 0)
-
-if [ "$EXPECTED" -gt 0 ] && [ "$ACTUAL" -lt "$EXPECTED" ]; then
-  echo "[FAIL] Expected ${EXPECTED} log artifact(s), found ${ACTUAL}." \
-       "One or more build jobs may have failed to upload their log." >&2
+  echo "[FAIL] No raw-log-* artifacts found." >&2
   exit 1
 fi
 
@@ -104,6 +82,4 @@ LOG_SIZE_MB=$(echo "scale=2; $(stat -c%s "$LOG_ZIP") / 1024 / 1024" | bc | sed '
 
 echo "LOG_ZIP=$LOG_ZIP"         >> "${GITHUB_ENV:-/dev/null}"
 echo "LOG_SIZE_MB=$LOG_SIZE_MB" >> "${GITHUB_ENV:-/dev/null}"
-
 echo "[OK] Build log: $LOG_ZIP (${LOG_SIZE_MB} MB) — ${ACTUAL} variant(s)"
-
