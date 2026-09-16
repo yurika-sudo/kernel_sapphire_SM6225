@@ -74,7 +74,7 @@ SUMMARY="${SUMMARY}> 📥 Full details preserved in \`build-log-run*.zip\` → e
 echo "$SUMMARY" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 
 # Save copy for the build log zip (picked up by build-logs.sh)
-mkdir -p ./logs
-echo "$SUMMARY" > ./logs/build_summary.md
+mkdir -p ./audit_logs
+echo "$SUMMARY" > ./audit_logs/build_summary.md
 
 echo "[OK] Build summary written"

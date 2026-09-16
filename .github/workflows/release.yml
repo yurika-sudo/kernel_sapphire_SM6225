@@ -57,11 +57,7 @@ jobs:
       - name: "📋 Build logs"
         env:
           GH_TOKEN:    ${{ secrets.GITHUB_TOKEN }}
-          BUILD_TYPE:        ${{ inputs.build_type }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_RUN_ID:     ${{ github.run_id }}
-          GITHUB_RUN_NUMBER: ${{ github.run_number }}
-          GITHUB_SHA:        ${{ github.sha }}
+          BUILD_TYPE:  ${{ inputs.build_type }}
         run: bash scripts/build-logs.sh
 
       - name: "📋 Build summary"
