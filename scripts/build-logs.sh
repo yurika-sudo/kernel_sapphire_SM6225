@@ -25,8 +25,9 @@ while IFS=$'\t' read -r JOB_ID JOB_NAME; do
   SAFE=$(echo "$JOB_NAME" | sed 's|.* / ||' | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g; s/^_//; s/_$//')
   outfile="./logs/${SAFE}.log"
 
-  if gh api /repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs \
-      2>/dev/null | _clean_log > "$outfile" && [ -s "$outfile" ]; then
+  gh api /repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs \
+      2>"/tmp/gh_err_${SAFE}.log" | _clean_log > "$outfile"
+  if [ -s "$outfile" ]; then
     ACTUAL=$((ACTUAL + 1))
   else
     # Fallback: artifact step logs
