@@ -105,9 +105,8 @@ jobs:
           BUILD_TYPE:  ${{ inputs.build_type }}
           DEFCONFIG:   ${{ inputs.defconfig }}
         run: |
-          mkdir -p "${{ github.workspace }}/build-log"
           set -o pipefail
-          bash scripts/apply-patches.sh 2>&1 | tee "${{ github.workspace }}/build-log/apply-patches.log"
+          bash scripts/apply-patches.sh
 
       - name: "🚫 Setup NoMount"
         working-directory: ${{ env.KERNEL_SRC }}
@@ -179,7 +178,7 @@ jobs:
           VARIANT:      ${{ inputs.variant_name }}
         run: |
           set -o pipefail
-          bash scripts/build.sh 2>&1 | tee "${{ github.workspace }}/build-log/build.log"
+          bash scripts/build.sh
 
       - name: "⚡ Save ccache"
         if: inputs.build_type == 'stable' && steps.ccache-restore.outputs.cache-hit != 'true'
@@ -191,7 +190,7 @@ jobs:
       - name: "🔍 Verify kernel"
         run: |
           set -o pipefail
-          bash scripts/verify-kernel.sh 2>&1 | tee "${{ github.workspace }}/build-log/verify.log"
+          bash scripts/verify-kernel.sh
 
       - name: "💉 KPM patch"
         if: inputs.ksu_type == 'sksu'
@@ -265,12 +264,4 @@ jobs:
             ${{ env.WORK_DIR }}/suki_version.txt
           retention-days: 1
 
-      - name: "📋 Upload build log"
-        if: always()
-        uses: actions/upload-artifact@v4.6.2
-        with:
-          name: raw-log-${{ inputs.variant_name }}
-          path: ${{ github.workspace }}/build-log/
-          retention-days: 1
-          if-no-files-found: warn
 

@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# build-logs.sh — collect per-job build logs via GitHub API
+# build-logs.sh — collect per-job build logs into a zip (full raw job logs via GitHub API)
 # env: GH_TOKEN, BUILD_TYPE, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_NUMBER, GITHUB_SHA
 set -e
 
 : "${BUILD_TYPE:-stable}"
 
-mkdir -p ./logs
+mkdir -p ./audit_logs
 
 gh api /repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs \
   --jq '.jobs[] | select(.name | test("GKI|CLO")) | [.id, .name] | @tsv' \
   > /tmp/build_jobs.tsv
 
+# Strip ISO timestamp prefix and ANSI escape codes only — no filtering, no headers
 _clean_log() {
   sed 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}\.[0-9]*Z //' \
   | sed 's/\x1b\[[0-9;]*[mGKHF]//g; s/\x1b(B//g' \
@@ -22,11 +23,11 @@ while IFS=$'\t' read -r JOB_ID JOB_NAME; do
   gh api /repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs \
     2>/dev/null \
     | _clean_log \
-    > "./logs/${SAFE}.log" \
-    || echo "[WARN] could not fetch: $JOB_NAME" > "./logs/${SAFE}.log"
+    > "./audit_logs/${SAFE}.log" \
+    || echo "[WARN] could not fetch: $JOB_NAME" > "./audit_logs/${SAFE}.log"
 done < /tmp/build_jobs.tsv
 
-cat > ./logs/00_run_info.txt << RUNINFO
+cat > ./audit_logs/00_run_info.txt << RUNINFO
 Run    : #${GITHUB_RUN_NUMBER}
 Repo   : ${GITHUB_REPOSITORY}
 SHA    : ${GITHUB_SHA}
@@ -37,7 +38,7 @@ RUNINFO
 
 LOG_DATE=$(date -u +'%Y-%m-%d')
 LOG_ZIP="build-log-run${GITHUB_RUN_NUMBER}-${LOG_DATE}-${BUILD_TYPE}.zip"
-zip -r9 "$LOG_ZIP" logs/
+zip -r9 "$LOG_ZIP" audit_logs/
 LOG_SIZE_MB=$(echo "scale=2; $(stat -c%s "$LOG_ZIP") / 1024 / 1024" | bc | sed 's/^\./0./')
 
 echo "LOG_ZIP=$LOG_ZIP"         >> "${GITHUB_ENV:-/dev/null}"
