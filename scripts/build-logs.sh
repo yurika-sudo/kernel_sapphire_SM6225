@@ -37,7 +37,7 @@ _fetch_job_log() {
 
 while IFS=$'\t' read -r JOB_ID JOB_NAME; do
   SAFE=$(echo "$JOB_NAME" | sed 's|.* / ||' | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g; s/^_//; s/_$//')
-  _fetch_job_log "$JOB_ID" "./audit_logs/${SAFE}.log"
+  _fetch_job_log "$JOB_ID" "./audit_logs/${SAFE}.log" || true
 done < /tmp/build_jobs.tsv
 
 cat > ./audit_logs/00_run_info.txt << RUNINFO
