@@ -322,10 +322,18 @@ index d6339783c..a250415a4 100644
  
  static char *remove_dot(char *s)
 diff --git a/scripts/mod/sumversion.c b/scripts/mod/sumversion.c
-index 5dd133017..2bff88343 100644
+index 5dd133017..4939c65f8 100644
 --- a/scripts/mod/sumversion.c
 +++ b/scripts/mod/sumversion.c
-@@ -222,19 +222,11 @@ static void md4_final_ascii(struct md4_ctx *mctx, char *out, unsigned int len)
+@@ -8,6 +8,7 @@
+ #include <errno.h>
+ #include <string.h>
+ #include <limits.h>
++#include <stdbool.h>
+ #include "modpost.h"
+ 
+ /*
+@@ -222,19 +223,11 @@ static void md4_final_ascii(struct md4_ctx *mctx, char *out, unsigned int len)
  		 mctx->hash[0], mctx->hash[1], mctx->hash[2], mctx->hash[3]);
  }
  
@@ -346,7 +354,7 @@ index 5dd133017..2bff88343 100644
  		if (file[i] == '"' && file[i-1] != '\\')
  			break;
  	}
-@@ -253,15 +245,44 @@ static int parse_comment(const char *file, unsigned long len)
+@@ -253,15 +246,44 @@ static int parse_comment(const char *file, unsigned long len)
  }
  
  /* FIXME: Handle .s files differently (eg. # starts comments) --RR */
@@ -392,7 +400,7 @@ index 5dd133017..2bff88343 100644
  		/* Collapse and ignore \ and CR. */
  		if (file[i] == '\\' && (i+1 < len) && file[i+1] == '\n') {
  			i++;
-@@ -274,7 +295,14 @@ static int parse_file(const char *fname, struct md4_ctx *md)
+@@ -274,7 +296,14 @@ static int parse_file(const char *fname, struct md4_ctx *md)
  
  		/* Handle strings as whole units */
  		if (file[i] == '"') {
@@ -408,7 +416,7 @@ index 5dd133017..2bff88343 100644
  			continue;
  		}
  
-@@ -284,11 +312,15 @@ static int parse_file(const char *fname, struct md4_ctx *md)
+@@ -284,11 +313,15 @@ static int parse_file(const char *fname, struct md4_ctx *md)
  			continue;
  		}
  
