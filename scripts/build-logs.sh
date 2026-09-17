@@ -11,20 +11,33 @@ gh api /repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs \
   --jq '.jobs[] | select(.name | test("GKI|CLO")) | [.id, .name] | @tsv' \
   > /tmp/build_jobs.tsv
 
-# Strip ISO timestamp prefix and ANSI escape codes only — no filtering, no headers
 _clean_log() {
   sed 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}\.[0-9]*Z //' \
   | sed 's/\x1b\[[0-9;]*[mGKHF]//g; s/\x1b(B//g' \
   | sed '/^##\[group\]/d; /^##\[endgroup\]/d'
 }
 
+_fetch_job_log() {
+  local job_id="$1"
+  local out="$2"
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if gh api "/repos/${GITHUB_REPOSITORY}/actions/jobs/${job_id}/logs" 2>/dev/null | _clean_log > "$out.tmp"; then
+      if [ -s "$out.tmp" ]; then
+        mv "$out.tmp" "$out"
+        return 0
+      fi
+    fi
+    sleep 5
+  done
+  echo "[WARN] empty/failed log after 5 attempts: job $job_id" > "$out"
+  rm -f "$out.tmp"
+  return 1
+}
+
 while IFS=$'\t' read -r JOB_ID JOB_NAME; do
   SAFE=$(echo "$JOB_NAME" | sed 's|.* / ||' | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g; s/^_//; s/_$//')
-  gh api /repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs \
-    2>/dev/null \
-    | _clean_log \
-    > "./audit_logs/${SAFE}.log" \
-    || echo "[WARN] could not fetch: $JOB_NAME" > "./audit_logs/${SAFE}.log"
+  _fetch_job_log "$JOB_ID" "./audit_logs/${SAFE}.log"
 done < /tmp/build_jobs.tsv
 
 cat > ./audit_logs/00_run_info.txt << RUNINFO
