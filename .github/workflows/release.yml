@@ -64,6 +64,13 @@ jobs:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
         run: bash scripts/release-summary.sh
 
+
+      - name: "📋 Build logs"
+        env:
+          GH_TOKEN:   ${{ secrets.GITHUB_TOKEN }}
+          BUILD_TYPE: ${{ inputs.build_type }}
+        run: bash scripts/build-logs.sh
+
       - name: "📝 Release body"
         env:
           BUILD_TYPE:        ${{ inputs.build_type }}
@@ -108,24 +115,11 @@ jobs:
           files: |
             ./release_zips/*.zip
             ./manager_apks/*.apk
+            ${{ env.LOG_ZIP }}
           tag_name:   ${{ env.RELEASE_TAG }}
           name:       ${{ env.RELEASE_NAME }}
           prerelease: ${{ env.IS_PRERELEASE }}
           body:       ${{ env.RELEASE_BODY }}
-
-      - name: "🏷️ Save release tag for log collector"
-        if: always()
-        run: |
-          mkdir -p ./release-tag
-          echo "${{ env.RELEASE_TAG }}" > ./release-tag/tag.txt
-
-      - name: "📤 Upload release tag"
-        if: always()
-        uses: actions/upload-artifact@v4.6.2
-        with:
-          name: release-tag
-          path: ./release-tag/tag.txt
-          retention-days: 1
 
       - name: "🎉 Telegram — success"
         if: success()

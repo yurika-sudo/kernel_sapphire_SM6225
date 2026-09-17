@@ -1,23 +1,13 @@
 #!/usr/bin/env bash
-# build-logs.sh — collect per-job build logs into a zip (full raw job logs
-# via the per-job GitHub API endpoint). Must be called from a workflow
-# that runs AFTER the target run has fully completed (e.g. via
-# workflow_run), otherwise every fetch 404s/empties regardless of retry.
-# env: GH_TOKEN, BUILD_TYPE, GITHUB_REPOSITORY, TARGET_RUN_ID, TARGET_RUN_NUMBER, TARGET_SHA
-# NOTE: GITHUB_RUN_ID/GITHUB_RUN_NUMBER/GITHUB_SHA are reserved by GitHub
-# Actions and silently ignore any override via env: — that's why this script
-# takes TARGET_* names instead when the run being inspected is NOT the
-# current run (e.g. called from a workflow_run-triggered workflow).
+# build-logs.sh — collect per-job build logs via GitHub API into a zip
+# env: GH_TOKEN, BUILD_TYPE, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_NUMBER, GITHUB_SHA
 set -e
 
 : "${BUILD_TYPE:-stable}"
-TARGET_RUN_ID="${TARGET_RUN_ID:-$GITHUB_RUN_ID}"
-TARGET_RUN_NUMBER="${TARGET_RUN_NUMBER:-$GITHUB_RUN_NUMBER}"
-TARGET_SHA="${TARGET_SHA:-$GITHUB_SHA}"
 
 mkdir -p ./audit_logs
 
-gh api /repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN_ID}/jobs \
+gh api /repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs \
   --jq '.jobs[] | select(.name | test("GKI|CLO")) | [.id, .name] | @tsv' \
   > /tmp/build_jobs.tsv
 
@@ -27,41 +17,26 @@ _clean_log() {
   | sed '/^##\[group\]/d; /^##\[endgroup\]/d'
 }
 
-_fetch_job_log() {
-  local job_id="$1"
-  local out="$2"
-  local attempt
-  for attempt in 1 2 3 4 5 6 7 8; do
-    if gh api "/repos/${GITHUB_REPOSITORY}/actions/jobs/${job_id}/logs" 2>/dev/null | _clean_log > "$out.tmp"; then
-      if [ -s "$out.tmp" ]; then
-        mv "$out.tmp" "$out"
-        echo "[OK] job $job_id fetched on attempt $attempt"
-        return 0
-      fi
-    fi
-    sleep 20
-  done
-  echo "[WARN] empty/failed log after 8 attempts: job $job_id" > "$out"
-  rm -f "$out.tmp"
-  return 1
-}
-
 while IFS=$'\t' read -r JOB_ID JOB_NAME; do
   SAFE=$(echo "$JOB_NAME" | sed 's|.* / ||' | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g; s/^_//; s/_$//')
-  _fetch_job_log "$JOB_ID" "./audit_logs/${SAFE}.log" || true
+  gh api /repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs \
+    2>/dev/null \
+    | _clean_log \
+    > "./audit_logs/${SAFE}.log" \
+    || echo "[WARN] could not fetch: $JOB_NAME" > "./audit_logs/${SAFE}.log"
 done < /tmp/build_jobs.tsv
 
 cat > ./audit_logs/00_run_info.txt << RUNINFO
-Run    : #${TARGET_RUN_NUMBER}
+Run    : #${GITHUB_RUN_NUMBER}
 Repo   : ${GITHUB_REPOSITORY}
-SHA    : ${TARGET_SHA}
+SHA    : ${GITHUB_SHA}
 Date   : $(date -u +'%Y-%m-%d %H:%M:%S UTC')
 Type   : ${BUILD_TYPE}
-URL    : https://github.com/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN_ID}
+URL    : https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
 RUNINFO
 
 LOG_DATE=$(date -u +'%Y-%m-%d')
-LOG_ZIP="build-log-run${TARGET_RUN_NUMBER}-${LOG_DATE}-${BUILD_TYPE}.zip"
+LOG_ZIP="build-log-run${GITHUB_RUN_NUMBER}-${LOG_DATE}-${BUILD_TYPE}.zip"
 zip -r9 "$LOG_ZIP" audit_logs/
 LOG_SIZE_MB=$(echo "scale=2; $(stat -c%s "$LOG_ZIP") / 1024 / 1024" | bc | sed 's/^\./0./')
 
