@@ -3,14 +3,21 @@
 # via the per-job GitHub API endpoint). Must be called from a workflow
 # that runs AFTER the target run has fully completed (e.g. via
 # workflow_run), otherwise every fetch 404s/empties regardless of retry.
-# env: GH_TOKEN, BUILD_TYPE, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_NUMBER, GITHUB_SHA
+# env: GH_TOKEN, BUILD_TYPE, GITHUB_REPOSITORY, TARGET_RUN_ID, TARGET_RUN_NUMBER, TARGET_SHA
+# NOTE: GITHUB_RUN_ID/GITHUB_RUN_NUMBER/GITHUB_SHA are reserved by GitHub
+# Actions and silently ignore any override via env: — that's why this script
+# takes TARGET_* names instead when the run being inspected is NOT the
+# current run (e.g. called from a workflow_run-triggered workflow).
 set -e
 
 : "${BUILD_TYPE:-stable}"
+TARGET_RUN_ID="${TARGET_RUN_ID:-$GITHUB_RUN_ID}"
+TARGET_RUN_NUMBER="${TARGET_RUN_NUMBER:-$GITHUB_RUN_NUMBER}"
+TARGET_SHA="${TARGET_SHA:-$GITHUB_SHA}"
 
 mkdir -p ./audit_logs
 
-gh api /repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs \
+gh api /repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN_ID}/jobs \
   --jq '.jobs[] | select(.name | test("GKI|CLO")) | [.id, .name] | @tsv' \
   > /tmp/build_jobs.tsv
 
@@ -45,16 +52,16 @@ while IFS=$'\t' read -r JOB_ID JOB_NAME; do
 done < /tmp/build_jobs.tsv
 
 cat > ./audit_logs/00_run_info.txt << RUNINFO
-Run    : #${GITHUB_RUN_NUMBER}
+Run    : #${TARGET_RUN_NUMBER}
 Repo   : ${GITHUB_REPOSITORY}
-SHA    : ${GITHUB_SHA}
+SHA    : ${TARGET_SHA}
 Date   : $(date -u +'%Y-%m-%d %H:%M:%S UTC')
 Type   : ${BUILD_TYPE}
-URL    : https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+URL    : https://github.com/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN_ID}
 RUNINFO
 
 LOG_DATE=$(date -u +'%Y-%m-%d')
-LOG_ZIP="build-log-run${GITHUB_RUN_NUMBER}-${LOG_DATE}-${BUILD_TYPE}.zip"
+LOG_ZIP="build-log-run${TARGET_RUN_NUMBER}-${LOG_DATE}-${BUILD_TYPE}.zip"
 zip -r9 "$LOG_ZIP" audit_logs/
 LOG_SIZE_MB=$(echo "scale=2; $(stat -c%s "$LOG_ZIP") / 1024 / 1024" | bc | sed 's/^\./0./')
 

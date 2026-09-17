@@ -32,9 +32,9 @@ jobs:
         env:
           GH_TOKEN:          ${{ secrets.GITHUB_TOKEN }}
           BUILD_TYPE:        testing
-          GITHUB_RUN_ID:     ${{ github.event.workflow_run.id }}
-          GITHUB_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
-          GITHUB_SHA:        ${{ github.event.workflow_run.head_sha }}
+          TARGET_RUN_ID:     ${{ github.event.workflow_run.id }}
+          TARGET_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+          TARGET_SHA:        ${{ github.event.workflow_run.head_sha }}
         run: bash scripts/build-logs.sh
 
       - name: "⬆️ Attach log to release"
