@@ -1,0 +1,112 @@
+diff --git a/drivers/cpuidle/governors/nap/Makefile b/drivers/cpuidle/governors/nap/Makefile
+index 798c8d541..bd4690bd2 100644
+--- a/drivers/cpuidle/governors/nap/Makefile
++++ b/drivers/cpuidle/governors/nap/Makefile
+@@ -12,10 +12,10 @@ cpuidle_gov_nap-y := nap.o nap_fpu.o
+ #
+ # CRITICAL: nap.o is intentionally compiled with NORMAL kernel flags
+ # (general-regs-only).  All floating-point/NEON code lives in nap_fpu.o,
+-# guarded by may_use_simd()/kernel_neon_begin()/kernel_neon_end() at
+-# every call site.  This separation ensures the compiler cannot emit
++# which is compiled without -mgeneral-regs-only and called directly from
++# nap_select().  This separation ensures the compiler cannot emit
+ # FP/NEON instructions in governor callbacks (nap_select, nap_reflect,
+-# etc.) outside a kernel_neon_begin/end block.
++# etc.) outside nap_fpu.o.
+ #
+ # Do NOT add a CFLAGS_REMOVE for nap.o -- it must stay general-regs-only.
+ CFLAGS_REMOVE_nap_fpu.o += -mgeneral-regs-only
+diff --git a/drivers/cpuidle/governors/nap/nap.c b/drivers/cpuidle/governors/nap/nap.c
+index b3c4b7bdd..dc40dbec9 100644
+--- a/drivers/cpuidle/governors/nap/nap.c
++++ b/drivers/cpuidle/governors/nap/nap.c
+@@ -12,11 +12,9 @@
+  * IMPORTANT: This file is compiled WITHOUT the -mgeneral-regs-only flag
+  * (normal arm64 kernel compilation forces general-regs-only). All
+  * floating-point/NEON code lives in nap_fpu.c, which has that flag
+- * removed via CFLAGS_REMOVE_nap_fpu.o and is only entered within a
+- * kernel_neon_begin()/kernel_neon_end() block guarded by may_use_simd().
+- * This separation ensures the compiler cannot emit FP/NEON instructions
+- * in governor callbacks (nap_select, nap_reflect, etc.) outside that
+- * guarded region, which would corrupt userspace FP/SIMD register state.
++ * removed via CFLAGS_REMOVE_nap_fpu.o and is called directly from
++ * nap_select() without any kernel_neon_begin/end wrapper — the code
++ * is scalar float only and does not touch NEON/SIMD vector registers.
+  */
+ 
+ #include <linux/cpuidle.h>
+@@ -30,8 +28,6 @@
+ #include <linux/sysfs.h>
+ #include <linux/string.h>
+ #include <linux/tick.h>
+-#include <asm/simd.h>
+-#include <asm/neon.h>
+ 
+ #include "nap.h"
+ 
+@@ -216,16 +212,9 @@ static int nap_select(struct cpuidle_driver *drv,
+ 
+ 	d->short_circuited = false;
+ 
+-	if (likely(may_use_simd())) {
+-		kernel_neon_begin();
+-		idx = nap_fpu_select(drv, dev, d);
+-		kernel_neon_end();
+-
+-		if (idx < 0)
+-			idx = nap_fallback_heuristic(drv, dev);
+-	} else {
++	idx = nap_fpu_select(drv, dev, d);
++	if (idx < 0)
+ 		idx = nap_fallback_heuristic(drv, dev);
+-	}
+ 
+ 	*stop_tick = (drv->states[idx].target_residency_ns >
+ 		      RESIDENCY_THRESHOLD_NS);
+@@ -422,7 +411,7 @@ static ssize_t reset_weights_store(struct kobject *kobj,
+ 
+ 	/*
+ 	 * Set a per-CPU flag; each CPU will reinitialize its own weights
+-	 * inside nap_select() within its own kernel_neon_begin/end context.
++	 * inside nap_select() on the next idle entry for that CPU.
+ 	 * This avoids cross-CPU data races on the weight arrays.
+ 	 *
+ 	 * Accepts "all" to reset every online CPU, or a cpulist
+diff --git a/drivers/cpuidle/governors/nap/nap.h b/drivers/cpuidle/governors/nap/nap.h
+index d7aef6979..39fc30a27 100644
+--- a/drivers/cpuidle/governors/nap/nap.h
++++ b/drivers/cpuidle/governors/nap/nap.h
+@@ -265,7 +265,7 @@ struct nap_cpu_data {
+ 
+ DECLARE_PER_CPU(struct nap_cpu_data, nap_data);
+ 
+-/* FP/NEON entry point (nap_fpu.c) — call only within kernel_neon_begin/end */
++/* Scalar FP entry point (nap_fpu.c) — safe to call directly in cpuidle context */
+ int nap_fpu_select(struct cpuidle_driver *drv,
+ 		   struct cpuidle_device *dev,
+ 		   struct nap_cpu_data *d);
+diff --git a/drivers/cpuidle/governors/nap/nap_fpu.c b/drivers/cpuidle/governors/nap/nap_fpu.c
+index da193e084..b65ecfdb2 100644
+--- a/drivers/cpuidle/governors/nap/nap_fpu.c
++++ b/drivers/cpuidle/governors/nap/nap_fpu.c
+@@ -3,14 +3,13 @@
+  * nap_fpu.c — FPU/SIMD code for the NAP cpuidle governor
+  *
+  * This file is compiled without -mgeneral-regs-only (see Makefile).
+- * ALL functions here MUST be called only from within
+- * kernel_neon_begin()/kernel_neon_end() blocks, guarded by
+- * may_use_simd() at the call site (see nap_select() in nap.c).
++ * ALL functions here use scalar float only — no NEON/SIMD vector
++ * instructions.  They may be called directly from cpuidle callbacks
++ * without kernel_neon_begin()/kernel_neon_end() wrappers.
+  *
+- * Keeping FP/NEON code in a separate translation unit ensures the
+- * compiler cannot emit FP/NEON instructions in non-FPU code paths
+- * (nap.c), which would silently corrupt userspace FP/SIMD register
+- * state.
++ * Keeping FP code in a separate translation unit ensures the compiler
++ * cannot emit FP instructions in non-FPU code paths (nap.c), which
++ * would silently corrupt userspace FP register state.
+  */
+ 
+ #include <linux/cpuidle.h>
