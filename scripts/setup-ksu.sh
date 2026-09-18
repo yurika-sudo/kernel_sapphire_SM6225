@@ -172,7 +172,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   KSUN_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
   echo "KSUN_TAG=$KSUN_TAG"    >> "${GITHUB_ENV:-/dev/null}"
   echo "$KSUN_TAG"                  > "$WORK_DIR/ksun_tag.txt"
-  _ksun_ver=$(grep -rh "^#define KSU_VERSION\b" KernelSU-Next/kernel/ 2>/dev/null \
+  _ksun_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
   | awk 'NR==1{print $NF}' | tr -d '[:space:]')
   echo "${_ksun_ver:-}" > "$WORK_DIR/ksun_version.txt"
   cd ..
