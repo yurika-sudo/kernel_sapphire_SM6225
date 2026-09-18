@@ -249,6 +249,11 @@ jobs:
           echo "$UNAME" > ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
           echo "Kernel uname: $UNAME"
 
+      - name: "📋 Collect build log"
+        if: always()
+        run: |
+          cp /tmp/build_${{ inputs.source_type }}.log             ${{ env.WORK_DIR }}/out/dist/build-${{ inputs.artifact_name }}.log 2>/dev/null ||             echo "[no log]" > ${{ env.WORK_DIR }}/out/dist/build-${{ inputs.artifact_name }}.log
+
       - name: "📤 Upload artifact"
         uses: actions/upload-artifact@v4.6.2
         with:
@@ -262,6 +267,7 @@ jobs:
             ${{ env.WORK_DIR }}/suki_ksu_tag.txt
             ${{ env.WORK_DIR }}/ksun_version.txt
             ${{ env.WORK_DIR }}/suki_version.txt
+            ${{ env.WORK_DIR }}/out/dist/build-${{ inputs.artifact_name }}.log
           retention-days: 1
 
 
