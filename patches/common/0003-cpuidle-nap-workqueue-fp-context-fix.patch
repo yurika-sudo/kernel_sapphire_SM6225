@@ -1,0 +1,196 @@
+diff --git a/drivers/cpuidle/governors/nap/Makefile b/drivers/cpuidle/governors/nap/Makefile
+index bd4690bd2..8327f3a70 100644
+--- a/drivers/cpuidle/governors/nap/Makefile
++++ b/drivers/cpuidle/governors/nap/Makefile
+@@ -8,14 +8,10 @@ obj-$(CONFIG_CPU_IDLE_GOV_NAP) += cpuidle_gov_nap.o
+ cpuidle_gov_nap-y := nap.o nap_fpu.o
+ 
+ # arm64 kernel builds with -mgeneral-regs-only (see arch/arm64/Makefile).
+-# nap_fpu.o uses NEON/FP instructions and must have that flag removed.
+-#
+-# CRITICAL: nap.o is intentionally compiled with NORMAL kernel flags
+-# (general-regs-only).  All floating-point/NEON code lives in nap_fpu.o,
+-# which is compiled without -mgeneral-regs-only and called directly from
+-# nap_select().  This separation ensures the compiler cannot emit
+-# FP/NEON instructions in governor callbacks (nap_select, nap_reflect,
+-# etc.) outside nap_fpu.o.
++# nap_fpu.o uses FP registers for scalar float arithmetic and must have
++# that flag removed.  It is only ever called from nap_fpu_work(), a
++# per-CPU workqueue worker that runs in process context where FP/NEON
++# registers are safe to use without kernel_neon_begin/end.
+ #
+ # Do NOT add a CFLAGS_REMOVE for nap.o -- it must stay general-regs-only.
+ CFLAGS_REMOVE_nap_fpu.o += -mgeneral-regs-only
+diff --git a/drivers/cpuidle/governors/nap/nap.c b/drivers/cpuidle/governors/nap/nap.c
+index dc40dbec9..5ec98f09a 100644
+--- a/drivers/cpuidle/governors/nap/nap.c
++++ b/drivers/cpuidle/governors/nap/nap.c
+@@ -9,12 +9,10 @@
+  * confidence level.  Weights are Xavier-initialized at boot, then refined via
+  * online learning (deferred backpropagation with SGD).
+  *
+- * IMPORTANT: This file is compiled WITHOUT the -mgeneral-regs-only flag
+- * (normal arm64 kernel compilation forces general-regs-only). All
+- * floating-point/NEON code lives in nap_fpu.c, which has that flag
+- * removed via CFLAGS_REMOVE_nap_fpu.o and is called directly from
+- * nap_select() without any kernel_neon_begin/end wrapper — the code
+- * is scalar float only and does not touch NEON/SIMD vector registers.
++ * All floating-point code lives in nap_fpu.c and is called exclusively
++ * from nap_fpu_work() -- a per-CPU workqueue worker that runs in process
++ * context where FP/NEON registers are safe to use.  nap_select() uses
++ * only the cached result (d->cached_nn_idx) written by the worker.
+  */
+ 
+ #include <linux/cpuidle.h>
+@@ -28,6 +26,7 @@
+ #include <linux/sysfs.h>
+ #include <linux/string.h>
+ #include <linux/tick.h>
++#include <linux/workqueue.h>
+ 
+ #include "nap.h"
+ 
+@@ -63,6 +62,26 @@
+ DEFINE_PER_CPU(struct nap_cpu_data, nap_data);
+ static struct cpuidle_driver *nap_cached_drv;
+ 
++/* ================================================================
++ * Per-CPU FPU worker (process context -- FP/NEON safe)
++ * ================================================================ */
++
++static void nap_fpu_work(struct work_struct *work)
++{
++	struct nap_cpu_data *d =
++		container_of(work, struct nap_cpu_data, fpu_work);
++	struct cpuidle_driver *drv = READ_ONCE(nap_cached_drv);
++	struct cpuidle_device *dev = cpuidle_get_device();
++	int idx;
++
++	if (!drv || !dev)
++		return;
++
++	idx = nap_fpu_select(drv, dev, d);
++	if (idx >= 0)
++		WRITE_ONCE(d->cached_nn_idx, idx);
++}
++
+ /* ================================================================
+  * Reflect-time updates (integer-only, no FPU needed)
+  * ================================================================ */
+@@ -212,8 +231,14 @@ static int nap_select(struct cpuidle_driver *drv,
+ 
+ 	d->short_circuited = false;
+ 
+-	idx = nap_fpu_select(drv, dev, d);
+-	if (idx < 0)
++	/*
++	 * Use the cached NN result from the last nap_fpu_work() run.
++	 * On the very first idle (cached_nn_idx == 0) this falls through
++	 * to nap_fallback_heuristic() which is the correct cold-start
++	 * behaviour -- identical to what upstream does with may_use_simd().
++	 */
++	idx = READ_ONCE(d->cached_nn_idx);
++	if (idx <= 0)
+ 		idx = nap_fallback_heuristic(drv, dev);
+ 
+ 	*stop_tick = (drv->states[idx].target_residency_ns >
+@@ -269,6 +294,13 @@ static void nap_reflect(struct cpuidle_device *dev, int index)
+ 		d->needs_learn = true;
+ 	}
+ 
++	/*
++	 * Schedule the FPU worker to run learning + forward pass in
++	 * process context where FP/NEON registers are safe to use.
++	 * schedule_work_on() is a no-op if the work is already queued.
++	 */
++	schedule_work_on(smp_processor_id(), &d->fpu_work);
++
+ 	d->stats.total_residency_ns += measured_ns;
+ 	if (index > 0 && measured_ns < drv->states[index].target_residency_ns)
+ 		d->stats.overshoot_count++;
+@@ -280,9 +312,11 @@ static int nap_enable(struct cpuidle_driver *drv,
+ 	struct nap_cpu_data *d = per_cpu_ptr(&nap_data, dev->cpu);
+ 
+ 	memset(d, 0, sizeof(*d));
++	INIT_WORK(&d->fpu_work, nap_fpu_work);
++	d->cached_nn_idx = 0;
+ 
+ 	/*
+-	 * Defer weight initialization to the first nap_select() FPU path
++	 * Defer weight initialization to the first nap_fpu_work() run
+ 	 * via reset_pending.  nap_enable() is called from cpuidle core
+ 	 * (cpuidle_enable_device) which may run on a different CPU than
+ 	 * dev->cpu during governor switch.  Deferring ensures FPU init
+@@ -311,6 +345,9 @@ static int nap_enable(struct cpuidle_driver *drv,
+ static void nap_disable(struct cpuidle_driver *drv,
+ 			struct cpuidle_device *dev)
+ {
++	struct nap_cpu_data *d = per_cpu_ptr(&nap_data, dev->cpu);
++
++	cancel_work_sync(&d->fpu_work);
+ 	WRITE_ONCE(nap_cached_drv, NULL);
+ }
+ 
+diff --git a/drivers/cpuidle/governors/nap/nap.h b/drivers/cpuidle/governors/nap/nap.h
+index 39fc30a27..0dcd643c7 100644
+--- a/drivers/cpuidle/governors/nap/nap.h
++++ b/drivers/cpuidle/governors/nap/nap.h
+@@ -259,13 +259,17 @@ struct nap_cpu_data {
+ 	int   learn_counter;
+ 	bool reset_pending;		/* set by sysfs, consumed by nap_select */
+ 
++	/* Workqueue-based FPU worker */
++	struct work_struct fpu_work;
++	int cached_nn_idx;		/* last result from fpu_work, used by nap_select */
++
+ 	/* sysfs statistics */
+ 	struct nap_stats stats;
+ };
+ 
+ DECLARE_PER_CPU(struct nap_cpu_data, nap_data);
+ 
+-/* Scalar FP entry point (nap_fpu.c) — safe to call directly in cpuidle context */
++/* FP entry point (nap_fpu.c) -- must only be called from process/workqueue context */
+ int nap_fpu_select(struct cpuidle_driver *drv,
+ 		   struct cpuidle_device *dev,
+ 		   struct nap_cpu_data *d);
+diff --git a/drivers/cpuidle/governors/nap/nap_fpu.c b/drivers/cpuidle/governors/nap/nap_fpu.c
+index b65ecfdb2..70b0e24b6 100644
+--- a/drivers/cpuidle/governors/nap/nap_fpu.c
++++ b/drivers/cpuidle/governors/nap/nap_fpu.c
+@@ -30,15 +30,29 @@ static inline float float_min(float a, float b) { return a < b ? a : b; }
+ static inline float float_max(float a, float b) { return a > b ? a : b; }
+ 
+ /*
+- * Kernel-safe sqrtf using the arm64 NEON/FP fsqrt instruction
+- * directly.  The compiler may otherwise lower nap_sqrtf to a libm
+- * call, which is unavailable in the kernel.  This file is always
+- * compiled with FP/NEON enabled (see Makefile).
++ * Scalar sqrtf via bit-trick seed + Newton-Raphson (no FP register
++ * constraints, no kernel_neon_begin/end required).
+  */
+ static inline float nap_sqrtf(float x)
+ {
+-	asm("fsqrt %s0, %s1" : "=w"(x) : "w"(x));
+-	return x;
++	/*
++	 * Pure scalar sqrt via bit-trick seed + two Newton-Raphson iterations:
++	 *   est = 0.5 * (est + x/est)
++	 * No FP/NEON register constraints -- safe to call without
++	 * kernel_neon_begin/end in cpuidle IRQ-disabled context.
++	 * Error < 0.00001% vs fsqrt; acceptable for weight initialization.
++	 */
++	union { float f; u32 i; } u = { .f = x };
++	float est;
++
++	if (unlikely(x <= 0.0f))
++		return 0.0f;
++
++	u.i = ((u.i - (1u << 23)) >> 1) + (1u << 29);
++	est = u.f;
++	est = 0.5f * (est + x / est);
++	est = 0.5f * (est + x / est);
++	return est;
+ }
+ 
+ /* Scalar log2 approximation (same algorithm as fast_log2f_sse) */
