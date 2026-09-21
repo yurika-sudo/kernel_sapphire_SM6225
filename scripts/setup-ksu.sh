@@ -210,8 +210,14 @@ elif [ "$KSU_TYPE" = "sksu" ]; then
     | jq -r '.tag_name' 2>/dev/null || echo "unknown")
   echo "SUKI_TAG=$SUKI_TAG"      >> "${GITHUB_ENV:-/dev/null}"
   echo "$SUKI_TAG"                > "$WORK_DIR/suki_ksu_tag.txt"
-  _suki_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
-  | awk 'NR==1{print $NF}' | tr -d '[:space:]')
+  _suki_base=$(grep -m1 "^VERSION_BASE" kernel/Kbuild 2>/dev/null | awk -F":=" '{gsub(/ /,"",$2); print $2}')
+  _suki_offset=$(grep -m1 "^VERSION_OFFSET" kernel/Kbuild 2>/dev/null | awk -F":=" '{gsub(/ /,"",$2); print $2}')
+  _suki_count=$(git rev-list --count HEAD 2>/dev/null || echo "")
+  if [ -n "$_suki_base" ] && [ -n "$_suki_offset" ] && [ -n "$_suki_count" ]; then
+    _suki_ver=$(( _suki_base + _suki_count - _suki_offset ))
+  else
+    _suki_ver=""
+  fi
   echo "${_suki_ver:-}" > "$WORK_DIR/suki_version.txt"
   cd ..
   _fix_ksu_umount_missing_set "KernelSU/kernel/feature/kernel_umount.c"
