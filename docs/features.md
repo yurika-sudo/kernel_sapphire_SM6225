@@ -38,23 +38,22 @@
 
 ## Seiran Core Module
 
-The kernel ships zram-ir/multi-comp support baked in, but `CONFIG_ZRAM=m` means `zram.ko`/`zsmalloc.ko` build as loadable modules — they don't reach the device via the AK3 kernel-image ZIP alone. A separate KSU/Magisk module carries them.
+> [!CAUTION]
+> **Required — no exceptions.** Without this module, ZRAM will not work at all — `zram0` won't come up, swap won't run, and RAM management will be worse than stock.
 
-> [!WARNING]
-> **Kernel ZIP alone = no ZRAM at all**, on every variant. This isn't "multi-comp missing" — `zram0` doesn't come up at all until this module loads `zram.ko`/`zsmalloc.ko` for you. Flashing just the kernel and expecting ZRAM/swap to work is the single most common source of "why is my RAM management worse than before" reports.
+The kernel ZIP alone is not enough. `CONFIG_ZRAM=m` means `zram.ko`/`zsmalloc.ko` are loadable modules, not baked into the kernel image. Seiran Core is the KSU/Magisk module that loads them.
 
 **What it does:** loads `zram.ko` + `zsmalloc.ko` with multi-comp + zram-ir tiered recompression, then sets NAP as cpuidle governor, ADIOS as I/O scheduler, and Reflex as cpufreq governor — all at `post-fs-data`.
 
-**Get it — 2 ways:**
-- **GitHub Release:** attached as `seiran-core.zip` alongside the kernel ZIP.
-- **Telegram:** sent automatically to the same channel as build/manager updates — [t.me/tmplogchat](https://t.me/tmplogchat).
+**Download:**
+- **GitHub Release:** `seiran-core.zip` attached alongside the kernel ZIP.
+- **Telegram:** [t.me/tmplogchat](https://t.me/tmplogchat)
 
-**Requires a module manager** — it's a KSU/Magisk module, installed through the manager app, not flashed from recovery.
-- **GKI-Ksun/SukiSU or CLO-Ksun/SukiSU:** you already need the matching manager APK for root (see [Manager](./installation.md#manager)) — install the zram module the same way.
-- **NoKSU:** the kernel has no root/manager baked in. Root separately first — Magisk (patch `boot.img`) or a boot.img-patched KSU-Next/SukiSU-Ultra — then install this module from that manager's Modules tab.
+**Install:** requires a module manager (KSU/Magisk). Install from the Modules tab — do not flash from recovery.
+- **NoKSU:** root first via Magisk or KSU-Next/SukiSU-Ultra, then install from there.
 
 > [!NOTE]
-> Must match your flashed variant exactly (e.g. `seiran-core.zip`). Universal — works across all variants (GKI/CLO × KSU-Next/SukiSU/NoKSU) as long as kernel version matches. Check status via the module's **Action** button after install.
+> Universal — works across all variants (GKI/CLO × KSU-Next/SukiSU/NoKSU).
 
 ---
 
@@ -77,52 +76,15 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 
 ### Stable (`patches/common/`)
 
-Applied to all variants (GKI, CLO, GKI-Compat).
-
-| Patch | Description |
-|---|---|
-| `bore-5.15-sapphire` | BORE burst-oriented scheduler |
-| `adios-backport` | ADIOS multi-queue I/O scheduler |
-| `reflex-gki-5.15` | Reflex cpufreq governor |
-| `bbrv3-5.15-sapphire` | BBRv3 TCP congestion control |
-| `prefer_silver_pelt_only` | Silver-cluster affinity tuning |
-| `walt-early-migrate-battery` | WALT early migration threshold |
-| `sched-nr-migrate-battery` | `sched_nr_migrate` battery tuning |
-| `watermark_scale_factor` | VM watermark tuning |
-| `vm_swappiness` | Default swappiness tuning |
-| `le9uo-workingset-protection-5.15-sapphire` | le9uo working set protection |
-| `0001-zram-multi-comp-recompress-huge-idle-5.15` | ZRAM multi-comp + huge/idle recompression |
-| `0002-zram-ir-1.2-5.15` | zram-ir tiered compression |
-| `0003-zram-read-path-dispatcher-fix` | ZRAM read path dispatcher fix |
-| `0004-zram-ir-prio-underflow-fix` | zram-ir priority underflow fix |
-| `0005-zram-read-priority-fix` | ZRAM read priority fix |
-| `0006-zram-ir-fallback-null-guard` | zram-ir NULL guard for flush requests |
-| `arm64-memcmp-optimize-sapphire` | arm64 memcmp optimization |
-| `logspam-filter-drm-mi_disp-avc` | DRM/mi_disp + AVC log suppression |
-| `0001-logspam-filter-nfc-hwsvc` | NFC hwsvc log suppression |
-| `0002-logspam-filter-n7-wlan-hdd` | WLAN HDD log suppression |
-| `0003-logspam-filter-cmn-mlme` | CMN MLME log suppression |
-| `qcom-logbuf-print-caller-arity-fix` | Qcom logbuf print caller arity fix |
-| `cve-2026-64560-posix-cpu-timers-uaf` | CVE-2026-64560 posix CPU timers UAF fix |
-| `rtmutex-ghostlock-cve-2026-43499-uaf-fix` | CVE-2026-43499 rtmutex ghostlock UAF fix |
-| `cass-5.15-sapphire-updated` | CASS scheduler |
-| `0001-cpuidle-nap-governor-arm64-scalar-gki` | cpuidle NAP governor (arm64 scalar) |
-| `kcompressd-sapphire-page-based` | kcompressd async compression daemon (page-based backport) |
-| `mglru-enable-walks-mmu` | MGLRU MMU notifier walks enable |
+Stable patches applied to all variants (GKI, CLO, GKI-Compat). See [`patches/common/`](../patches/common/) for the full list.
 
 ### GKI-Compat only (`patches/gki-compat-only/`)
 
-Compatibility shims applied on top of `patches/common/` for the GKI-Compat tree (pinned to 5.15.123).
+Compatibility shims on top of `patches/common/` to keep the GKI-Compat tree (pinned to 5.15.123) building clean. See [`patches/gki-compat-only/`](../patches/gki-compat-only/).
 
-| Patch | Description |
-|---|---|
-| `0001-vma-pad-start-compat-shim` | VMA pad-start compat shim |
-| `0002-adios-cleanup-guard-compat` | ADIOS cleanup guard for older tree |
-| `0003-posix-cpu-timers-rcu-guard-compat` | RCU guard macro compat shim for CVE-2026-64560 |
+### Testing (`patches/testing/`)
 
-### Under Testing (`patches/testing/`)
-
-No patches currently under testing.
+Patches under evaluation — may be unstable or variant-specific. See [`patches/testing/`](../patches/testing/).
 
 ---
 
