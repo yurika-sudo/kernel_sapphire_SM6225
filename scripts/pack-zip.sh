@@ -50,6 +50,17 @@ git clone --depth=1 "$AK3_REPO" ak3_tmp
 # Per-variant ZIP: only Image (for flashing) — no named copy to keep size lean
 cp "$IMAGE" "ak3_tmp/Image"
 
+# Bundle zram modules if available (globally, all variants)
+KO_DIR="${WORK_DIR}/out/dist/ko"
+if [ -f "${KO_DIR}/zram.ko" ] && [ -f "${KO_DIR}/zsmalloc.ko" ]; then
+  mkdir -p "ak3_tmp/modules/system/lib/modules"
+  cp "${KO_DIR}/zram.ko"     "ak3_tmp/modules/system/lib/modules/"
+  cp "${KO_DIR}/zsmalloc.ko" "ak3_tmp/modules/system/lib/modules/"
+  echo "[INFO] zram modules bundled into zip"
+else
+  echo "[WARN] zram.ko/zsmalloc.ko not found in ${KO_DIR} — skipping module bundle"
+fi
+
 cd ak3_tmp
 zip -r9 "../${ZIP_NAME}" * -x .git/*
 cd ..
