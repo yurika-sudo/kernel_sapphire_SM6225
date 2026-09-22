@@ -64,11 +64,15 @@ jobs:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
         run: bash scripts/release-summary.sh
 
-      - name: "Build logs"
+      - name: "Audit logs"
         env:
-          GH_TOKEN:   ${{ secrets.GITHUB_TOKEN }}
-          BUILD_TYPE: ${{ inputs.build_type }}
-        run: bash scripts/build-logs.sh
+          GH_TOKEN:          ${{ secrets.GITHUB_TOKEN }}
+          BUILD_TYPE:        ${{ inputs.build_type }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID:     ${{ github.run_id }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_SHA:        ${{ github.sha }}
+        run: bash scripts/audit-logs.sh
 
       - name: "Release body"
         env:
@@ -114,7 +118,7 @@ jobs:
           files: |
             ./release_zips/*.zip
             ./manager_apks/*.apk
-            ${{ env.LOG_ZIP }}
+            ${{ env.LOG_AUDIT_ZIP }}
           tag_name:   ${{ env.RELEASE_TAG }}
           name:       ${{ env.RELEASE_NAME }}
           prerelease: ${{ env.IS_PRERELEASE }}
