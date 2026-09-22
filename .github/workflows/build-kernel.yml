@@ -139,6 +139,7 @@ jobs:
           suki_tag_pin: ${{ inputs.suki_tag_pin }}
 
       - name: "🐳 Droidspaces"
+        if: inputs.source_type != 'kernel-org'
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           bash ${{ github.workspace }}/scripts/droidspaces.sh \
