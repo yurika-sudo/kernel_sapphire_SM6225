@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   release:
-    name: "📦 Package & Release"
+    name: "Package & Release"
     runs-on: ubuntu-latest
 
     steps:
@@ -27,25 +27,25 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: "📥 Download all artifacts"
+      - name: "Download all artifacts"
         uses: actions/download-artifact@v4.3.0
         with:
           path: ./artifacts/
 
-      - name: "🔖 Resolve versions"
+      - name: "Resolve versions"
         run: bash scripts/resolve-versions.sh
         env:
-          BUILD_TYPE: ${{ inputs.build_type }}
+          BUILD_TYPE:    ${{ inputs.build_type }}
           WORKFLOW_TYPE: ${{ inputs.workflow_type }}
           GITHUB_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
 
-      - name: "🗂️ Collect / bundle ZIPs"
+      - name: "Collect / bundle ZIPs"
         env:
           ZIP_MODE:   ${{ inputs.zip_mode }}
           BUILD_TYPE: ${{ inputs.build_type }}
         run: bash scripts/pack-release.sh
 
-      - name: "📦 Fetch manager APKs"
+      - name: "Fetch manager APKs"
         env:
           GITHUB_TOKEN:              ${{ secrets.GITHUB_TOKEN }}
           KSUN_MANAGER_ARTIFACT_ID:  ${{ env.KSUN_MANAGER_ARTIFACT_ID }}
@@ -54,38 +54,37 @@ jobs:
           SUKI_VERSION:              ${{ env.SUKI_VERSION }}
         run: bash scripts/fetch-manager-apks.sh
 
-      - name: "📋 Build summary"
+      - name: "Build summary"
         env:
-          BUILD_TYPE:      ${{ inputs.build_type }}
-          ZIP_MODE:        ${{ inputs.zip_mode }}
-          REPO:            ${{ github.repository }}
-          SHA:             ${{ github.sha }}
-          RUN_URL:         "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          BUILD_TYPE:        ${{ inputs.build_type }}
+          ZIP_MODE:          ${{ inputs.zip_mode }}
+          REPO:              ${{ github.repository }}
+          SHA:               ${{ github.sha }}
+          RUN_URL:           "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
         run: bash scripts/release-summary.sh
 
-
-      - name: "📋 Build logs"
+      - name: "Build logs"
         env:
           GH_TOKEN:   ${{ secrets.GITHUB_TOKEN }}
           BUILD_TYPE: ${{ inputs.build_type }}
         run: bash scripts/build-logs.sh
 
-      - name: "📝 Release body"
+      - name: "Release body"
         env:
           BUILD_TYPE:        ${{ inputs.build_type }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_RUN_ID:     ${{ github.run_id }}
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
           GITHUB_SHA:        ${{ github.sha }}
-          WORKFLOW_TYPE: ${{ inputs.workflow_type }}
-          RUN_URL:     "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          REPO:        ${{ github.repository }}
-          SHA:         ${{ github.sha }}
-          RUN_NUMBER:  ${{ github.run_number }}
+          WORKFLOW_TYPE:     ${{ inputs.workflow_type }}
+          RUN_URL:           "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          REPO:              ${{ github.repository }}
+          SHA:               ${{ github.sha }}
+          RUN_NUMBER:        ${{ github.run_number }}
         run: bash scripts/release-notes.sh
 
-      - name: "☢️ Nuke ALL existing release assets (opt-in)"
+      - name: "Nuke ALL existing release assets (opt-in)"
         if: ${{ inputs.nuke_release == true }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -96,7 +95,7 @@ jobs:
             | xargs -r -I{} gh release delete-asset \
                 "$RELEASE_TAG" {} --yes 2>/dev/null || true
 
-      - name: "🧹 Purge old AK3 assets"
+      - name: "Purge old AK3 assets"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -104,14 +103,14 @@ jobs:
             -q '.assets[].name' 2>/dev/null \
             | grep '^AK3-' \
             | xargs -r -I{} gh release delete-asset \
-                "$RELEASE_TAG" {} --yes 2>/dev/null || true        
-        
-      - name: "⬆️ Create release"
+                "$RELEASE_TAG" {} --yes 2>/dev/null || true
+
+      - name: "Create release"
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          overwrite: true  
+          overwrite: true
           files: |
             ./release_zips/*.zip
             ./manager_apks/*.apk
@@ -121,19 +120,22 @@ jobs:
           prerelease: ${{ env.IS_PRERELEASE }}
           body:       ${{ env.RELEASE_BODY }}
 
-      - name: "🎉 Telegram — success"
+      - name: "Telegram — success"
         if: success()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_TOPIC_ID:  ${{ secrets.TELEGRAM_TOPIC_ID }}
-          BUILD_TYPE:    ${{ inputs.build_type }}
-          ZIP_MODE:      ${{ inputs.zip_mode }}
-          RUN_URL:       "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          RUN_NUMBER:    ${{ github.run_number }}
-          SHA:           ${{ github.sha }}
-          START_TIME:    ${{ inputs.start_time }}
-          KERNEL_UNAME:  ${{ env.KERNEL_UNAME }}
+          BUILD_TYPE:       ${{ inputs.build_type }}
+          ZIP_MODE:         ${{ inputs.zip_mode }}
+          RUN_URL:          "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_NUMBER:       ${{ github.run_number }}
+          SHA:              ${{ github.sha }}
+          START_TIME:       ${{ inputs.start_time }}
+          KERNEL_UNAME:     ${{ env.KERNEL_UNAME }}
           KERNEL_UNAME_GKI: ${{ env.KERNEL_UNAME_GKI }}
           KERNEL_UNAME_CLO: ${{ env.KERNEL_UNAME_CLO }}
+          GITHUB_REPOSITORY:   ${{ github.repository }}
+          GITHUB_REF_NAME:     ${{ github.ref_name }}
+          GITHUB_ACTOR:        ${{ github.actor }}
         run: bash scripts/notify.sh success

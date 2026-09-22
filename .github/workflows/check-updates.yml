@@ -1,4 +1,4 @@
-name: "🔍 Check Source Updates"
+name: "Check Source Updates"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   check:
-    name: "🔍 Check upstream versions"
+    name: "Check upstream versions"
     runs-on: ubuntu-latest
     outputs:
       has_update:    ${{ steps.versions.outputs.has_update }}
@@ -32,16 +32,16 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: "🔍 Fetch and compare upstream versions"
+      - name: "Fetch and compare upstream versions"
         id: versions
         run: bash scripts/check-sources.sh
 
-  # Build-gate: only runs when its tag actually moved. Uses GKI-Ksun/GKI-SukiSU
+  # Build-gate: only runs when its tag actually moved. Uses GKI-KSU-Next/GKI-SukiSU-Ultra
   # as the cheapest representative variant — goal is "does this candidate
   # compile", not a full 6-way matrix. build_type: stable so testing/ patches
   # don't add noise to the signal.
   verify-ksun:
-    name: "🧪 Verify KSU-Next candidate"
+    name: "Verify KSU-Next candidate"
     needs: check
     if: needs.check.outputs.ksun_changed == 'true'
     uses: ./.github/workflows/build-kernel.yml
@@ -49,7 +49,7 @@ jobs:
       variant_name:  "Verify-KSU-Next"
       source_type:   gki
       ksu_type:      ksun
-      zip_prefix:    VERIFY_Ksun
+      zip_prefix:    VERIFY_KSU-Next
       artifact_name: verify-ksun
       defconfig:     gki_defconfig
       build_type:    stable
@@ -57,15 +57,15 @@ jobs:
     secrets: inherit
 
   verify-sksu:
-    name: "🧪 Verify SukiSU-Ultra candidate"
+    name: "Verify SukiSU-Ultra candidate"
     needs: check
     if: needs.check.outputs.suki_changed == 'true'
     uses: ./.github/workflows/build-kernel.yml
     with:
-      variant_name:  "Verify-SukiSU"
+      variant_name:  "Verify-SukiSU-Ultra"
       source_type:   gki
       ksu_type:      sksu
-      zip_prefix:    VERIFY_SukiSU
+      zip_prefix:    VERIFY_SukiSU-Ultra
       artifact_name: verify-sksu
       defconfig:     gki_defconfig
       build_type:    stable
@@ -73,7 +73,7 @@ jobs:
     secrets: inherit
 
   apply-pins:
-    name: "📌 Apply verified pins"
+    name: "Apply verified pins"
     needs: [check, verify-ksun, verify-sksu]
     if: always() && needs.check.outputs.has_update == 'true'
     runs-on: ubuntu-latest
@@ -84,7 +84,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: "📌 Write source-pins.json (skip fields whose gate failed)"
+      - name: "Write source-pins.json (skip fields whose gate failed)"
         id: apply
         env:
           NEW_KSUN:  ${{ needs.check.outputs.ksun_tag }}
@@ -153,7 +153,7 @@ jobs:
           git push
 
   notify:
-    name: "📣 Telegram report"
+    name: "Telegram report"
     needs: [check, apply-pins]
     if: always()
     runs-on: ubuntu-latest
@@ -162,7 +162,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: "📣 Telegram"
+      - name: "Telegram"
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}

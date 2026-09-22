@@ -27,21 +27,21 @@ jobs:
       KERNEL_SRC: ${{ github.workspace }}/kernel_src
 
     steps:
-      - name: "📦 Checkout"
+      - name: "Checkout"
         uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 1
 
-      - name: "🛠️ Setup env"
+      - name: "Setup env"
         uses: ./.github/actions/setup-env
 
-      - name: "📌 Read CLO source pin"
+      - name: "Read CLO source pin"
         if: inputs.source_type == 'clo'
         id: clo-pin
         run: |
           echo "hash=$(jq -r .clo_sublevel sources/source-pins.json)" >> $GITHUB_OUTPUT
 
-      - name: "📦 Restore CLO source cache"
+      - name: "Restore CLO source cache"
         if: inputs.source_type == 'clo'
         id: clo-src-cache
         uses: actions/cache/restore@v4
@@ -50,7 +50,7 @@ jobs:
           key: clo-source-${{ steps.clo-pin.outputs.hash }}
           restore-keys: clo-source-
 
-      - name: "🌟 Clone kernel source"
+      - name: "Clone kernel source"
         env:
           SOURCE_TYPE:   ${{ inputs.source_type }}
           KSU_TYPE:      ${{ inputs.ksu_type }}
@@ -58,17 +58,17 @@ jobs:
           CLO_FRAGMENT:  ${{ inputs.clo_fragment }}
         run: bash scripts/clone-source.sh
 
-      - name: "💾 Save CLO source cache"
+      - name: "Save CLO source cache"
         if: inputs.source_type == 'clo'
         uses: actions/cache/save@v4
         with:
           path: ${{ env.KERNEL_SRC }}
           key: clo-source-${{ steps.clo-pin.outputs.hash }}
 
-      - name: "🔧 Fix source warnings"
+      - name: "Fix source warnings"
         run: bash scripts/fix-source-warnings.sh "${{ env.KERNEL_SRC }}"
 
-      - name: "⚡ Configure ccache"
+      - name: "Configure ccache"
         if: inputs.build_type == 'stable'
         run: |
           sudo apt-get install -y ccache
@@ -83,7 +83,7 @@ jobs:
           echo "CCACHE_COMPRESSLEVEL=3"                                                                            >> $GITHUB_ENV
           echo "CCACHE_SLOPPINESS=file_macro,time_macros,include_file_mtime,include_file_ctime,pch_defines,system_headers,locale" >> $GITHUB_ENV
 
-      - name: "⚡ Restore ccache"
+      - name: "Restore ccache"
         if: inputs.build_type == 'stable'
         id: ccache-restore
         uses: actions/cache/restore@v4
@@ -93,12 +93,12 @@ jobs:
           restore-keys: |
             ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-
 
-      - name: "🔧 Setup toolchain"
+      - name: "Setup toolchain"
         env:
           SOURCE_TYPE: ${{ inputs.source_type }}
         run: bash scripts/setup-toolchain.sh
 
-      - name: "🩹 Apply patches"
+      - name: "Apply patches"
         env:
           SOURCE_TYPE: ${{ inputs.source_type }}
           KSU_TYPE:    ${{ inputs.ksu_type }}
@@ -108,13 +108,13 @@ jobs:
           set -o pipefail
           bash scripts/apply-patches.sh
 
-      - name: "🚫 Setup NoMount"
+      - name: "Setup NoMount"
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           curl -LSs "https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh" \
             | bash -s dev
 
-      - name: "🛡️ Setup BBG"
+      - name: "Setup BBG"
         if: inputs.ksu_type == 'ksun'
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
@@ -128,7 +128,7 @@ jobs:
             sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
             security/Kconfig
 
-      - name: "🔑 Setup KSU + SUSFS"
+      - name: "Setup KSU + SUSFS"
         if: inputs.ksu_type != 'none'
         uses: ./.github/actions/setup-ksu
         with:
@@ -138,14 +138,14 @@ jobs:
           ksun_tag_pin: ${{ inputs.ksun_tag_pin }}
           suki_tag_pin: ${{ inputs.suki_tag_pin }}
 
-      - name: "🐳 Droidspaces"
+      - name: "Droidspaces"
         if: inputs.source_type != 'kernel-org'
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           bash ${{ github.workspace }}/scripts/droidspaces.sh \
             "arch/arm64/configs/${{ inputs.defconfig }}"
 
-      - name: "⚙️ Kernel configs"
+      - name: "Kernel configs"
         uses: ./.github/actions/setup-configs
         with:
           ksu_type:     ${{ inputs.ksu_type }}
@@ -154,7 +154,7 @@ jobs:
           kernel_dir:   ${{ env.KERNEL_SRC }}
           clo_fragment: ${{ inputs.clo_fragment }}
 
-      - name: "🏷️ Localversion"
+      - name: "Localversion"
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           SHORT_SHA="${{ github.sha }}"
@@ -168,7 +168,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add . && git commit -m "clean dirty flag" || true
 
-      - name: "🚀 Build kernel"
+      - name: "Build kernel"
         id: build
         timeout-minutes: 50
         env:
@@ -181,19 +181,19 @@ jobs:
           set -o pipefail
           bash scripts/build.sh
 
-      - name: "⚡ Save ccache"
+      - name: "Save ccache"
         if: inputs.build_type == 'stable' && steps.ccache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ~/.ccache
           key: ccache-${{ inputs.source_type }}-${{ inputs.ksu_type }}-${{ hashFiles('sources/source-pins.json') }}
 
-      - name: "🔍 Verify kernel"
+      - name: "Verify kernel"
         run: |
           set -o pipefail
           bash scripts/verify-kernel.sh
 
-      - name: "💉 KPM patch"
+      - name: "KPM patch"
         if: inputs.ksu_type == 'sksu'
         working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
@@ -202,7 +202,7 @@ jobs:
           chmod +x patch_linux && ./patch_linux
           rm -f Image && mv oImage Image
 
-      - name: "📋 Build summary"
+      - name: "Build summary"
         if: always()
         env:
           VARIANT:     ${{ inputs.variant_name }}
@@ -212,7 +212,7 @@ jobs:
           RUN_URL:     "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: bash scripts/build-summary.sh
 
-      - name: "📣 Notify variant failure"
+      - name: "Notify variant failure"
         if: failure()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -225,7 +225,7 @@ jobs:
           RUN_NUMBER:  ${{ github.run_number }}
         run: bash scripts/notify.sh variant-failure
 
-      - name: "📦 Pack ZIP"
+      - name: "Pack ZIP"
         env:
           ZIP_PREFIX:  ${{ inputs.zip_prefix }}
           KSU_TYPE:    ${{ inputs.ksu_type }}
@@ -233,7 +233,7 @@ jobs:
           SOURCE_TYPE: ${{ inputs.source_type }}
         run: bash scripts/pack-zip.sh
 
-      - name: "📦 Pack Seiran Core module"
+      - name: "Pack Seiran Core module"
         if: inputs.artifact_name == 'gki-ksun'
         env:
           SOURCE_TYPE: ${{ inputs.artifact_name }}
@@ -242,7 +242,7 @@ jobs:
         run: |
           bash scripts/pack-module.sh
 
-      - name: "🏷️ Capture uname"
+      - name: "Capture uname"
         run: |
           UNAME=$(grep UTS_RELEASE \
             ${{ env.WORK_DIR }}/out/include/generated/utsrelease.h 2>/dev/null \
@@ -250,12 +250,14 @@ jobs:
           echo "$UNAME" > ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
           echo "Kernel uname: $UNAME"
 
-      - name: "📋 Collect build log"
+      - name: "Collect build log"
         if: always()
         run: |
-          cp /tmp/build_${{ inputs.source_type }}.log             ${{ env.WORK_DIR }}/out/dist/build-${{ inputs.artifact_name }}.log 2>/dev/null ||             echo "[no log]" > ${{ env.WORK_DIR }}/out/dist/build-${{ inputs.artifact_name }}.log
+          cp /tmp/build_${{ inputs.source_type }}.log \
+            ${{ env.WORK_DIR }}/out/dist/build-${{ inputs.artifact_name }}.log 2>/dev/null || \
+            echo "[no log]" > ${{ env.WORK_DIR }}/out/dist/build-${{ inputs.artifact_name }}.log
 
-      - name: "📤 Upload artifact"
+      - name: "Upload artifact"
         uses: actions/upload-artifact@v4.6.2
         with:
           name: ${{ inputs.artifact_name }}
@@ -270,5 +272,3 @@ jobs:
             ${{ env.WORK_DIR }}/suki_version.txt
             ${{ env.WORK_DIR }}/out/dist/build-${{ inputs.artifact_name }}.log
           retention-days: 1
-
-
