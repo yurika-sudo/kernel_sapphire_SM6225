@@ -227,7 +227,14 @@ elif [ "$KSU_TYPE" = "rsku" ]; then
   _patch_susfs_def_h
 
   _inject_susfs_init "ReSukiSU/kernel/ksu.c"
-  _link_ksu_driver "ReSukiSU"
+  # ReSukiSU keeps its kernel integration under ReSukiSU/kernel/ (not root),
+  # so link that subdirectory directly instead of using _link_ksu_driver.
+  [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
+    ln -sf "../ReSukiSU/kernel" drivers/kernelsu
+  grep -q "obj-.*kernelsu" drivers/Makefile || \
+    echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+  grep -q "kernelsu/Kconfig" drivers/Kconfig || \
+    echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
   rm -rf susfs4ksu
 
 fi
