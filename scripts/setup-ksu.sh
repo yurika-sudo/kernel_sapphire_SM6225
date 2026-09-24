@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # setup-ksu.sh — integrate KSU variant + SUSFS into kernel source
-# env: KSU_TYPE (ksun|sksu|none), KERNEL_DIR, WORK_DIR
-# optional env: KSUN_TAG_PIN, SUKI_TAG_PIN — if set, checkout that exact tag
+# env: KSU_TYPE (ksun|rsku|none), KERNEL_DIR, WORK_DIR
+# optional env: KSUN_TAG_PIN, RSKU_TAG_PIN — if set, checkout that exact tag
 #   instead of floating branch HEAD. Used only by check-updates.yml's verify
 #   gate to test a specific candidate tag before it's committed to
 #   source-pins.json. Normal builds never set these, so day-to-day behavior
@@ -196,51 +196,39 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   rm -rf susfs4ksu
 
 # SukiSU-Ultra
-elif [ "$KSU_TYPE" = "sksu" ]; then
-  rm -rf ./KernelSU ./drivers/kernelsu
-  curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" \
-    | bash -s builtin
-  [ -d "KernelSU" ] || { echo "[ERROR] KernelSU dir not found"; exit 1; }
+elif [ "$KSU_TYPE" = "rsku" ]; then
+  rm -rf ./KernelSU ./drivers/kernelsu ./ReSukiSU
+  git clone --depth=1 https://github.com/ReSukiSU/ReSukiSU.git
+  [ -d "ReSukiSU" ] || { echo "[ERROR] ReSukiSU not found"; exit 1; }
 
-  cd KernelSU
+  cd ReSukiSU
   git fetch --tags 2>/dev/null || true
-  _checkout_pin "." "${SUKI_TAG_PIN:-}" "SukiSU-Ultra"
-  SUKI_TAG=$(git describe --tags --abbrev=0 2>/dev/null || \
-    curl -sf "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest" \
-    | jq -r '.tag_name' 2>/dev/null || echo "unknown")
-  echo "SUKI_TAG=$SUKI_TAG"      >> "${GITHUB_ENV:-/dev/null}"
-  echo "$SUKI_TAG"                > "$WORK_DIR/suki_ksu_tag.txt"
-  _suki_base=$(grep -m1 "^VERSION_BASE" kernel/Makefile kernel/Kbuild 2>/dev/null | head -1 | awk -F":=" '{gsub(/ /,"",$2); print $2}')
-  _suki_offset=$(grep -m1 "^VERSION_OFFSET" kernel/Makefile kernel/Kbuild 2>/dev/null | head -1 | awk -F":=" '{gsub(/ /,"",$2); print $2}')
-  _suki_count=$(git rev-list --count HEAD 2>/dev/null || echo "")
-  if [ -n "$_suki_base" ] && [ -n "$_suki_offset" ] && [ -n "$_suki_count" ]; then
-    _suki_ver=$(( _suki_base + _suki_count - _suki_offset ))
-  else
-    _suki_ver=""
-  fi
-  echo "${_suki_ver:-}" > "$WORK_DIR/suki_version.txt"
+  _checkout_pin "." "${RSKU_TAG_PIN:-}" "ReSukiSU"
+  RSKU_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
+  echo "RSKU_TAG=$RSKU_TAG"    >> "${GITHUB_ENV:-/dev/null}"
+  echo "$RSKU_TAG"                  > "$WORK_DIR/rsku_tag.txt"
+  _rsku_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
+  | awk 'NR==1{print $NF}' | tr -d '[:space:]')
+  echo "${_rsku_ver:-}" > "$WORK_DIR/rsku_version.txt"
   cd ..
-  _fix_ksu_umount_missing_set "KernelSU/kernel/feature/kernel_umount.c"
 
-  # SUSFS — (ShirkNeko fork from simonpunk main branch)
-  git clone --depth=1 https://github.com/ShirkNeko/susfs4ksu.git -b gki-android13-5.15
+  # SUSFS — simonpunk main branch (ReSukiSU already ships SUSFS built-in)
+  git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
   SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
   echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
   echo "[OK] SUSFS commit: $SUSFS_COMMIT"
 
   SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
   [ -f "$SUSFS_PATCH" ] && patch -p1 --forward --fuzz=3 < "$SUSFS_PATCH" || true
-  _fix_susfs_exec_suki
   _patch_namespace_gki_hunk1
   mkdir -p fs include/linux
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
 
-  _inject_susfs_init "KernelSU/kernel/ksu.c"
-  _link_ksu_driver "KernelSU"
+  _inject_susfs_init "ReSukiSU/kernel/ksu.c"
+  _link_ksu_driver "ReSukiSU"
   rm -rf susfs4ksu
 
-fi
 
 echo "[OK] KSU setup complete: $KSU_TYPE"

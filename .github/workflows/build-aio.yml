@@ -53,11 +53,11 @@ jobs:
             artifact:  "gki-ksun"
             defconfig: "gki_defconfig"
 
-          - name:      "GKI-SukiSU-Ultra"
+          - name:      "GKI-ReSukiSU"
             source:    "gki"
-            ksu:       "sksu"
-            prefix:    "GKI_SukiSU-Ultra"
-            artifact:  "gki-sksu"
+            ksu:       "rsku"
+            prefix:    "GKI_ReSukiSU"
+            artifact:  "gki-rsku"
             defconfig: "gki_defconfig"
 
           - name:      "GKI-NoKSU"
@@ -75,11 +75,11 @@ jobs:
             defconfig: "gki_defconfig"
             clo_fragment: "vendor/bengal_GKI.config"
 
-          - name:      "CLO-SukiSU-Ultra"
+          - name:      "CLO-ReSukiSU"
             source:    "clo"
-            ksu:       "sksu"
-            prefix:    "CLO_SukiSU-Ultra"
-            artifact:  "clo-sksu"
+            ksu:       "rsku"
+            prefix:    "CLO_ReSukiSU"
+            artifact:  "clo-rsku"
             defconfig: "gki_defconfig"
             clo_fragment: "vendor/bengal_GKI.config"
 
