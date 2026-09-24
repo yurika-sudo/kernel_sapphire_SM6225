@@ -12,8 +12,8 @@ inputs:
     description: "Optional exact KSU-Next tag to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
     required: false
     default: ""
-  suki_tag_pin:
-    description: "Optional exact SukiSU-Ultra tag to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
+  rsku_tag_pin:
+    description: "Optional exact ReSukiSU tag to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
     required: false
     default: ""
 
@@ -26,5 +26,5 @@ runs:
         KERNEL_DIR:   ${{ inputs.kernel_dir }}
         WORK_DIR:     ${{ inputs.work_dir }}
         KSUN_TAG_PIN: ${{ inputs.ksun_tag_pin }}
-        SUKI_TAG_PIN: ${{ inputs.suki_tag_pin }}
+        RSKU_TAG_PIN: ${{ inputs.rsku_tag_pin }}
       run: bash ${{ github.workspace }}/scripts/setup-ksu.sh
