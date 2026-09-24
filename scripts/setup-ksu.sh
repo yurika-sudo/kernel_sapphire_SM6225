@@ -230,5 +230,6 @@ elif [ "$KSU_TYPE" = "rsku" ]; then
   _link_ksu_driver "ReSukiSU"
   rm -rf susfs4ksu
 
+fi
 
 echo "[OK] KSU setup complete: $KSU_TYPE"
