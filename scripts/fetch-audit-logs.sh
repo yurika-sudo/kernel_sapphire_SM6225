@@ -31,10 +31,14 @@ found=0
 while IFS=$'\t' read -r JOB_ID JOB_NAME; do
   SAFE=$(echo "$JOB_NAME" | sed 's/[^a-zA-Z0-9._-]/_/g; s/__*/_/g; s/^_//; s/_$//')
   echo "[FETCH] ${JOB_NAME} (${JOB_ID})..."
-  RAW=$(gh api /repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs 2>&1)
-  HTTP_STATUS=$?
-  echo "[DEBUG] job ${JOB_ID} exit=${HTTP_STATUS} bytes=$(echo "$RAW" | wc -c)"
-  echo "$RAW" | _clean_log > "./audit_logs/${SAFE}.log"
+  curl -sfL \
+    -H "Authorization: Bearer ${GH_TOKEN}" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs" \
+    2>/dev/null \
+    | _clean_log \
+    > "./audit_logs/${SAFE}.log" \
+    || { echo "[WARN] fetch failed for ${JOB_NAME}"; echo "[WARN] fetch failed" > "./audit_logs/${SAFE}.log"; }
   echo "[OK] ${JOB_NAME} ($(wc -l < "./audit_logs/${SAFE}.log") lines)"
   found=$((found + 1))
 done < /tmp/build_jobs.tsv
