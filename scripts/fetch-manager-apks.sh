@@ -43,17 +43,17 @@ _fetch() {
   local apk_name
   apk_name=$(basename "$apk")
 
-  # SukiSU-Ultra's manager artifact ships with a bare "Manager.apk" /
+  # ReSukiSU's manager artifact ships with a bare "Manager.apk" /
   # "Spoofed-Manager.apk" — no version/commit baked in like KSUN's does.
   # Prefix so it's identifiable in the release asset list at a glance.
   case "$(echo "$apk_name" | tr '[:upper:]' '[:lower:]')" in
     manager.apk)
-      _ver="${SUKI_VERSION:-}"
-      apk_name="SukiSU-Manager${_ver:+-${_ver}}.apk"
+      _ver="${RSKU_VERSION:-}"
+      apk_name="ReSukiSU-Manager${_ver:+-${_ver}}.apk"
       ;;
     spoofed-manager.apk)
-      _ver="${SUKI_VERSION:-}"
-      apk_name="SukiSU-Spoofed-Manager${_ver:+-${_ver}}.apk"
+      _ver="${RSKU_VERSION:-}"
+      apk_name="ReSukiSU-Spoofed-Manager${_ver:+-${_ver}}.apk"
       ;;
   esac
 
@@ -71,5 +71,5 @@ _fetch() {
 
 _fetch "KernelSU-Next/KernelSU-Next" "${KSUN_MANAGER_ARTIFACT_ID:-}"         "ksun"
 _fetch "KernelSU-Next/KernelSU-Next" "${KSUN_MANAGER_SPOOFED_ARTIFACT_ID:-}" "ksun-spoofed"
-_fetch "SukiSU-Ultra/SukiSU-Ultra"   "${SUKI_MANAGER_ARTIFACT_ID:-}"         "sksu"
-_fetch "SukiSU-Ultra/SukiSU-Ultra"   "${SUKI_MANAGER_SPOOFED_ARTIFACT_ID:-}" "sksu-spoofed"
+_fetch "ReSukiSU/ReSukiSU"   "${RSKU_MANAGER_ARTIFACT_ID:-}"         "rsku"
+_fetch "ReSukiSU/ReSukiSU"   "${RSKU_MANAGER_SPOOFED_ARTIFACT_ID:-}" "rsku-spoofed"
