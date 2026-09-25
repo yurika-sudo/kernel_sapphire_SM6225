@@ -208,8 +208,12 @@ elif [ "$KSU_TYPE" = "rsku" ]; then
   git fetch --tags 2>/dev/null || true
   _checkout_pin "." "${RSKU_TAG_PIN:-}" "ReSukiSU"
   RSKU_SHA=$(git rev-parse HEAD)
-  RSKU_TAG=$(git ls-remote --tags origin 2>/dev/null | awk -v sha="$RSKU_SHA" '$0 ~ sha {match($2,/refs\/tags\/(.+)/,a); print a[1]}' | tail -1)
-  RSKU_TAG=${RSKU_TAG:-$(git ls-remote --tags https://github.com/ReSukiSU/ReSukiSU.git 2>/dev/null | awk -v sha="$RSKU_SHA" '$0 ~ sha {match($2,/refs\/tags\/(.+)/,a); print a[1]}' | tail -1)}
+  # Try local describe first (works when HEAD is exactly on a tag after fetch --tags).
+  # Fall back to ls-remote with ^{} deref filter — annotated tags expose the commit
+  # SHA only on the "refs/tags/<name>^{}" line, not the tag-object line.
+  RSKU_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null | tr -d '[:space:]')
+  RSKU_TAG=${RSKU_TAG:-$(git ls-remote --tags origin 2>/dev/null | awk -v sha="$RSKU_SHA" '/\^\{\}$/ && $0 ~ sha {match($2,/refs\/tags\/([^^]+)/,a); print a[1]}' | tail -1)}
+  RSKU_TAG=${RSKU_TAG:-$(git ls-remote --tags https://github.com/ReSukiSU/ReSukiSU.git 2>/dev/null | awk -v sha="$RSKU_SHA" '/\^\{\}$/ && $0 ~ sha {match($2,/refs\/tags\/([^^]+)/,a); print a[1]}' | tail -1)}
   RSKU_TAG=${RSKU_TAG:-unknown}
   echo "RSKU_TAG=$RSKU_TAG"    >> "${GITHUB_ENV:-/dev/null}"
   echo "RSKU_SHA=$RSKU_SHA"    >> "${GITHUB_ENV:-/dev/null}"
