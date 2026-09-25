@@ -61,6 +61,19 @@ _fetch() {
       ;;
   esac
 
+  # ReSukiSU ships identical filenames in both Manager-release and
+  # Spoofed-Manager-release artifacts (e.g. both contain arm64-v8a-release.apk).
+  # Disambiguate by prefixing spoofed labels so collision guard never fires.
+  case "$label" in
+    *-spoofed)
+      case "$(echo "$apk_name" | tr '[:upper:]' '[:lower:]')" in
+        resukisu_*-release.apk) apk_name="${apk_name/-release.apk/-spoofed-release.apk}" ;;
+        resukisu_*-debug.apk)   apk_name="${apk_name/-debug.apk/-spoofed-debug.apk}" ;;
+        *)                      apk_name="Spoofed-${apk_name}" ;;
+      esac
+      ;;
+  esac
+
   # Keep upstream's own Gradle-generated filename (e.g.
   # KernelSU_Next_v3.3.0_33214-release.apk) instead of inventing ours.
   local dest="./manager_apks/${apk_name}"
