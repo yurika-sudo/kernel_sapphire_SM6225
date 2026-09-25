@@ -207,8 +207,10 @@ elif [ "$KSU_TYPE" = "rsku" ]; then
   cd ReSukiSU
   git fetch --tags 2>/dev/null || true
   _checkout_pin "." "${RSKU_TAG_PIN:-}" "ReSukiSU"
-  RSKU_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
   RSKU_SHA=$(git rev-parse HEAD)
+  RSKU_TAG=$(git ls-remote --tags origin 2>/dev/null | awk -v sha="$RSKU_SHA" '$0 ~ sha {match($2,/refs\/tags\/(.+)/,a); print a[1]}' | tail -1)
+  RSKU_TAG=${RSKU_TAG:-$(git ls-remote --tags https://github.com/ReSukiSU/ReSukiSU.git 2>/dev/null | awk -v sha="$RSKU_SHA" '$0 ~ sha {match($2,/refs\/tags\/(.+)/,a); print a[1]}' | tail -1)}
+  RSKU_TAG=${RSKU_TAG:-unknown}
   echo "RSKU_TAG=$RSKU_TAG"    >> "${GITHUB_ENV:-/dev/null}"
   echo "RSKU_SHA=$RSKU_SHA"    >> "${GITHUB_ENV:-/dev/null}"
   echo "$RSKU_TAG"                  > "$WORK_DIR/rsku_tag.txt"

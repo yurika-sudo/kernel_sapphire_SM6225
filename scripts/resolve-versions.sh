@@ -123,12 +123,12 @@ RSKU_MANAGER_URL="${RSKU_MANAGER_URL:-https://github.com/ReSukiSU/ReSukiSU/actio
 RSKU_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/runs/${_sr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name | ascii_downcase | startswith("manager")) | select(.expired == false) | .id // empty' | head -1 || true)
+  | jq -r '.artifacts[] | select(.name == "Manager-release") | select(.expired == false) | .id // empty' | head -1 || true)
 
 RSKU_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/runs/${_sr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name | ascii_downcase | startswith("spoofed-manager")) | select(.expired == false) | .id // empty' | head -1 || true)
+  | jq -r '.artifacts[] | select(.name == "Spoofed-Manager-release") | select(.expired == false) | .id // empty' | head -1 || true)
 
 DATE_TAG=$(date +'%Y%m%d')
 
