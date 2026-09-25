@@ -244,6 +244,8 @@ jobs:
             ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
             ${{ env.WORK_DIR }}/ksun_tag.txt
             ${{ env.WORK_DIR }}/rsku_tag.txt
+            ${{ env.WORK_DIR }}/ksun_sha.txt
+            ${{ env.WORK_DIR }}/rsku_sha.txt
             ${{ env.WORK_DIR }}/ksun_version.txt
             ${{ env.WORK_DIR }}/rsku_version.txt
           retention-days: 1

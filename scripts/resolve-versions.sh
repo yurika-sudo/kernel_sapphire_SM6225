@@ -47,10 +47,40 @@ KSUN_VERSION=$([ -f "$_kv" ] && cat "$_kv" | tr -d '[:space:]' || echo "")
 _sv=$(find ./artifacts -name "rsku_version.txt" | head -1)
 RSKU_VERSION=$([ -f "$_sv" ] && cat "$_sv" | tr -d '[:space:]' || echo "")
 
-# Latest CI run for manager links (best-effort; falls back to Actions page)
-_kr=$(curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml/runs?status=success&branch=dev&per_page=1" \
-  | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]')
+# Commit SHAs recorded at build time — used to match exact manager CI run
+_ks=$(find ./artifacts -name "ksun_sha.txt" | head -1)
+KSUN_SHA=$([ -f "$_ks" ] && cat "$_ks" | tr -d '[:space:]' || echo "")
+_rs=$(find ./artifacts -name "rsku_sha.txt" | head -1)
+RSKU_SHA=$([ -f "$_rs" ] && cat "$_rs" | tr -d '[:space:]' || echo "")
+
+# Find manager CI run whose head_sha matches the kernel driver SHA recorded at build time.
+# Falls back to latest successful run if no SHA match found (e.g. testing build or old artifact).
+_ksun_find_run() {
+  local sha="$1" page run_id
+  for page in 1 2 3; do
+    local runs
+    runs=$(curl -sf --max-time 15 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+      "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml/runs?status=success&branch=dev&per_page=20&page=${page}")
+    run_id=$(echo "$runs" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+sha=sys.argv[1] if len(sys.argv)>1 else ""
+for r in d.get("workflow_runs",[]):
+    if r["head_sha"]==sha:
+        print(r["id"]); break
+" "$sha" 2>/dev/null | tr -d "[:space:]")
+    [ -n "$run_id" ] && { echo "$run_id"; return 0; }
+    # Stop paging if no more runs
+    local count
+    count=$(echo "$runs" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get("workflow_runs",[])))") 2>/dev/null
+    [ "${count:-0}" -lt 20 ] && break
+  done
+  # Fallback: latest run
+  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+    "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml/runs?status=success&branch=dev&per_page=1" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d["workflow_runs"][0]["id"] if d["workflow_runs"] else "")" 2>/dev/null | tr -d "[:space:]"
+}
+_kr=$(_ksun_find_run "$KSUN_SHA")
 KSUN_MANAGER_URL="${_kr:+https://github.com/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}}"
 KSUN_MANAGER_URL="${KSUN_MANAGER_URL:-https://github.com/KernelSU-Next/KernelSU-Next/actions}"
 KSUN_MANAGER_ARTIFACT_ID=$([ -n "$_kr" ] && \
@@ -63,9 +93,31 @@ KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_kr" ] && \
   "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}/artifacts" \
   | jq -r '.artifacts[] | select(.name == "manager-spoofed") | .id // empty' | head -1 || true)  
 
-_sr=$(curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
-  | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]')
+_rsku_find_run() {
+  local sha="$1" page run_id
+  for page in 1 2 3; do
+    local runs
+    runs=$(curl -sf --max-time 15 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+      "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=20&page=${page}")
+    run_id=$(echo "$runs" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+sha=sys.argv[1] if len(sys.argv)>1 else ""
+for r in d.get("workflow_runs",[]):
+    if r["head_sha"]==sha:
+        print(r["id"]); break
+" "$sha" 2>/dev/null | tr -d "[:space:]")
+    [ -n "$run_id" ] && { echo "$run_id"; return 0; }
+    local count
+    count=$(echo "$runs" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get("workflow_runs",[])))") 2>/dev/null
+    [ "${count:-0}" -lt 20 ] && break
+  done
+  # Fallback: latest run
+  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+    "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d["workflow_runs"][0]["id"] if d["workflow_runs"] else "")" 2>/dev/null | tr -d "[:space:]"
+}
+_sr=$(_rsku_find_run "$RSKU_SHA")
 RSKU_MANAGER_URL="${_sr:+https://github.com/ReSukiSU/ReSukiSU/actions/runs/${_sr}}"
 RSKU_MANAGER_URL="${RSKU_MANAGER_URL:-https://github.com/ReSukiSU/ReSukiSU/actions/workflows/build-manager.yml}"
 RSKU_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \

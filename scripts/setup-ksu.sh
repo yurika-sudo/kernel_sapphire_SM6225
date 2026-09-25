@@ -170,8 +170,11 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   git fetch --tags 2>/dev/null || true
   _checkout_pin "." "${KSUN_TAG_PIN:-}" "KSU-Next"
   KSUN_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
+  KSUN_SHA=$(git rev-parse HEAD)
   echo "KSUN_TAG=$KSUN_TAG"    >> "${GITHUB_ENV:-/dev/null}"
+  echo "KSUN_SHA=$KSUN_SHA"    >> "${GITHUB_ENV:-/dev/null}"
   echo "$KSUN_TAG"                  > "$WORK_DIR/ksun_tag.txt"
+  echo "$KSUN_SHA"                  > "$WORK_DIR/ksun_sha.txt"
   _ksun_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
   | awk 'NR==1{print $NF}' | tr -d '[:space:]')
   echo "${_ksun_ver:-}" > "$WORK_DIR/ksun_version.txt"
@@ -205,8 +208,11 @@ elif [ "$KSU_TYPE" = "rsku" ]; then
   git fetch --tags 2>/dev/null || true
   _checkout_pin "." "${RSKU_TAG_PIN:-}" "ReSukiSU"
   RSKU_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
+  RSKU_SHA=$(git rev-parse HEAD)
   echo "RSKU_TAG=$RSKU_TAG"    >> "${GITHUB_ENV:-/dev/null}"
+  echo "RSKU_SHA=$RSKU_SHA"    >> "${GITHUB_ENV:-/dev/null}"
   echo "$RSKU_TAG"                  > "$WORK_DIR/rsku_tag.txt"
+  echo "$RSKU_SHA"                  > "$WORK_DIR/rsku_sha.txt"
   _rsku_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
   | awk 'NR==1{print $NF}' | tr -d '[:space:]')
   echo "${_rsku_ver:-}" > "$WORK_DIR/rsku_version.txt"
