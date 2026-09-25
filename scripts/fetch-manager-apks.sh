@@ -37,7 +37,11 @@ _fetch() {
     || { echo "[WARN] No APK in $label artifact — skipping"; return 0; }
 
   local apk
-  apk=$(find "${tmp}" -name "*.apk" | head -1)
+  # Prefer arm64-v8a; fall back to universal; last resort: whatever find gives first.
+  # ReSukiSU artifact ships 4 ABIs — without this filter head -1 may pick x86_64.
+  apk=$(find "${tmp}" -name "*arm64-v8a*.apk" | head -1)
+  [ -z "$apk" ] && apk=$(find "${tmp}" -name "*universal*.apk" | head -1)
+  [ -z "$apk" ] && apk=$(find "${tmp}" -name "*.apk" | head -1)
   [ -z "$apk" ] && { echo "[WARN] APK not found post-extract for $label"; return 0; }
 
   local apk_name
