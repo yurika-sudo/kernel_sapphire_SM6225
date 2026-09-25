@@ -72,13 +72,13 @@ for r in d.get("workflow_runs",[]):
     [ -n "$run_id" ] && { echo "$run_id"; return 0; }
     # Stop paging if no more runs
     local count
-    count=$(echo "$runs" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get("workflow_runs",[])))") 2>/dev/null
+    count=$(echo "$runs" | python3 -c 'import sys,json; print(len(json.load(sys.stdin).get("workflow_runs",[])))') 2>/dev/null
     [ "${count:-0}" -lt 20 ] && break
   done
   # Fallback: latest run
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
     "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml/runs?status=success&branch=dev&per_page=1" \
-    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d["workflow_runs"][0]["id"] if d["workflow_runs"] else "")" 2>/dev/null | tr -d "[:space:]"
+    | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["workflow_runs"][0]["id"] if d["workflow_runs"] else "")' 2>/dev/null | tr -d "[:space:]"
 }
 _kr=$(_ksun_find_run "$KSUN_SHA")
 KSUN_MANAGER_URL="${_kr:+https://github.com/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}}"
@@ -109,13 +109,13 @@ for r in d.get("workflow_runs",[]):
 " "$sha" 2>/dev/null | tr -d "[:space:]")
     [ -n "$run_id" ] && { echo "$run_id"; return 0; }
     local count
-    count=$(echo "$runs" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get("workflow_runs",[])))") 2>/dev/null
+    count=$(echo "$runs" | python3 -c 'import sys,json; print(len(json.load(sys.stdin).get("workflow_runs",[])))') 2>/dev/null
     [ "${count:-0}" -lt 20 ] && break
   done
   # Fallback: latest run
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
     "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
-    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d["workflow_runs"][0]["id"] if d["workflow_runs"] else "")" 2>/dev/null | tr -d "[:space:]"
+    | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["workflow_runs"][0]["id"] if d["workflow_runs"] else "")' 2>/dev/null | tr -d "[:space:]"
 }
 _sr=$(_rsku_find_run "$RSKU_SHA")
 RSKU_MANAGER_URL="${_sr:+https://github.com/ReSukiSU/ReSukiSU/actions/runs/${_sr}}"
