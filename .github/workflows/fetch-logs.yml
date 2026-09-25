@@ -1,0 +1,32 @@
+name: "Fetch Audit Logs"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+on:
+  workflow_run:
+    workflows: ["Build Kernels — AIO"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  fetch-logs:
+    name: "Fetch & Upload Audit Logs"
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event != 'schedule'
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 1
+
+      - name: "Fetch audit logs"
+        env:
+          GH_TOKEN:             ${{ secrets.AUDIT_TOKEN }}
+          TRIGGERED_RUN_ID:     ${{ github.event.workflow_run.id }}
+          GITHUB_REPOSITORY:    ${{ github.repository }}
+          BUILD_TYPE:           ${{ github.event.workflow_run.name == 'Build Kernels — AIO' && 'stable' || 'stable' }}
+        run: bash scripts/fetch-audit-logs.sh
