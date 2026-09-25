@@ -65,7 +65,7 @@ fi
 [ "$BUILD_TYPE" = "testing" ] && RELEASE_TAG="${SUSFS_TAG}-testing" || RELEASE_TAG="$SUSFS_TAG"
 
 echo "[INFO] Uploading to release ${RELEASE_TAG}..."
-gh release upload "$RELEASE_TAG" "$LOG_ZIP" \
+GH_TOKEN="$GITHUB_TOKEN" gh release upload "$RELEASE_TAG" "$LOG_ZIP" \
   --repo "$GITHUB_REPOSITORY" \
   --clobber \
   && echo "[OK] Uploaded ${LOG_ZIP} to ${RELEASE_TAG}" \

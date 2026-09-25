@@ -25,7 +25,8 @@ jobs:
 
       - name: "Fetch audit logs"
         env:
-          GH_TOKEN:             ${{ secrets.AUDIT_TOKEN }}
+          GH_TOKEN:             ${{ secrets.AUDIT_TOKEN }}  # fetch log API
+          GITHUB_TOKEN:         ${{ secrets.GITHUB_TOKEN }}  # release upload
           TRIGGERED_RUN_ID:     ${{ github.event.workflow_run.id }}
           GITHUB_REPOSITORY:    ${{ github.repository }}
           BUILD_TYPE:           ${{ github.event.workflow_run.name == 'Build Kernels — AIO' && 'stable' || 'stable' }}
