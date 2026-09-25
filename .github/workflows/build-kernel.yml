@@ -193,15 +193,6 @@ jobs:
           set -o pipefail
           bash scripts/verify-kernel.sh
 
-      - name: "Build summary"
-        if: always()
-        env:
-          VARIANT:     ${{ inputs.variant_name }}
-          KSU_TYPE:    ${{ inputs.ksu_type }}
-          SOURCE_TYPE: ${{ inputs.source_type }}
-          BUILD_TYPE:  ${{ inputs.build_type }}
-          RUN_URL:     "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-        run: bash scripts/build-summary.sh
 
       - name: "Notify variant failure"
         if: failure()
@@ -241,12 +232,6 @@ jobs:
           echo "$UNAME" > ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
           echo "Kernel uname: $UNAME"
 
-      - name: "Collect build log"
-        if: always()
-        run: |
-          cp /tmp/build_${{ inputs.source_type }}.log \
-            ${{ env.WORK_DIR }}/out/dist/build-${{ inputs.artifact_name }}.log 2>/dev/null || \
-            echo "[no log]" > ${{ env.WORK_DIR }}/out/dist/build-${{ inputs.artifact_name }}.log
 
       - name: "Upload artifact"
         uses: actions/upload-artifact@v4.6.2
@@ -261,5 +246,4 @@ jobs:
             ${{ env.WORK_DIR }}/rsku_tag.txt
             ${{ env.WORK_DIR }}/ksun_version.txt
             ${{ env.WORK_DIR }}/rsku_version.txt
-            ${{ env.WORK_DIR }}/out/dist/build-${{ inputs.artifact_name }}.log
           retention-days: 1
