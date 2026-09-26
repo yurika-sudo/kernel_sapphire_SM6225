@@ -44,11 +44,11 @@ jobs:
             artifact:  "gkicompat-ksun"
             defconfig: "gki_defconfig"
 
-          - name:      "GKI-Compat-SukiSU-Ultra"
+          - name:      "GKI-Compat-ReSukiSU"
             source:    "gki-compat"
-            ksu:       "sksu"
-            prefix:    "GKIC_SukiSU-Ultra"
-            artifact:  "gkicompat-sksu"
+            ksu:       "rsku"
+            prefix:    "GKIC_ReSukiSU"
+            artifact:  "gkicompat-rsku"
             defconfig: "gki_defconfig"
 
           - name:      "GKI-Compat-NoKSU"
