@@ -206,6 +206,7 @@ elif [ "$KSU_TYPE" = "rsku" ]; then
 
   cd ReSukiSU
   git fetch --tags 2>/dev/null || true
+  git fetch --deepen=50 2>/dev/null || true
   _checkout_pin "." "${RSKU_TAG_PIN:-}" "ReSukiSU"
   RSKU_SHA=$(git rev-parse HEAD)
   # 1. Exact match on HEAD (HEAD is directly tagged).
