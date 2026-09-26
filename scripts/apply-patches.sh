@@ -49,7 +49,13 @@ PATCHES_DIR="$WORK_DIR/patches"
 if [ -d "$PATCHES_DIR/common" ]; then
   for PATCH in "$PATCHES_DIR/common"/*.patch; do
     [ -f "$PATCH" ] || continue
-    apply_patch "$PATCH" "$(basename "$PATCH" .patch)"
+    NAME="$(basename "$PATCH" .patch)"
+    # zstd-upgrade-v157 requires v1.5.7 subdir layout — not compatible with gki-compat flat layout
+    if [ "$SOURCE_TYPE" = "gki-compat" ] && [ "$NAME" = "zstd-upgrade-v157" ]; then
+      echo "[SKIP] $NAME — not applicable to gki-compat (flat zstd layout)"
+      continue
+    fi
+    apply_patch "$PATCH" "$NAME"
   done
 fi
 
