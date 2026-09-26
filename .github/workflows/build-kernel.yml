@@ -216,7 +216,7 @@ jobs:
         run: bash scripts/pack-zip.sh
 
       - name: "Pack Seiran Core module"
-        if: inputs.artifact_name == 'gki-ksun'
+        if: endsWith(inputs.artifact_name, '-ksun')
         env:
           SOURCE_TYPE: ${{ inputs.artifact_name }}
           COMMIT_SHA:  ${{ github.sha }}
