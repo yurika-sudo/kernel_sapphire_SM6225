@@ -56,6 +56,7 @@ if [ -f "${KO_DIR}/zram.ko" ] && [ -f "${KO_DIR}/zsmalloc.ko" ]; then
   mkdir -p "ak3_tmp/modules/system/lib/modules"
   cp "${KO_DIR}/zram.ko"     "ak3_tmp/modules/system/lib/modules/"
   cp "${KO_DIR}/zsmalloc.ko" "ak3_tmp/modules/system/lib/modules/"
+  [ -f "${KO_DIR}/encore_fas.ko" ] && cp "${KO_DIR}/encore_fas.ko" "ak3_tmp/modules/system/lib/modules/" && echo "[INFO] encore_fas.ko bundled" || echo "[WARN] encore_fas.ko not found — skipping"
   echo "[INFO] zram modules bundled into zip"
 else
   echo "[WARN] zram.ko/zsmalloc.ko not found in ${KO_DIR} — skipping module bundle"
