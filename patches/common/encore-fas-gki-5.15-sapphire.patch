@@ -1,3 +1,22 @@
+diff --git a/drivers/misc/Kconfig b/drivers/misc/Kconfig
+index c0967589f..c1cb3a76a 100644
+--- a/drivers/misc/Kconfig
++++ b/drivers/misc/Kconfig
+@@ -507,4 +507,5 @@ source "drivers/misc/cardreader/Kconfig"
+ source "drivers/misc/habanalabs/Kconfig"
+ source "drivers/misc/uacce/Kconfig"
+ source "drivers/misc/pvpanic/Kconfig"
++source "drivers/misc/encore_fas/Kconfig"
+ endmenu
+diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
+index a109b9cb6..8150f4abd 100644
+--- a/drivers/misc/Makefile
++++ b/drivers/misc/Makefile
+@@ -61,3 +61,4 @@ obj-$(CONFIG_HISI_HIKEY_USB)	+= hisi_hikey_usb.o
+ obj-$(CONFIG_HI6421V600_IRQ)	+= hi6421v600-irq.o
+ obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
+ obj-$(CONFIG_OPEN_DICE)		+= open-dice.o
++obj-$(CONFIG_ENCORE_FAS)		+= encore_fas/
 diff --git a/drivers/misc/encore_fas/Kconfig b/drivers/misc/encore_fas/Kconfig
 new file mode 100644
 index 000000000..f80e8e843

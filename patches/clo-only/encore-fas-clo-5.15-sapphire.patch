@@ -1,3 +1,22 @@
+diff --git a/drivers/misc/Kconfig b/drivers/misc/Kconfig
+index b75b23a4d..b0ffc4861 100644
+--- a/drivers/misc/Kconfig
++++ b/drivers/misc/Kconfig
+@@ -545,4 +545,5 @@ source "drivers/misc/habanalabs/Kconfig"
+ source "drivers/misc/uacce/Kconfig"
+ source "drivers/misc/pvpanic/Kconfig"
+ source "drivers/misc/qrc/Kconfig"
++source "drivers/misc/encore_fas/Kconfig"
+ endmenu
+diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
+index d7c5ed90a..f3c6afdd8 100644
+--- a/drivers/misc/Makefile
++++ b/drivers/misc/Makefile
+@@ -66,3 +66,4 @@ obj-$(CONFIG_QPNP_MISC)		+= qpnp-misc.o
+ obj-$(CONFIG_PROFILER)		+= profiler.o
+ obj-$(CONFIG_QRC)		+= qrc/
+ obj-$(CONFIG_HDMI_INPUT_MUX)	+= hdmi_input_mux.o
++obj-$(CONFIG_ENCORE_FAS)		+= encore_fas/
 diff --git a/drivers/misc/encore_fas/Kconfig b/drivers/misc/encore_fas/Kconfig
 new file mode 100644
 index 000000000..f80e8e843
