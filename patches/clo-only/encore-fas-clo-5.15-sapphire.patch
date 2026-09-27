@@ -1,22 +1,3 @@
-diff --git a/drivers/misc/Kconfig b/drivers/misc/Kconfig
-index b75b23a4d..b0ffc4861 100644
---- a/drivers/misc/Kconfig
-+++ b/drivers/misc/Kconfig
-@@ -545,4 +545,5 @@ source "drivers/misc/habanalabs/Kconfig"
- source "drivers/misc/uacce/Kconfig"
- source "drivers/misc/pvpanic/Kconfig"
- source "drivers/misc/qrc/Kconfig"
-+source "drivers/misc/encore_fas/Kconfig"
- endmenu
-diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
-index d7c5ed90a..f3c6afdd8 100644
---- a/drivers/misc/Makefile
-+++ b/drivers/misc/Makefile
-@@ -66,3 +66,4 @@ obj-$(CONFIG_QPNP_MISC)		+= qpnp-misc.o
- obj-$(CONFIG_PROFILER)		+= profiler.o
- obj-$(CONFIG_QRC)		+= qrc/
- obj-$(CONFIG_HDMI_INPUT_MUX)	+= hdmi_input_mux.o
-+obj-$(CONFIG_ENCORE_FAS)		+= encore_fas/
 diff --git a/drivers/misc/encore_fas/Kconfig b/drivers/misc/encore_fas/Kconfig
 new file mode 100644
 index 000000000..f80e8e843
@@ -262,10 +243,10 @@ index 000000000..f6a4a9955
 +#endif
 diff --git a/drivers/misc/encore_fas/encore_fas_ctx.c b/drivers/misc/encore_fas/encore_fas_ctx.c
 new file mode 100644
-index 000000000..7c2d8d351
+index 000000000..963cd334c
 --- /dev/null
 +++ b/drivers/misc/encore_fas/encore_fas_ctx.c
-@@ -0,0 +1,489 @@
+@@ -0,0 +1,491 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +
 +#include <linux/hrtimer.h>
@@ -280,6 +261,8 @@ index 000000000..7c2d8d351
 +#include <linux/spinlock.h>
 +#include <linux/uprobes.h>
 +#include <linux/workqueue.h>
++
++MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
 +
 +#include "encore_fas_compat.h"
 +#include "encore_fas_ctx.h"

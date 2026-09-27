@@ -1,22 +1,3 @@
-diff --git a/drivers/misc/Kconfig b/drivers/misc/Kconfig
-index c0967589f..c1cb3a76a 100644
---- a/drivers/misc/Kconfig
-+++ b/drivers/misc/Kconfig
-@@ -507,4 +507,5 @@ source "drivers/misc/cardreader/Kconfig"
- source "drivers/misc/habanalabs/Kconfig"
- source "drivers/misc/uacce/Kconfig"
- source "drivers/misc/pvpanic/Kconfig"
-+source "drivers/misc/encore_fas/Kconfig"
- endmenu
-diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
-index a109b9cb6..8150f4abd 100644
---- a/drivers/misc/Makefile
-+++ b/drivers/misc/Makefile
-@@ -61,3 +61,4 @@ obj-$(CONFIG_HISI_HIKEY_USB)	+= hisi_hikey_usb.o
- obj-$(CONFIG_HI6421V600_IRQ)	+= hi6421v600-irq.o
- obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
- obj-$(CONFIG_OPEN_DICE)		+= open-dice.o
-+obj-$(CONFIG_ENCORE_FAS)		+= encore_fas/
 diff --git a/drivers/misc/encore_fas/Kconfig b/drivers/misc/encore_fas/Kconfig
 new file mode 100644
 index 000000000..f80e8e843
@@ -262,10 +243,10 @@ index 000000000..f6a4a9955
 +#endif
 diff --git a/drivers/misc/encore_fas/encore_fas_ctx.c b/drivers/misc/encore_fas/encore_fas_ctx.c
 new file mode 100644
-index 000000000..7c2d8d351
+index 000000000..963cd334c
 --- /dev/null
 +++ b/drivers/misc/encore_fas/encore_fas_ctx.c
-@@ -0,0 +1,489 @@
+@@ -0,0 +1,491 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +
 +#include <linux/hrtimer.h>
@@ -280,6 +261,8 @@ index 000000000..7c2d8d351
 +#include <linux/spinlock.h>
 +#include <linux/uprobes.h>
 +#include <linux/workqueue.h>
++
++MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
 +
 +#include "encore_fas_compat.h"
 +#include "encore_fas_ctx.h"
