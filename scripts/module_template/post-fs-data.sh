@@ -34,6 +34,8 @@ rmmod zsmalloc 2>/dev/null
 # Load dependency first, then the dependent module.
 insmod ${MODDIR}/module/zsmalloc.ko 2>/dev/null
 insmod ${MODDIR}/module/zram.ko 2>/dev/null
+# encore_fas — Frame Aware Scheduling module (optional, skip if not present)
+[ -f "${MODDIR}/module/encore_fas.ko" ] && insmod ${MODDIR}/module/encore_fas.ko 2>/dev/null
 
 # Fail-safe, not fail-dangerous: if our modules didn't load, don't attempt a
 # risky live fallback to reload the stock .ko by guessing its path — worst

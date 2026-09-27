@@ -181,6 +181,11 @@ if [ -n "$ZSMALLOC_KO" ]; then
 else
   echo "[WARN] zsmalloc.ko not found after modules_install — module packaging will be skipped for ${SOURCE_TYPE}"
 fi
+ENCORE_FAS_KO=$(find "$MODULES_OUT" -name 'encore_fas.ko' | head -1)
+if [ -n "$ENCORE_FAS_KO" ]; then
+  cp "$ENCORE_FAS_KO" "$KO_OUT/encore_fas.ko"
+  echo "[${SOURCE_TYPE^^}] Collecting encore_fas.ko..."
+fi
 
 DURATION=$(( $(date +%s) - START ))
 echo "✅ Build done in $((DURATION/60))m $((DURATION%60))s"
