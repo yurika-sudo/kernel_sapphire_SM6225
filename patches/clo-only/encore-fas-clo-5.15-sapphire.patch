@@ -262,14 +262,15 @@ index 000000000..f6a4a9955
 +#endif
 diff --git a/drivers/misc/encore_fas/encore_fas_ctx.c b/drivers/misc/encore_fas/encore_fas_ctx.c
 new file mode 100644
-index 000000000..963cd334c
+index 000000000..7ef3c2c59
 --- /dev/null
 +++ b/drivers/misc/encore_fas/encore_fas_ctx.c
-@@ -0,0 +1,491 @@
+@@ -0,0 +1,492 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +
 +#include <linux/hrtimer.h>
 +#include <linux/ktime.h>
++#include <linux/module.h>
 +#include <linux/mutex.h>
 +#include <linux/namei.h>
 +#include <linux/path.h>
@@ -281,13 +282,13 @@ index 000000000..963cd334c
 +#include <linux/uprobes.h>
 +#include <linux/workqueue.h>
 +
-+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
-+
 +#include "encore_fas_compat.h"
 +#include "encore_fas_ctx.h"
 +#include "encore_fas_det.h"
 +#include "encore_fas_evq.h"
 +#include "encore_fas_time.h"
++
++MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
 +
 +struct fas_ctx {
 +	raw_spinlock_t lock ____cacheline_aligned;
