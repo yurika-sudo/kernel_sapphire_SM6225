@@ -133,8 +133,11 @@ elif [ "$MODE" = "check" ]; then
 
   if [ "${HAS_UPDATE:-false}" != "true" ]; then
     MSG="<b>[check-updates] No upstream changes</b>%0A%0A"
-    MSG="${MSG}KSU-Next <code>${CHECK_KSUN_TAG:-?}</code> · ReSukiSU <code>${CHECK_RSKU_TAG:-?}</code> · SUSFS <code>${CHECK_SUSFS_TAG:-?}</code>%0A"
-    MSG="${MSG}GKI <code>${CHECK_GKI_SUB:-?}</code> · CLO <code>${CHECK_CLO_SUB:-?}</code>%0A%0A"
+    MSG="${MSG}KSU-Next: <code>${CHECK_KSUN_TAG:-?}</code>%0A"
+    MSG="${MSG}ReSukiSU: <code>${CHECK_RSKU_TAG:-?}</code>%0A"
+    MSG="${MSG}SUSFS: <code>${CHECK_SUSFS_TAG:-?}</code>%0A"
+    MSG="${MSG}GKI: <code>${CHECK_GKI_SUB:-?}</code>%0A"
+    MSG="${MSG}CLO: <code>${CHECK_CLO_SUB:-?}</code>%0A%0A"
     MSG="${MSG}<a href='${RUN_URL}'>Logs</a>"
     _tg_msg "$MSG"
     exit 0
@@ -143,8 +146,11 @@ elif [ "$MODE" = "check" ]; then
   # Has update
   MSG="<b>[check-updates] Upstream update detected</b>%0A%0A"
   [ -n "${UPDATE_DETAIL:-}" ] && MSG="${MSG}${UPDATE_DETAIL}%0A%0A"
-  MSG="${MSG}KSU-Next <code>${CHECK_KSUN_TAG:-?}</code> · ReSukiSU <code>${CHECK_RSKU_TAG:-?}</code> · SUSFS <code>${CHECK_SUSFS_TAG:-?}</code>%0A"
-  MSG="${MSG}GKI <code>${CHECK_GKI_SUB:-?}</code> · CLO <code>${CHECK_CLO_SUB:-?}</code>%0A"
+  MSG="${MSG}KSU-Next: <code>${CHECK_KSUN_TAG:-?}</code>%0A"
+  MSG="${MSG}ReSukiSU: <code>${CHECK_RSKU_TAG:-?}</code>%0A"
+  MSG="${MSG}SUSFS: <code>${CHECK_SUSFS_TAG:-?}</code>%0A"
+  MSG="${MSG}GKI: <code>${CHECK_GKI_SUB:-?}</code>%0A"
+  MSG="${MSG}CLO: <code>${CHECK_CLO_SUB:-?}</code>%0A"
 
   if [ -n "${HELD_BACK:-}" ]; then
     MSG="${MSG}%0AHeld back (gate failed):%0A"
