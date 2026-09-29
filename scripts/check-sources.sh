@@ -17,8 +17,8 @@ KSUN_TAG=$(_curl "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/tags"
 [ -z "$KSUN_TAG" ] && KSUN_TAG="unknown"
 echo "KSU-Next     : $KSUN_TAG"
 
-RSKU_TAG=$(_curl "https://api.github.com/repos/ReSukiSU/ReSukiSU/releases/latest" \
-  | jq -r '.tag_name // "unknown"' 2>/dev/null || echo "unknown")
+RSKU_TAG=$(_curl "https://api.github.com/repos/ReSukiSU/ReSukiSU/tags" \
+  | jq -r 'if type=="array" and length>0 then .[0].name else "unknown" end' 2>/dev/null || echo "unknown")
 [ -z "$RSKU_TAG" ] && RSKU_TAG="unknown"
 echo "ReSukiSU     : $RSKU_TAG"
 
@@ -28,15 +28,20 @@ SUSFS_TAG=$(_curl "https://api.github.com/repos/sidex15/susfs4ksu-module/tags" \
 [ -z "$SUSFS_TAG" ] && SUSFS_TAG="unknown"
 echo "SUSFS module : $SUSFS_TAG"
 
-GKI_RAW=$(_curl \
-  "https://android.googlesource.com/kernel/common/+/refs/heads/android13-5.15-lts/Makefile?format=TEXT")
-GKI_MK=$(echo "$GKI_RAW" | base64 -d 2>/dev/null || true)
-GKI_SUB=$(echo "$GKI_MK" | awk -F' *= *' \
+GKI_TMP=$(mktemp -d)
+git clone --filter=blob:none --sparse --depth=1 \
+  https://android.googlesource.com/kernel/common \
+  -b android13-5.15-lts "$GKI_TMP" >/dev/null 2>&1 && \
+git -C "$GKI_TMP" sparse-checkout set --cone >/dev/null 2>&1 && \
+git -C "$GKI_TMP" checkout HEAD -- Makefile >/dev/null 2>&1 || true
+GKI_SUB=$(awk -F' *= *' \
   '/^VERSION /    {v=$2}
    /^PATCHLEVEL / {p=$2}
    /^SUBLEVEL /   {s=$2}
-   END { if(v && p && s) print "v"v"."p"."s; else print "unknown" }')
+   END { if(v && p && s) print "v"v"."p"."s; else print "unknown" }' \
+  "$GKI_TMP/Makefile" 2>/dev/null || echo "unknown")
 GKI_SUB="${GKI_SUB:-unknown}"
+rm -rf "$GKI_TMP"
 echo "GKI 5.15     : $GKI_SUB"
 
 CLO_RAW=$(_curl \
