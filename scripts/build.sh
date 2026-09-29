@@ -184,9 +184,14 @@ else
   echo "[WARN] zsmalloc.ko not found after modules_install — module packaging will be skipped for ${SOURCE_TYPE}"
 fi
 ENCORE_FAS_KO=$(find "$MODULES_OUT" -name 'encore_fas.ko' | head -1)
+ATH9K_HTC_KO=$(find "$MODULES_OUT" -name 'ath9k_htc.ko' | head -1)
 if [ -n "$ENCORE_FAS_KO" ]; then
   cp "$ENCORE_FAS_KO" "$KO_OUT/encore_fas.ko"
   echo "[${SOURCE_TYPE^^}] Collecting encore_fas.ko..."
+fi
+if [ -n "$ATH9K_HTC_KO" ]; then
+  cp "$ATH9K_HTC_KO" "$KO_OUT/ath9k_htc.ko"
+  echo "[${SOURCE_TYPE^^}] Collecting ath9k_htc.ko..."
 fi
 
 DURATION=$(( $(date +%s) - START ))
