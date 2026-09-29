@@ -17,10 +17,10 @@ KSUN_TAG=$(_curl "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/tags"
 [ -z "$KSUN_TAG" ] && KSUN_TAG="unknown"
 echo "KSU-Next     : $KSUN_TAG"
 
-SUKI_TAG=$(_curl "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest" \
+RSKU_TAG=$(_curl "https://api.github.com/repos/ReSukiSU/ReSukiSU/releases/latest" \
   | jq -r '.tag_name // "unknown"' 2>/dev/null || echo "unknown")
-[ -z "$SUKI_TAG" ] && SUKI_TAG="unknown"
-echo "SukiSU-Ultra : $SUKI_TAG"
+[ -z "$RSKU_TAG" ] && RSKU_TAG="unknown"
+echo "ReSukiSU     : $RSKU_TAG"
 
 SUSFS_TAG=$(_curl "https://api.github.com/repos/sidex15/susfs4ksu-module/tags" \
   | jq -r 'if type=="array" and length>0 then .[0].name else "unknown" end' 2>/dev/null \
@@ -55,7 +55,7 @@ echo "=== Comparing against source-pins.json ==="
 PIN_GKI=$(_pin "gki_sublevel")
 PIN_CLO=$(_pin "clo_sublevel")
 PIN_KSUN=$(_pin "ksun_tag")
-PIN_SUKI=$(_pin "suki_tag")
+PIN_RSKU=$(_pin "rsku_tag")
 PIN_SUSFS=$(_pin "susfs_tag")
 
 UPDATES=()
@@ -81,7 +81,7 @@ elif [ "$CLO_SUB" != "$PIN_CLO" ]; then
 fi
 
 KSUN_CHANGED="false"
-SUKI_CHANGED="false"
+RSKU_CHANGED="false"
 
 if [ "$KSUN_TAG" = "unknown" ]; then
   FAILED+=("KSU-Next"); KSUN_TAG="$PIN_KSUN"
@@ -90,11 +90,11 @@ elif [ "$KSUN_TAG" != "$PIN_KSUN" ]; then
   KSUN_CHANGED="true"
 fi
 
-if [ "$SUKI_TAG" = "unknown" ]; then
-  FAILED+=("SukiSU"); SUKI_TAG="$PIN_SUKI"
-elif [ "$SUKI_TAG" != "$PIN_SUKI" ]; then
-  UPDATES+=("SukiSU: ${PIN_SUKI} → ${SUKI_TAG}")
-  SUKI_CHANGED="true"
+if [ "$RSKU_TAG" = "unknown" ]; then
+  FAILED+=("ReSukiSU"); RSKU_TAG="$PIN_RSKU"
+elif [ "$RSKU_TAG" != "$PIN_RSKU" ]; then
+  UPDATES+=("ReSukiSU: ${PIN_RSKU} → ${RSKU_TAG}")
+  RSKU_CHANGED="true"
 fi
 
 if [ "$SUSFS_TAG" = "unknown" ]; then
@@ -124,13 +124,13 @@ fi
 # uses; GITHUB_OUTPUT supports it identically.
 {
   echo "ksun_tag=$KSUN_TAG"
-  echo "suki_tag=$SUKI_TAG"
+  echo "rsku_tag=$RSKU_TAG"
   echo "susfs_tag=$SUSFS_TAG"
   echo "gki_sub=$GKI_SUB"
   echo "clo_sub=$CLO_SUB"
   echo "has_update=$HAS_UPDATE"
   echo "ksun_changed=$KSUN_CHANGED"
-  echo "suki_changed=$SUKI_CHANGED"
+  echo "rsku_changed=$RSKU_CHANGED"
   echo "update_detail<<EOF"
   echo "$UPDATE_DETAIL"
   echo "EOF"
