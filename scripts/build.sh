@@ -53,12 +53,14 @@ echo "[${SOURCE_TYPE^^}] Building defconfig: $DEFCONFIG"
 make "${MAKE_FLAGS[@]}" "$DEFCONFIG"
 
 echo "[${SOURCE_TYPE^^}] Switching to ThinLTO..."
+echo "[${SOURCE_TYPE^^}] Disabling headers install..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -e LTO_CLANG \
   -d LTO_NONE \
   -e LTO_CLANG_THIN \
   -d LTO_CLANG_FULL \
-  -e THINLTO
+  -e THINLTO \
+  -d HEADERS_INSTALL
 echo "[${SOURCE_TYPE^^}] Forcing mq-deadline and stripping BFQ..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -e MQ_IOSCHED_DEADLINE \
