@@ -1,0 +1,313 @@
+diff --git a/arch/arm64/include/asm/unistd.h b/arch/arm64/include/asm/unistd.h
+index 3cb206aea..6bdb5f5db 100644
+--- a/arch/arm64/include/asm/unistd.h
++++ b/arch/arm64/include/asm/unistd.h
+@@ -38,7 +38,7 @@
+ #define __ARM_NR_compat_set_tls		(__ARM_NR_COMPAT_BASE + 5)
+ #define __ARM_NR_COMPAT_END		(__ARM_NR_COMPAT_BASE + 0x800)
+ 
+-#define __NR_compat_syscalls		449
++#define __NR_compat_syscalls		450
+ #endif
+ 
+ #define __ARCH_WANT_SYS_CLONE
+diff --git a/arch/arm64/include/asm/unistd32.h b/arch/arm64/include/asm/unistd32.h
+index f4fb040a4..ce8f80b75 100644
+--- a/arch/arm64/include/asm/unistd32.h
++++ b/arch/arm64/include/asm/unistd32.h
+@@ -903,6 +903,8 @@ __SYSCALL(__NR_landlock_add_rule, sys_landlock_add_rule)
+ __SYSCALL(__NR_landlock_restrict_self, sys_landlock_restrict_self)
+ #define __NR_process_mrelease 448
+ __SYSCALL(__NR_process_mrelease, sys_process_mrelease)
++#define __NR_futex_waitv 449
++__SYSCALL(__NR_futex_waitv, sys_futex_waitv)
+ 
+ /*
+  * Please add new compat syscalls above this comment and update
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index ce6310933..aa755d42a 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -15,6 +15,7 @@ struct iattr;
+ struct inode;
+ struct iocb;
+ struct io_event;
++struct futex_waitv;
+ struct iovec;
+ struct __kernel_old_itimerval;
+ struct kexec_segment;
+@@ -622,6 +623,9 @@ asmlinkage long sys_futex(u32 __user *uaddr, int op, u32 val,
+ asmlinkage long sys_futex_time32(u32 __user *uaddr, int op, u32 val,
+ 				 const struct old_timespec32 __user *utime,
+ 				 u32 __user *uaddr2, u32 val3);
++asmlinkage long sys_futex_waitv(struct futex_waitv __user *waiters,
++			       unsigned int nr_futexes, unsigned int flags,
++			       struct __kernel_timespec __user *timeout, clockid_t clockid);
+ asmlinkage long sys_get_robust_list(int pid,
+ 				    struct robust_list_head __user * __user *head_ptr,
+ 				    size_t __user *len_ptr);
+diff --git a/include/uapi/asm-generic/unistd.h b/include/uapi/asm-generic/unistd.h
+index 17a5a317f..2458572a6 100644
+--- a/include/uapi/asm-generic/unistd.h
++++ b/include/uapi/asm-generic/unistd.h
+@@ -880,8 +880,11 @@ __SYSCALL(__NR_memfd_secret, sys_memfd_secret)
+ #define __NR_process_mrelease 448
+ __SYSCALL(__NR_process_mrelease, sys_process_mrelease)
+ 
++#define __NR_futex_waitv 449
++__SYSCALL(__NR_futex_waitv, sys_futex_waitv)
++
+ #undef __NR_syscalls
+-#define __NR_syscalls 449
++#define __NR_syscalls 450
+ 
+ /*
+  * 32 bit systems traditionally used different
+diff --git a/include/uapi/linux/futex.h b/include/uapi/linux/futex.h
+index 235e5b2fa..fab1aca30 100644
+--- a/include/uapi/linux/futex.h
++++ b/include/uapi/linux/futex.h
+@@ -152,4 +152,15 @@ struct robust_list_head {
+   (((op & 0xf) << 28) | ((cmp & 0xf) << 24)		\
+    | ((oparg & 0xfff) << 12) | (cmparg & 0xfff))
+ 
++
++#define FUTEX_32		2
++#define FUTEX_WAITV_MAX		128
++
++struct futex_waitv {
++	__u64 val;
++	__u64 uaddr;
++	__u32 flags;
++	__u32 __reserved;
++};
++
+ #endif /* _UAPI_LINUX_FUTEX_H */
+diff --git a/kernel/futex/core.c b/kernel/futex/core.c
+index ad692df36..c792efd45 100644
+--- a/kernel/futex/core.c
++++ b/kernel/futex/core.c
+@@ -3994,6 +3994,223 @@ void futex_exit_release(struct task_struct *tsk)
+ 	futex_cleanup(tsk);
+ 	futex_cleanup_end(tsk, FUTEX_STATE_DEAD);
+ }
++/**
++ * struct futex_vector - Auxiliary struct for futex_waitv()
++ * @w: Userspace provided data
++ * @q: Kernel side data
++ */
++struct futex_vector {
++struct futex_waitv w;
++struct futex_q q;
++};
++
++#define FUTEXV_STACK_MAX	4
++
++static int unqueue_multiple(struct futex_vector *v, int count)
++{
++int ret = -1, i;
++
++for (i = 0; i < count; i++) {
++if (!unqueue_me(&v[i].q))
++ret = i;
++}
++
++return ret;
++}
++
++static int futex_wait_multiple_setup(struct futex_vector *vs, int count, int *woken)
++{
++struct futex_hash_bucket *hb;
++bool retry = false;
++int ret, i;
++u32 uval;
++
++retry:
++for (i = 0; i < count; i++) {
++if ((vs[i].w.flags & FUTEX_PRIVATE_FLAG) && retry)
++continue;
++ret = get_futex_key(u64_to_user_ptr(vs[i].w.uaddr),
++    !(vs[i].w.flags & FUTEX_PRIVATE_FLAG),
++    &vs[i].q.key, FUTEX_READ);
++if (unlikely(ret))
++return ret;
++}
++
++set_current_state(TASK_INTERRUPTIBLE);
++
++for (i = 0; i < count; i++) {
++u32 __user *uaddr = (u32 __user *)(unsigned long)vs[i].w.uaddr;
++struct futex_q *q = &vs[i].q;
++u32 val = (u32)vs[i].w.val;
++
++hb = queue_lock(q);
++ret = get_futex_value_locked(&uval, uaddr);
++
++if (!ret && uval == val) {
++queue_me(q, hb);
++continue;
++}
++
++queue_unlock(hb);
++__set_current_state(TASK_RUNNING);
++
++*woken = unqueue_multiple(vs, i);
++if (*woken >= 0)
++return 1;
++
++if (ret) {
++if (get_user(uval, uaddr))
++return -EFAULT;
++retry = true;
++goto retry;
++}
++
++if (uval != val)
++return -EWOULDBLOCK;
++}
++
++return 0;
++}
++
++static void futex_sleep_multiple(struct futex_vector *vs, unsigned int count,
++struct hrtimer_sleeper *to)
++{
++if (to && !to->task)
++return;
++
++for (; count; count--, vs++) {
++if (!READ_ONCE(vs->q.lock_ptr))
++return;
++}
++
++freezable_schedule();
++}
++
++static int futex_wait_multiple(struct futex_vector *vs, unsigned int count,
++      struct hrtimer_sleeper *to)
++{
++int ret, hint = 0;
++
++if (to)
++hrtimer_sleeper_start_expires(to, HRTIMER_MODE_ABS);
++
++while (1) {
++ret = futex_wait_multiple_setup(vs, count, &hint);
++if (ret) {
++if (ret > 0)
++ret = hint;
++return ret;
++}
++
++futex_sleep_multiple(vs, count, to);
++__set_current_state(TASK_RUNNING);
++
++ret = unqueue_multiple(vs, count);
++if (ret >= 0)
++return ret;
++
++if (to && !to->task)
++return -ETIMEDOUT;
++else if (signal_pending(current))
++return -ERESTARTSYS;
++}
++}
++
++#define FUTEXV_WAITER_MASK (FUTEX_32 | FUTEX_PRIVATE_FLAG)
++
++static int futex_parse_waitv(struct futex_vector *futexv,
++    struct futex_waitv __user *uwaitv,
++    unsigned int nr_futexes)
++{
++struct futex_waitv aux;
++unsigned int i;
++
++for (i = 0; i < nr_futexes; i++) {
++if (copy_from_user(&aux, &uwaitv[i], sizeof(aux)))
++return -EFAULT;
++if ((aux.flags & ~FUTEXV_WAITER_MASK) || aux.__reserved)
++return -EINVAL;
++if (!(aux.flags & FUTEX_32))
++return -EINVAL;
++futexv[i].w.flags = aux.flags;
++futexv[i].w.val = aux.val;
++futexv[i].w.uaddr = aux.uaddr;
++futexv[i].q = futex_q_init;
++}
++
++return 0;
++}
++
++SYSCALL_DEFINE5(futex_waitv, struct futex_waitv __user *, waiters,
++unsigned int, nr_futexes, unsigned int, flags,
++struct __kernel_timespec __user *, timeout, clockid_t, clockid)
++{
++struct futex_vector stack_futexv[FUTEXV_STACK_MAX];
++struct hrtimer_sleeper to;
++struct futex_vector *futexv;
++struct timespec64 ts;
++ktime_t time;
++int ret;
++
++if (flags)
++return -EINVAL;
++
++if (!nr_futexes || nr_futexes > FUTEX_WAITV_MAX || !waiters)
++return -EINVAL;
++
++if (timeout) {
++int flag_clkid = 0;
++
++if (clockid == CLOCK_REALTIME)
++flag_clkid = FLAGS_CLOCKRT;
++
++if (clockid != CLOCK_REALTIME && clockid != CLOCK_MONOTONIC)
++return -EINVAL;
++
++if (get_timespec64(&ts, timeout))
++return -EFAULT;
++
++if (!timespec64_valid(&ts))
++return -EINVAL;
++
++time = timespec64_to_ktime(ts);
++if (clockid == CLOCK_MONOTONIC)
++time = timens_ktime_to_host(CLOCK_MONOTONIC, time);
++
++futex_setup_timer(&time, &to, flag_clkid, 0);
++}
++
++if (nr_futexes <= FUTEXV_STACK_MAX) {
++futexv = stack_futexv;
++} else {
++futexv = kmalloc_array(nr_futexes, sizeof(*futexv), GFP_KERNEL);
++if (!futexv) {
++ret = -ENOMEM;
++goto destroy_timer;
++}
++}
++
++ret = futex_parse_waitv(futexv, waiters, nr_futexes);
++if (!ret)
++ret = futex_wait_multiple(futexv, nr_futexes, timeout ? &to : NULL);
++
++if (timeout) {
++hrtimer_cancel(&to.timer);
++destroy_hrtimer_on_stack(&to.timer);
++}
++
++if (futexv != stack_futexv)
++kfree(futexv);
++
++return ret;
++
++destroy_timer:
++if (timeout) {
++hrtimer_cancel(&to.timer);
++destroy_hrtimer_on_stack(&to.timer);
++}
++return ret;
++}
+ 
+ long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
+ 		u32 __user *uaddr2, u32 val2, u32 val3)
