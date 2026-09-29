@@ -23,6 +23,10 @@ on:
         description: "Nuke ALL existing assets on this release before uploading (opt-in)"
         type: boolean
         default: true
+      fast_test:
+        description: "Fast boot test — GKI-KSU-Next only, no release"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -39,9 +43,36 @@ jobs:
       - id: ts
         run: echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
 
+  build-fast:
+    name: "${{ matrix.variant.name }}"
+    needs: [setup]
+    if: ${{ inputs.fast_test == true }}
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - name:      "GKI-KSU-Next"
+            source:    "gki"
+            ksu:       "ksun"
+            prefix:    "GKI_KSU-Next"
+            artifact:  "gki-ksun"
+            defconfig: "gki_defconfig"
+    uses: ./.github/workflows/build-kernel.yml
+    with:
+      variant_name:  ${{ matrix.variant.name }}
+      source_type:   ${{ matrix.variant.source }}
+      ksu_type:      ${{ matrix.variant.ksu }}
+      zip_prefix:    ${{ matrix.variant.prefix }}
+      artifact_name: ${{ matrix.variant.artifact }}
+      defconfig:     ${{ matrix.variant.defconfig }}
+      clo_fragment:  ''
+      build_type:    ${{ inputs.build_type || 'stable' }}
+    secrets: inherit
+
   build:
     name: "${{ matrix.variant.name }}"
     needs: [setup]
+    if: ${{ inputs.fast_test != true }}
     strategy:
       fail-fast: false
       matrix:
@@ -106,7 +137,7 @@ jobs:
   release:
     name: "Package & Release"
     needs: [setup, build]
-    if: success() && github.event_name != 'schedule'
+    if: success() && github.event_name != 'schedule' && inputs.fast_test != true
     uses: ./.github/workflows/release.yml
     with:
       zip_mode:   ${{ inputs.zip_mode || 'per-variant' }}
@@ -119,8 +150,11 @@ jobs:
   notify-failure:
     name: "Notify Failure"
     runs-on: ubuntu-latest
-    needs: [build]
-    if: always() && needs.build.result == 'cancelled' && github.event_name != 'schedule'
+    needs: [build, build-fast]
+    if: |
+      always() &&
+      (needs.build.result == 'cancelled' || needs.build-fast.result == 'cancelled') &&
+      github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4.2.2
         with:
