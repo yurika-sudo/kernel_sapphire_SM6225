@@ -37,6 +37,8 @@ cp "${KO_DIR}/zram.ko" "$STAGE_DIR/module/zram.ko"
 cp "${KO_DIR}/zsmalloc.ko" "$STAGE_DIR/module/zsmalloc.ko"
 [ -f "${KO_DIR}/encore_fas.ko" ] && cp "${KO_DIR}/encore_fas.ko" "$STAGE_DIR/module/encore_fas.ko"
 [ -f "${KO_DIR}/ath9k_htc.ko" ] && cp "${KO_DIR}/ath9k_htc.ko" "$STAGE_DIR/module/ath9k_htc.ko"
+[ -f "${KO_DIR}/mac80211.ko" ] && cp "${KO_DIR}/mac80211.ko" "$STAGE_DIR/module/mac80211.ko"
+[ -f "${KO_DIR}/cfg80211.ko" ] && cp "${KO_DIR}/cfg80211.ko" "$STAGE_DIR/module/cfg80211.ko"
 
 chmod +x "$STAGE_DIR/customize.sh" "$STAGE_DIR/post-fs-data.sh" "$STAGE_DIR/action.sh"
 [ -f "$STAGE_DIR/service.sh" ] && chmod +x "$STAGE_DIR/service.sh"

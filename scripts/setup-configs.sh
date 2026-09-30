@@ -16,7 +16,8 @@ sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off noirqdebug mitigations=o
 sed -i 's/kasan\.stacktrace=off/kasan=off/'               "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
-for SYM in PID_NS DEBUG_KINFO \
+for SYM in WLAN_VENDOR_ATH \
+           PID_NS DEBUG_KINFO \
            NET_SCH_CODEL NET_SCH_FQ_CODEL UBSAN NET_SCH_DEFAULT DEFAULT_NET_SCH DEFAULT_NET_SCH_FQ_CODEL \
            LRU_GEN LRU_GEN_ENABLED NET_SCH_FQ DEBUG_MEMORY_INIT PRINTK_CALLER \
            ZRAM_DEF_COMP_LZORLE ZRAM_DEF_COMP_ZSTD ZRAM_DEF_COMP_LZ4 ZRAM_DEF_COMP_LZO ZRAM_DEF_COMP \
@@ -95,6 +96,7 @@ CONFIG_UPROBES=y
 CONFIG_UPROBE_EVENTS=y
 CONFIG_ENCORE_FAS=m
 CONFIG_WLAN=y
+CONFIG_WLAN_VENDOR_ATH=y
 CONFIG_CFG80211=m
 CONFIG_MAC80211=m
 CONFIG_ATH9K_HTC=m
