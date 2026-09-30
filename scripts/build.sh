@@ -203,6 +203,21 @@ if [ -n "$CFG80211_KO" ]; then
   cp "$CFG80211_KO" "$KO_OUT/cfg80211.ko"
   echo "[${SOURCE_TYPE^^}] Collecting cfg80211.ko..."
 fi
+ATH_KO=$(find "$MODULES_OUT" -name 'ath.ko' | head -1)
+ATH9K_HW_KO=$(find "$MODULES_OUT" -name 'ath9k_hw.ko' | head -1)
+ATH9K_COMMON_KO=$(find "$MODULES_OUT" -name 'ath9k_common.ko' | head -1)
+if [ -n "$ATH_KO" ]; then
+  cp "$ATH_KO" "$KO_OUT/ath.ko"
+  echo "[${SOURCE_TYPE^^}] Collecting ath.ko..."
+fi
+if [ -n "$ATH9K_HW_KO" ]; then
+  cp "$ATH9K_HW_KO" "$KO_OUT/ath9k_hw.ko"
+  echo "[${SOURCE_TYPE^^}] Collecting ath9k_hw.ko..."
+fi
+if [ -n "$ATH9K_COMMON_KO" ]; then
+  cp "$ATH9K_COMMON_KO" "$KO_OUT/ath9k_common.ko"
+  echo "[${SOURCE_TYPE^^}] Collecting ath9k_common.ko..."
+fi
 
 DURATION=$(( $(date +%s) - START ))
 echo "✅ Build done in $((DURATION/60))m $((DURATION%60))s"
