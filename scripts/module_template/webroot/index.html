@@ -63,32 +63,32 @@ async function run(cmd) {
 }
 
 async function refreshStatus() {
-  const dongle = await run("lsusb 2>/dev/null | grep -c '0cf3:9271'");
+  const dongle = await run("lsusb 2>/dev/null | grep -c 0cf3:9271 || echo 0");
   setStatus("s-dongle",
     dongle.stdout.trim() === "1" ? "connected" : "not connected",
     dongle.stdout.trim() === "1" ? "ok" : "off");
 
-  const wlan = await run("lsmod | grep -c '^wlan '");
+  const wlan = await run("lsmod | grep -c '^wlan ' || echo 0");
   setStatus("s-wlan",
     wlan.stdout.trim() === "1" ? "loaded" : "unloaded",
     wlan.stdout.trim() === "1" ? "warn" : "off");
 
-  const cfg = await run("lsmod | grep -c '^cfg80211 '");
+  const cfg = await run("lsmod | grep -c '^cfg80211 ' || echo 0");
   setStatus("s-cfg",
     cfg.stdout.trim() === "1" ? "loaded" : "not loaded",
     cfg.stdout.trim() === "1" ? "ok" : "off");
 
-  const mac = await run("lsmod | grep -c '^mac80211 '");
+  const mac = await run("lsmod | grep -c '^mac80211 ' || echo 0");
   setStatus("s-mac",
     mac.stdout.trim() === "1" ? "loaded" : "not loaded",
     mac.stdout.trim() === "1" ? "ok" : "off");
 
-  const ath = await run("lsmod | grep -c '^ath9k_htc '");
+  const ath = await run("lsmod | grep -c '^ath9k_htc ' || echo 0");
   setStatus("s-ath",
     ath.stdout.trim() === "1" ? "loaded" : "not loaded",
     ath.stdout.trim() === "1" ? "ok" : "off");
 
-  const wlan1 = await run("ip link show wlan1 2>/dev/null | grep -c wlan1");
+  const wlan1 = await run("ip link show wlan1 2>/dev/null | grep -c wlan1 || echo 0");
   setStatus("s-wlan1",
     wlan1.stdout.trim() === "1" ? "up" : "absent",
     wlan1.stdout.trim() === "1" ? "ok" : "off");
@@ -102,7 +102,7 @@ async function activate() {
   log("⚠ WiFi and Bluetooth must be OFF before proceeding.");
   log("Checking dongle...");
 
-  const dongle = await run("lsusb 2>/dev/null | grep -c '0cf3:9271'");
+  const dongle = await run("lsusb 2>/dev/null | grep -c 0cf3:9271 || echo 0");
   if (dongle.stdout.trim() !== "1") {
     log("✕ Dongle not detected. Plug in TL-WN722N first.");
     document.getElementById("btn-activate").disabled = false;
@@ -148,7 +148,7 @@ async function activate() {
   await run(IW + " phy " + phy + " interface add wlan1 type managed 2>/dev/null");
   await run("ip link set wlan1 up 2>/dev/null");
 
-  const check = await run("ip link show wlan1 2>/dev/null | grep -c wlan1");
+  const check = await run("ip link show wlan1 2>/dev/null | grep -c wlan1 || echo 0");
   if (check.stdout.trim() === "1") {
     log("✓ wlan1 is up. Ready.");
   } else {
