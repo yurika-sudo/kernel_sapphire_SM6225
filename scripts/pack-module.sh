@@ -42,10 +42,14 @@ cp "${KO_DIR}/zsmalloc.ko" "$STAGE_DIR/module/zsmalloc.ko"
 [ -f "${KO_DIR}/ath9k_htc.ko" ]  && cp "${KO_DIR}/ath9k_htc.ko"  "$STAGE_DIR/module/ath9k_htc.ko"
 [ -f "${KO_DIR}/mac80211.ko" ] && cp "${KO_DIR}/mac80211.ko" "$STAGE_DIR/module/mac80211.ko"
 [ -f "${KO_DIR}/cfg80211.ko" ] && cp "${KO_DIR}/cfg80211.ko" "$STAGE_DIR/module/cfg80211.ko"
-# cfg80211 overlay — replaces vendor 5.15.94 with GKI build at boot
+# cfg80211 overlay — replaces vendor cfg80211 with GKI build at boot
+# Both /vendor/lib/modules and /vendor_dlkm/lib/modules need covering:
+# vendor_dlkm is a separate erofs partition loaded at t=4s before NoMount
 if [ -f "${KO_DIR}/cfg80211.ko" ]; then
   mkdir -p "$STAGE_DIR/system/vendor/lib/modules"
   cp "${KO_DIR}/cfg80211.ko" "$STAGE_DIR/system/vendor/lib/modules/cfg80211.ko"
+  mkdir -p "$STAGE_DIR/system/vendor_dlkm/lib/modules"
+  cp "${KO_DIR}/cfg80211.ko" "$STAGE_DIR/system/vendor_dlkm/lib/modules/cfg80211.ko"
 fi
 
 chmod +x "$STAGE_DIR/customize.sh" "$STAGE_DIR/post-fs-data.sh" "$STAGE_DIR/action.sh"
