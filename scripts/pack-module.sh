@@ -42,6 +42,11 @@ cp "${KO_DIR}/zsmalloc.ko" "$STAGE_DIR/module/zsmalloc.ko"
 [ -f "${KO_DIR}/ath9k_htc.ko" ]  && cp "${KO_DIR}/ath9k_htc.ko"  "$STAGE_DIR/module/ath9k_htc.ko"
 [ -f "${KO_DIR}/mac80211.ko" ] && cp "${KO_DIR}/mac80211.ko" "$STAGE_DIR/module/mac80211.ko"
 [ -f "${KO_DIR}/cfg80211.ko" ] && cp "${KO_DIR}/cfg80211.ko" "$STAGE_DIR/module/cfg80211.ko"
+# cfg80211 overlay — replaces vendor 5.15.94 with GKI build at boot
+if [ -f "${KO_DIR}/cfg80211.ko" ]; then
+  mkdir -p "$STAGE_DIR/system/vendor/lib/modules"
+  cp "${KO_DIR}/cfg80211.ko" "$STAGE_DIR/system/vendor/lib/modules/cfg80211.ko"
+fi
 
 chmod +x "$STAGE_DIR/customize.sh" "$STAGE_DIR/post-fs-data.sh" "$STAGE_DIR/action.sh"
 [ -f "$STAGE_DIR/service.sh" ] && chmod +x "$STAGE_DIR/service.sh"
