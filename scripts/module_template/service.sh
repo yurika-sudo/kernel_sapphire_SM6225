@@ -17,3 +17,23 @@ fi
 # Reflex cpufreq governor — SM6225 has 2 fixed clusters (little: policy0, big: policy4)
 echo reflex > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
 echo reflex > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null
+
+# PowerSuspend — brightness-triggered userspace hook via inotifywait
+BRIGHTNESS_NODE="/sys/class/backlight/panel0-backlight/brightness"
+POWERSUSPEND_STATE="/sys/kernel/power_suspend/power_suspend_state"
+POWERSUSPEND_MODE="/sys/kernel/power_suspend/power_suspend_mode"
+
+if [ -f "$BRIGHTNESS_NODE" ] && [ -f "$POWERSUSPEND_STATE" ]; then
+  # Set userspace mode so sysfs writes are accepted
+  echo 1 > "$POWERSUSPEND_MODE"
+  # Monitor brightness node for any write event, react immediately
+  "${MODDIR}/tools/inotifywait" -m -e close_write "$BRIGHTNESS_NODE" 2>/dev/null | \
+  while read -r _ _ _; do
+    BRIGHTNESS=$(cat "$BRIGHTNESS_NODE")
+    if [ "$BRIGHTNESS" = "0" ]; then
+      echo 1 > "$POWERSUSPEND_STATE"
+    else
+      echo 0 > "$POWERSUSPEND_STATE"
+    fi
+  done &
+fi
