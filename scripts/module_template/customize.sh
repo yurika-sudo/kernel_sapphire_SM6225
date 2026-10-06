@@ -1,4 +1,5 @@
 $BOOTMODE || abort "! Install this module from Magisk/KernelSU Manager, not recovery."
+chmod +x "$MODPATH/tools/inotifywait"
 
 cat /proc/version | grep -qE '^Linux version 5\.15\.' || abort "! This module only supports the sapphire 5.15 kernel."
 
