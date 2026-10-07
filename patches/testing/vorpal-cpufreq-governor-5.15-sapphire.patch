@@ -40,10 +40,10 @@ index f357aa757..87150cf07 100644
 +obj-$(CONFIG_CPU_FREQ_GOV_VORPAL)	+= cpufreq_vorpal.o
 diff --git a/drivers/cpufreq/cpufreq_vorpal.c b/drivers/cpufreq/cpufreq_vorpal.c
 new file mode 100644
-index 000000000..2815f3f4a
+index 000000000..f1c06c15d
 --- /dev/null
 +++ b/drivers/cpufreq/cpufreq_vorpal.c
-@@ -0,0 +1,2858 @@
+@@ -0,0 +1,2862 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Vorpal CPUFreq Governor v2.2 — schedutil-derived, tri-cluster.
@@ -88,6 +88,10 @@ index 000000000..2815f3f4a
 +
 +#define CREATE_TRACE_POINTS
 +#include <trace/events/vorpal.h>
++
++#ifndef SCHED_FLAG_SUGOV
++#define SCHED_FLAG_SUGOV	0x10000000
++#endif
 +
 +#define CPUFREQ_VORPAL_NAME     "vorpal"
 +#define CPUFREQ_VORPAL_VERSION  "2.2-1"
@@ -2148,6 +2152,16 @@ index 000000000..2815f3f4a
 +{
 +	struct task_struct *thread;
 +	struct cpufreq_policy *policy = p->policy;
++	struct sched_attr attr = {
++		.size		= sizeof(struct sched_attr),
++		.sched_policy	= SCHED_DEADLINE,
++		.sched_flags	= SCHED_FLAG_SUGOV,
++		.sched_nice	= 0,
++		.sched_priority	= 0,
++		.sched_runtime	= NSEC_PER_MSEC,
++		.sched_deadline = 10 * NSEC_PER_MSEC,
++		.sched_period	= 10 * NSEC_PER_MSEC,
++	};
 +	int ret;
 +
 +	/* Deferred-path only, but initialise before the fast-switch return: a
@@ -2167,16 +2181,6 @@ index 000000000..2815f3f4a
 +		return PTR_ERR(thread);
 +	}
 +
-+	struct sched_attr attr = {
-+		.size		= sizeof(struct sched_attr),
-+		.sched_policy	= SCHED_DEADLINE,
-+		.sched_flags	= SCHED_FLAG_SUGOV,
-+		.sched_nice	= 0,
-+		.sched_priority	= 0,
-+		.sched_runtime	= NSEC_PER_MSEC,
-+		.sched_deadline = 10 * NSEC_PER_MSEC,
-+		.sched_period	= 10 * NSEC_PER_MSEC,
-+	};
 +	ret = sched_setattr_nocheck(thread, &attr);
 +	if (ret) {
 +		kthread_stop(thread);
@@ -2489,9 +2493,7 @@ index 000000000..2815f3f4a
 +	 * inter-frame gap steps out within the cap and a longer gap lands
 +	 * on the discard. */
 +	ns = t - ((u64)(RFX_EMA_MAX_STEPS + 1) * RFX_EMA_DECAY_PERIOD_NS);
-+	WARN_ON(rfx_ema(1000, 0, t, &ns, true) !=
-+		1000 - RFX_EMA_MAX_STEPS * 1000 / RFX_EMA_GAMING_DIVISOR ||
-+		ns != t);
++	WARN_ON(rfx_ema(1000, 0, t, &ns, true) != 685 || ns != t);
 +
 +	/* Gaming headroom ramp: nothing at the gate, something above it (a ramp
 +	 * truncated to whole percent would give zero there), never past
@@ -2683,6 +2685,8 @@ index 000000000..2815f3f4a
 +	 * re-arm and the full one does. */
 +	memset(&p, 0, sizeof(p));
 +	rfx_warmup_rearm_quiet(&p, RFX_GAMING_WARMUP_TRIGGER_PCT - 1, t);
++	rfx_warmup_rearm_quiet(&p, RFX_GAMING_WARMUP_TRIGGER_PCT - 1,
++				 t + RFX_GAMING_REARM_QUIET_NS);
 +	WARN_ON(p.gaming_warmup_pending != true);
 +	p.gaming_warmup_pending = false;
 +	rfx_warmup_rearm_quiet(&p, RFX_GAMING_WARMUP_TRIGGER_PCT - 1, t);
