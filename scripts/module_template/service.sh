@@ -15,8 +15,8 @@ if [ -f "${MODDIR}/module/ath9k_htc.ko" ]; then
   insmod ${MODDIR}/module/ath9k_htc.ko 2>/dev/null
 fi
 # Reflex cpufreq governor — SM6225 has 2 fixed clusters (little: policy0, big: policy4)
-echo reflex > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
-echo reflex > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null
+echo vorpal > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
+echo vorpal > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null
 
 # PowerSuspend — brightness-triggered userspace hook via inotifywait
 BRIGHTNESS_NODE="/sys/class/backlight/panel0-backlight/brightness"
