@@ -17,6 +17,7 @@ sed -i 's/kasan\.stacktrace=off/kasan=off/'               "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
 for SYM in WLAN_VENDOR_ATH \
+           FAIR_GROUP_SCHED CFS_BANDWIDTH \
            PID_NS DEBUG_KINFO \
            NET_SCH_CODEL NET_SCH_FQ_CODEL UBSAN NET_SCH_DEFAULT DEFAULT_NET_SCH DEFAULT_NET_SCH_FQ_CODEL \
            LRU_GEN LRU_GEN_ENABLED NET_SCH_FQ DEBUG_MEMORY_INIT PRINTK_CALLER \
@@ -105,8 +106,6 @@ CONFIG_ATH=m
 CONFIG_ATH9K_HW=m
 CONFIG_ATH9K_COMMON=m
 CONFIG_CGROUP_PIDS=y
-CONFIG_FAIR_GROUP_SCHED=y
-CONFIG_CFS_BANDWIDTH=y
 CONFIG_SUSPEND_SKIP_SYNC=y
 CONFIG_POWERSUSPEND=y
 EOF
@@ -160,6 +159,14 @@ EOF
 
 # NoKSU — no extras, common configs above apply
 # (only common configs above apply — nothing extra here)
+fi
+
+# GKI-only configs (CLO excluded — bootloops on CLO with FAIR_GROUP_SCHED/CFS_BANDWIDTH)
+if [ "$SOURCE_TYPE" = "gki" ]; then
+cat >> "$CF" << 'EOF'
+CONFIG_FAIR_GROUP_SCHED=y
+CONFIG_CFS_BANDWIDTH=y
+EOF
 fi
 
 echo "[OK] Configs written for KSU_TYPE=$KSU_TYPE SOURCE_TYPE=$SOURCE_TYPE"
