@@ -17,23 +17,47 @@ fi
 # Reflex cpufreq governor — SM6225 has 2 fixed clusters (little: policy0, big: policy4)
 echo vorpal > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
 echo vorpal > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null
-
-# PowerSuspend — brightness-triggered userspace hook via inotifywait
+# PowerSuspend + Big core hotplug — brightness-triggered via inotifywait
+# close_write fires once per write cycle (after each dimming step)
+# State guard prevents redundant writes on multi-step brightness transitions
 BRIGHTNESS_NODE="/sys/class/backlight/panel0-backlight/brightness"
 POWERSUSPEND_STATE="/sys/kernel/power_suspend/power_suspend_state"
 POWERSUSPEND_MODE="/sys/kernel/power_suspend/power_suspend_mode"
+BIG_CORES="4 5 6 7"
+INOTIFY="${MODDIR}/tools/inotifywait"
+
+_screen_off() {
+  echo 1 > "$POWERSUSPEND_STATE" 2>/dev/null
+  for c in $BIG_CORES; do
+    echo 0 > /sys/devices/system/cpu/cpu${c}/online 2>/dev/null
+  done
+}
+
+_screen_on() {
+  for c in $BIG_CORES; do
+    echo 1 > /sys/devices/system/cpu/cpu${c}/online 2>/dev/null
+  done
+  echo 0 > "$POWERSUSPEND_STATE" 2>/dev/null
+}
 
 if [ -f "$BRIGHTNESS_NODE" ] && [ -f "$POWERSUSPEND_STATE" ]; then
-  # Set userspace mode so sysfs writes are accepted
   echo 1 > "$POWERSUSPEND_MODE"
-  # Monitor brightness node for any write event, react immediately
-  "${MODDIR}/tools/inotifywait" -m -e close_write "$BRIGHTNESS_NODE" 2>/dev/null | \
+
+  # Set initial state on boot
+  _PREV=""
+  _VAL=$(cat "$BRIGHTNESS_NODE" 2>/dev/null)
+  if [ "$_VAL" = "0" ]; then
+    _screen_off; _PREV="off"
+  else
+    _screen_on; _PREV="on"
+  fi
+
+  "$INOTIFY" -m -e close_write "$BRIGHTNESS_NODE" 2>/dev/null | \
   while read -r _ _ _; do
-    BRIGHTNESS=$(cat "$BRIGHTNESS_NODE")
-    if [ "$BRIGHTNESS" = "0" ]; then
-      echo 1 > "$POWERSUSPEND_STATE"
-    else
-      echo 0 > "$POWERSUSPEND_STATE"
-    fi
+    _VAL=$(cat "$BRIGHTNESS_NODE" 2>/dev/null)
+    [ "$_VAL" = "0" ] && _CUR="off" || _CUR="on"
+    [ "$_CUR" = "$_PREV" ] && continue
+    _PREV="$_CUR"
+    [ "$_CUR" = "off" ] && _screen_off || _screen_on
   done &
 fi
