@@ -14,7 +14,14 @@ fi
 echo "cpuidle: $(cat /sys/devices/system/cpu/cpuidle/current_governor 2>/dev/null || echo unknown)"
 echo "I/O scheduler: $(cat $(find /sys/block/sd*/queue/scheduler 2>/dev/null | head -1) 2>/dev/null | grep -oE '\[[^]]+\]' | tr -d '[]' || echo unknown)"
 echo "cpufreq policy0: $(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null || echo unknown)"
-echo "cpufreq policy4: $(cat /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null || echo unknown)"
+GOV4=$(cat /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null || echo unknown)
+if [ "$GOV4" = "vorpal" ]; then
+  GM=$(cat /sys/devices/system/cpu/cpufreq/policy4/vorpal/gaming_mode 2>/dev/null)
+  [ "$GM" = "1" ] && GM_LABEL="gaming" || GM_LABEL="daily"
+  echo "cpufreq policy4: vorpal [$GM_LABEL]"
+else
+  echo "cpufreq policy4: $GOV4"
+fi
 echo ""
 
 # -- Dongle status --
@@ -30,6 +37,21 @@ echo "mac80211: $(lsmod | grep -q '^mac80211' && echo 'loaded' || echo 'not load
 echo "wlan: $(lsmod | grep -q '^wlan' && echo 'loaded' || echo 'not loaded')"
 echo "wlan0/wlan0mon: $(ip link show 2>/dev/null | grep -qE 'wlan0|wlan0mon' && echo 'up/present' || echo 'not present')"
 echo ""
+
+# -- Vorpal gaming_mode toggle (no arg) --
+GOV4=$(cat /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null)
+if [ -z "$1" ] && [ "$GOV4" = "vorpal" ]; then
+  GM_PATH=/sys/devices/system/cpu/cpufreq/policy4/vorpal/gaming_mode
+  GM=$(cat "$GM_PATH" 2>/dev/null)
+  if [ "$GM" = "1" ]; then
+    echo 0 > "$GM_PATH"
+    echo ">> Vorpal: switched to daily mode"
+  else
+    echo 1 > "$GM_PATH"
+    echo ">> Vorpal: switched to gaming mode"
+  fi
+  exit 0
+fi
 
 # -- Smart toggle (no arg) --
 if [ -z "$1" ]; then
