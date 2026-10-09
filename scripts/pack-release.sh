@@ -13,7 +13,7 @@ mkdir -p ./release_zips
 
 if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
   [ "$BUILD_TYPE" = "testing" ] && SUFFIX="-testing" || SUFFIX=""
-  # AIO bundles both GKI and CLO — use major.minor only, not per-source sublevel
+  # AIO bundles all GKI variants — use major.minor only, not per-source sublevel
   _series=$(echo "${KERNEL_VERSION:-5.15.x}" | grep -oP '^\d+\.\d+' || echo "5.15")
   AIO_NAME="AK3-ALL-${_series}-$(date +'%Y-%m')${SUFFIX}.zip"
 
@@ -26,15 +26,12 @@ if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
     [ -f "$ARTIFACT_ZIP" ] || continue
 
     # Derive named image from artifact dir name
-    # artifact dirs: gki-ksun, gki-sksu, gki-nksu, clo-ksun, clo-sksu, clo-nksu
+    # artifact dirs: gki-ksun, gki-sksu, gki-nksu
     DIR_NAME=$(basename "$ARTIFACT_DIR")
     case "$DIR_NAME" in
       gki-ksun)  IMG_NAME="Image.gki.ksu"   ;;
       gki-sksu)  IMG_NAME="Image.gki.suki"  ;;
       gki-nksu) IMG_NAME="Image.gki.noksu" ;;
-      clo-ksun)  IMG_NAME="Image.clo.ksu"   ;;
-      clo-sksu)  IMG_NAME="Image.clo.suki"  ;;
-      clo-nksu) IMG_NAME="Image.clo.noksu" ;;
       *)         IMG_NAME="Image.$(echo "$DIR_NAME" | tr -d '-')" ;;
     esac
 

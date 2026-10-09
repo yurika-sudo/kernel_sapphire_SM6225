@@ -137,7 +137,6 @@ elif [ "$MODE" = "check" ]; then
     MSG="${MSG}ReSukiSU: <code>${CHECK_RSKU_TAG:-?}</code>%0A"
     MSG="${MSG}SUSFS: <code>${CHECK_SUSFS_TAG:-?}</code>%0A"
     MSG="${MSG}GKI: <code>${CHECK_GKI_SUB:-?}</code>%0A"
-    MSG="${MSG}CLO: <code>${CHECK_CLO_SUB:-?}</code>%0A%0A"
     MSG="${MSG}<a href='${RUN_URL}'>Logs</a>"
     _tg_msg "$MSG"
     exit 0
@@ -150,7 +149,6 @@ elif [ "$MODE" = "check" ]; then
   MSG="${MSG}ReSukiSU: <code>${CHECK_RSKU_TAG:-?}</code>%0A"
   MSG="${MSG}SUSFS: <code>${CHECK_SUSFS_TAG:-?}</code>%0A"
   MSG="${MSG}GKI: <code>${CHECK_GKI_SUB:-?}</code>%0A"
-  MSG="${MSG}CLO: <code>${CHECK_CLO_SUB:-?}</code>%0A"
 
   if [ -n "${HELD_BACK:-}" ]; then
     MSG="${MSG}%0AHeld back (gate failed):%0A"

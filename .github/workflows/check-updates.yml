@@ -21,7 +21,6 @@ jobs:
       rsku_tag:      ${{ steps.versions.outputs.rsku_tag }}
       susfs_tag:     ${{ steps.versions.outputs.susfs_tag }}
       gki_sub:       ${{ steps.versions.outputs.gki_sub }}
-      clo_sub:       ${{ steps.versions.outputs.clo_sub }}
       ksun_changed:  ${{ steps.versions.outputs.ksun_changed }}
       rsku_changed:  ${{ steps.versions.outputs.rsku_changed }}
       update_detail: ${{ steps.versions.outputs.update_detail }}
@@ -91,7 +90,6 @@ jobs:
           NEW_RSKU:  ${{ needs.check.outputs.rsku_tag }}
           NEW_SUSFS: ${{ needs.check.outputs.susfs_tag }}
           NEW_GKI:   ${{ needs.check.outputs.gki_sub }}
-          NEW_CLO:   ${{ needs.check.outputs.clo_sub }}
           KSUN_GATE: ${{ needs.verify-ksun.result }}
           RSKU_GATE: ${{ needs.verify-rsku.result }}
         run: |
@@ -118,17 +116,14 @@ jobs:
             HELD_BACK+=("ReSukiSU: verify build failed, kept ${OLD_RSKU}")
           fi
 
-          # susfs_tag / gki_sublevel / clo_sublevel stay ungated (see commit
-          # message) — always take the freshly-detected value.
+          # susfs_tag / gki_sublevel stay ungated — always take the freshly-detected value.
           jq -n \
             --arg gki   "$NEW_GKI" \
-            --arg clo   "$NEW_CLO" \
             --arg ksun  "$FINAL_KSUN" \
             --arg rsku  "$FINAL_RSKU" \
             --arg susfs "$NEW_SUSFS" \
             '{
               gki_sublevel: $gki,
-              clo_sublevel: $clo,
               ksun_tag:     $ksun,
               rsku_tag:     $rsku,
               susfs_tag:    $susfs
@@ -173,7 +168,6 @@ jobs:
           CHECK_RSKU_TAG:  ${{ needs.check.outputs.rsku_tag }}
           CHECK_SUSFS_TAG: ${{ needs.check.outputs.susfs_tag }}
           CHECK_GKI_SUB:   ${{ needs.check.outputs.gki_sub }}
-          CHECK_CLO_SUB:   ${{ needs.check.outputs.clo_sub }}
           UPDATE_DETAIL:   ${{ needs.check.outputs.update_detail }}
           CHECK_FAILED:    ${{ needs.check.outputs.check_failed }}
           HELD_BACK:       ${{ needs.apply-pins.outputs.held_back }}

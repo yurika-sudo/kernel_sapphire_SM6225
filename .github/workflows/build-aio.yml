@@ -65,7 +65,6 @@ jobs:
       zip_prefix:    ${{ matrix.variant.prefix }}
       artifact_name: ${{ matrix.variant.artifact }}
       defconfig:     ${{ matrix.variant.defconfig }}
-      clo_fragment:  ''
       build_type:    ${{ inputs.build_type || 'stable' }}
     secrets: inherit
 
@@ -98,30 +97,6 @@ jobs:
             artifact:  "gki-nksu"
             defconfig: "gki_defconfig"
 
-          - name:      "CLO-KSU-Next"
-            source:    "clo"
-            ksu:       "ksun"
-            prefix:    "CLO_KSU-Next"
-            artifact:  "clo-ksun"
-            defconfig: "gki_defconfig"
-            clo_fragment: "vendor/bengal_GKI.config"
-
-          - name:      "CLO-ReSukiSU"
-            source:    "clo"
-            ksu:       "rsku"
-            prefix:    "CLO_ReSukiSU"
-            artifact:  "clo-rsku"
-            defconfig: "gki_defconfig"
-            clo_fragment: "vendor/bengal_GKI.config"
-
-          - name:      "CLO-NoKSU"
-            source:    "clo"
-            ksu:       "none"
-            prefix:    "CLO_NoKSU"
-            artifact:  "clo-nksu"
-            defconfig: "gki_defconfig"
-            clo_fragment: "vendor/bengal_GKI.config"
-
     uses: ./.github/workflows/build-kernel.yml
     with:
       variant_name:  ${{ matrix.variant.name }}
@@ -130,7 +105,6 @@ jobs:
       zip_prefix:    ${{ matrix.variant.prefix }}
       artifact_name: ${{ matrix.variant.artifact }}
       defconfig:     ${{ matrix.variant.defconfig }}
-      clo_fragment:  ${{ matrix.variant.clo_fragment || '' }}
       build_type:    ${{ inputs.build_type || 'stable' }}
     secrets: inherit
 

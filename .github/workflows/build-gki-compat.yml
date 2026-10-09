@@ -66,7 +66,6 @@ jobs:
       zip_prefix:    ${{ matrix.variant.prefix }}
       artifact_name: ${{ matrix.variant.artifact }}
       defconfig:     ${{ matrix.variant.defconfig }}
-      clo_fragment:  ""
       build_type:    ${{ inputs.build_type || 'stable' }}
     secrets: inherit
 

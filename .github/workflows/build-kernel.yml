@@ -4,12 +4,11 @@ on:
   workflow_call:
     inputs:
       variant_name:  { type: string, required: true }
-      source_type:   { type: string, required: true }   # gki | clo
+      source_type:   { type: string, required: true }   # gki | gki-compat
       ksu_type:      { type: string, required: true }   # ksun | sksu | none
       zip_prefix:    { type: string, required: true }
       artifact_name: { type: string, required: true }
       defconfig:     { type: string, required: true }
-      clo_fragment:  { type: string, required: false }  # e.g. vendor/bengal_GKI.config (CLO only)
       build_type:    { type: string, required: true }   # stable | testing
       ksun_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
       rsku_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
@@ -35,35 +34,11 @@ jobs:
       - name: "Setup env"
         uses: ./.github/actions/setup-env
 
-      - name: "Read CLO source pin"
-        if: inputs.source_type == 'clo'
-        id: clo-pin
-        run: |
-          echo "hash=$(jq -r .clo_sublevel sources/source-pins.json)" >> $GITHUB_OUTPUT
-
-      - name: "Restore CLO source cache"
-        if: inputs.source_type == 'clo'
-        id: clo-src-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.KERNEL_SRC }}
-          key: clo-source-${{ steps.clo-pin.outputs.hash }}
-          restore-keys: clo-source-
-
       - name: "Clone kernel source"
         env:
           SOURCE_TYPE:   ${{ inputs.source_type }}
           KSU_TYPE:      ${{ inputs.ksu_type }}
-          CLO_CACHE_HIT: ${{ steps.clo-src-cache.outputs.cache-hit }}
-          CLO_FRAGMENT:  ${{ inputs.clo_fragment }}
         run: bash scripts/clone-source.sh
-
-      - name: "Save CLO source cache"
-        if: inputs.source_type == 'clo'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ env.KERNEL_SRC }}
-          key: clo-source-${{ steps.clo-pin.outputs.hash }}
 
       - name: "Fix source warnings"
         run: bash scripts/fix-source-warnings.sh "${{ env.KERNEL_SRC }}"
@@ -152,7 +127,6 @@ jobs:
           source_type:  ${{ inputs.source_type }}
           defconfig:    ${{ env.KERNEL_SRC }}/arch/arm64/configs/${{ inputs.defconfig }}
           kernel_dir:   ${{ env.KERNEL_SRC }}
-          clo_fragment: ${{ inputs.clo_fragment }}
 
       - name: "Localversion"
         working-directory: ${{ env.KERNEL_SRC }}
@@ -175,7 +149,6 @@ jobs:
           SOURCE_TYPE:  ${{ inputs.source_type }}
           KSU_TYPE:     ${{ inputs.ksu_type }}
           DEFCONFIG:    ${{ inputs.defconfig }}
-          CLO_FRAGMENT: ${{ inputs.clo_fragment }}
           VARIANT:      ${{ inputs.variant_name }}
         run: |
           set -o pipefail

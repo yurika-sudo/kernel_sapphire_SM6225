@@ -44,21 +44,11 @@ GKI_SUB="${GKI_SUB:-unknown}"
 rm -rf "$GKI_TMP"
 echo "GKI 5.15     : $GKI_SUB"
 
-CLO_RAW=$(_curl \
-  "https://git.codelinaro.org/clo/la/kernel/msm-5.15/-/raw/kernel.lnx.5.15.r1-rel/Makefile")
-CLO_SUB=$(echo "$CLO_RAW" | awk -F' *= *' \
-  '/^VERSION /    {v=$2}
-   /^PATCHLEVEL / {p=$2}
-   /^SUBLEVEL /   {s=$2}
-   END { if(v && p && s) print "v"v"."p"."s; else print "unknown" }')
-CLO_SUB="${CLO_SUB:-unknown}"
-echo "CLO 5.15     : $CLO_SUB"
 
 echo ""
 echo "=== Comparing against source-pins.json ==="
 
 PIN_GKI=$(_pin "gki_sublevel")
-PIN_CLO=$(_pin "clo_sublevel")
 PIN_KSUN=$(_pin "ksun_tag")
 PIN_RSKU=$(_pin "rsku_tag")
 PIN_SUSFS=$(_pin "susfs_tag")
@@ -79,11 +69,6 @@ elif [ "$GKI_SUB" != "$PIN_GKI" ]; then
   UPDATES+=("GKI: ${PIN_GKI} → ${GKI_SUB}")
 fi
 
-if [ "$CLO_SUB" = "unknown" ]; then
-  FAILED+=("CLO"); CLO_SUB="$PIN_CLO"
-elif [ "$CLO_SUB" != "$PIN_CLO" ]; then
-  UPDATES+=("CLO: ${PIN_CLO} → ${CLO_SUB}")
-fi
 
 KSUN_CHANGED="false"
 RSKU_CHANGED="false"
@@ -132,7 +117,6 @@ fi
   echo "rsku_tag=$RSKU_TAG"
   echo "susfs_tag=$SUSFS_TAG"
   echo "gki_sub=$GKI_SUB"
-  echo "clo_sub=$CLO_SUB"
   echo "has_update=$HAS_UPDATE"
   echo "ksun_changed=$KSUN_CHANGED"
   echo "rsku_changed=$RSKU_CHANGED"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build.sh — unified GKI/CLO kernel build
+# build.sh — GKI kernel build
 # env: SOURCE_TYPE, KSU_TYPE, DEFCONFIG, VARIANT, KERNEL_SRC, WORK_DIR, CLANG_DIR
 set -e
 
@@ -98,54 +98,6 @@ echo "[${SOURCE_TYPE^^}] Forcing Net Scheduler to FQ..."
   --set-str DEFAULT_NET_SCH "fq"
 make "${MAKE_FLAGS[@]}" olddefconfig  
 
-if [ -n "${CLO_FRAGMENT:-}" ]; then
-  echo "[${SOURCE_TYPE^^}] Merging fragment(s): $CLO_FRAGMENT"
-  FRAG_PATHS=()
-  for f in $CLO_FRAGMENT; do
-    FRAG_PATHS+=("arch/arm64/configs/$f")
-  done
-  KCONFIG_CONFIG="${OUT_DIR}/dist/.config" \
-    scripts/kconfig/merge_config.sh -m \
-    "${OUT_DIR}/dist/.config" \
-    "${FRAG_PATHS[@]}"
-  make "${MAKE_FLAGS[@]}" olddefconfig
-  echo "[CLO] Re-enforcing ZRAM_DEF_COMP=lz4 after fragment merge"
-  ./scripts/config --file "${OUT_DIR}/dist/.config" \
-    -d ZRAM_DEF_COMP_LZORLE \
-    -d ZRAM_DEF_COMP_ZSTD \
-    -e ZRAM_DEF_COMP_LZ4 \
-    -d ZRAM_DEF_COMP_LZO \
-    -d CRYPTO_LZO \
-    --set-str ZRAM_DEF_COMP "lz4"
-  echo "[CLO] Re-enforcing TCP_CONG=bbr3 after fragment merge"
-  ./scripts/config --file "${OUT_DIR}/dist/.config" \
-    -e TCP_CONG_ADVANCED \
-    -d TCP_CONG_BBR \
-    -e TCP_CONG_WESTWOOD \
-    -e TCP_CONG_BBR3 \
-    --set-str DEFAULT_TCP_CONG "bbr3" \
-    -d DEFAULT_BBR \
-    -e DEFAULT_BBR3
-  echo "[CLO] Re-enforcing mq-deadline I/O scheduler after fragment merge"
-  ./scripts/config --file "${OUT_DIR}/dist/.config" \
-    -e MQ_IOSCHED_DEADLINE \
-    -d IOSCHED_BFQ \
-    -d BFQ_GROUP_IOSCHED \
-    -e DEFAULT_DEADLINE \
-    -d DEFAULT_BFQ \
-    -d DEFAULT_NONE \
-    --set-str DEFAULT_MQ_IOSCHED "mq-deadline"
-  echo "[CLO] Forcing Net Scheduler to FQ and TCP Advanced..."
-  ./scripts/config --file "${OUT_DIR}/dist/.config" \
-    -e NET_SCH_FQ \
-    -d NET_SCH_FQ_CODEL \
-    -e NET_SCH_CAKE \
-    -e NET_SCH_PIE \
-    -e NET_SCH_DEFAULT \
-    -e DEFAULT_FQ \
-    --set-str DEFAULT_NET_SCH "fq"
-  make "${MAKE_FLAGS[@]}" olddefconfig
- fi
 
 echo "[${SOURCE_TYPE^^}] Building Image + modules..."
 if ! make "${MAKE_FLAGS[@]}" Image modules 2>&1 | tee "$LOG"; then

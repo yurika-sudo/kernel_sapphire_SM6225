@@ -119,7 +119,6 @@ jobs:
           START_TIME:       ${{ inputs.start_time }}
           KERNEL_UNAME:     ${{ env.KERNEL_UNAME }}
           KERNEL_UNAME_GKI: ${{ env.KERNEL_UNAME_GKI }}
-          KERNEL_UNAME_CLO: ${{ env.KERNEL_UNAME_CLO }}
           GITHUB_REPOSITORY:   ${{ github.repository }}
           GITHUB_REF_NAME:     ${{ github.ref_name }}
           GITHUB_ACTOR:        ${{ github.actor }}

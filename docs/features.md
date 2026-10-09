@@ -59,7 +59,7 @@ The kernel ZIP alone is not enough. `CONFIG_ZRAM=m` means `zram.ko`/`zsmalloc.ko
 - **NoKSU:** root first via Magisk or KSU-Next/SukiSU-Ultra, then install from there.
 
 > [!NOTE]
-> Universal — works across all variants (GKI/CLO × KSU-Next/SukiSU/NoKSU).
+> Universal — works across all variants (GKI × KSU-Next/SukiSU/NoKSU).
 
 ---
 
@@ -82,7 +82,7 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 
 ### Stable (`patches/common/`)
 
-Stable patches applied to all variants (GKI, CLO, GKI-Compat). See [`patches/common/`](../patches/common/) for the full list.
+Stable patches applied to all variants (GKI, GKI-Compat). See [`patches/common/`](../patches/common/) for the full list.
 
 ### GKI-Compat only (`patches/gki-compat-only/`)
 

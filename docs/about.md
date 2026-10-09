@@ -16,7 +16,7 @@ This started as a way to learn kernel building properly — CI/CD, GKI complianc
 
 ## Stack
 
-- Kernel: `android13-5.15-lts` (GKI) + CodeLinaro `msm-5.15` (CLO)
+- Kernel: `android13-5.15-lts` (GKI)
 - Root: KernelSU-Next / SukiSU-Ultra / NoKSU
 - SUSFS for filesystem spoofing
 - CI/CD: GitHub Actions — fully automated build, package, release, notify

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup-toolchain.sh — AOSP-pinned clang for gki/gki-compat, ZyC for clo
+# setup-toolchain.sh — AOSP-pinned clang for gki/gki-compat
 # env: WORK_DIR, KERNEL_SRC, SOURCE_TYPE
 set -e
 

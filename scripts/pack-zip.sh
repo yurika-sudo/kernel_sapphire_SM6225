@@ -21,7 +21,6 @@ KERNEL_VERSION=$(echo "$_raw" | grep -oP '^\d+\.\d+\.\d+' || echo "$_raw")
 # Derive labels from env
 case "${SOURCE_TYPE}" in
   gki) SRC_LABEL="GKI" ;;
-  clo) SRC_LABEL="CLO" ;;
   *)   SRC_LABEL="${SOURCE_TYPE^^}" ;;
 esac
 

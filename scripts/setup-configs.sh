@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # setup-configs.sh — inject kernel configs into defconfig
-# env: KSU_TYPE, SOURCE_TYPE, DEFCONFIG (full path), KERNEL_DIR, CLO_FRAGMENT (optional)
+# env: KSU_TYPE, SOURCE_TYPE, DEFCONFIG (full path), KERNEL_DIR
 set -e
 
 : "${KSU_TYPE:?}"
@@ -161,7 +161,7 @@ EOF
 # (only common configs above apply — nothing extra here)
 fi
 
-# GKI-only configs (CLO excluded — bootloops on CLO with FAIR_GROUP_SCHED/CFS_BANDWIDTH)
+# GKI-only configs
 if [ "$SOURCE_TYPE" = "gki" ]; then
 cat >> "$CF" << 'EOF'
 CONFIG_FAIR_GROUP_SCHED=y

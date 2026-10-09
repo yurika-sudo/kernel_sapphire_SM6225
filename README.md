@@ -1,6 +1,6 @@
 # Seiran Kernel
 
-Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — `android13-5.15`, GKI + CLO variants.
+Automated kernel builder for **Redmi Note 13 4G/NFC (sapphire/sapphiren)** — `android13-5.15`, GKI variants.
 
 > [!WARNING]
 > Personal project. Tested on my own device only. Flash at your own risk.

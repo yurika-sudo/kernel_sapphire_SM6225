@@ -10,8 +10,6 @@ inputs:
     required: true
   kernel_dir:
     required: true
-  clo_fragment:
-    required: false
 
 runs:
   using: composite
@@ -22,5 +20,4 @@ runs:
         SOURCE_TYPE:  ${{ inputs.source_type }}
         DEFCONFIG:    ${{ inputs.defconfig }}
         KERNEL_DIR:   ${{ inputs.kernel_dir }}
-        CLO_FRAGMENT: ${{ inputs.clo_fragment }}
       run: bash ${{ github.workspace }}/scripts/setup-configs.sh
