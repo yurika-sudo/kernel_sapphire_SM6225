@@ -1,5 +1,101 @@
+diff --git a/arch/arm64/include/asm/topology.h b/arch/arm64/include/asm/topology.h
+index ec2db3419c..d4bc002ee1 100644
+--- a/arch/arm64/include/asm/topology.h
++++ b/arch/arm64/include/asm/topology.h
+@@ -23,6 +23,8 @@ void update_freq_counters_refs(void);
+ #define arch_set_freq_scale topology_set_freq_scale
+ #define arch_scale_freq_capacity topology_get_freq_scale
+ #define arch_scale_freq_invariant topology_scale_freq_invariant
++#define arch_set_min_freq_scale topology_set_min_freq_scale
++#define arch_scale_min_freq_capacity topology_get_min_freq_scale
+ 
+ /* Replace task scheduler's default cpu-invariant accounting */
+ #define arch_scale_cpu_capacity topology_get_cpu_scale
+diff --git a/drivers/base/arch_topology.c b/drivers/base/arch_topology.c
+index db1424e1c0..8f95dd6bfd 100644
+--- a/drivers/base/arch_topology.c
++++ b/drivers/base/arch_topology.c
+@@ -151,6 +151,24 @@ void topology_set_freq_scale(const struct cpumask *cpus, unsigned long cur_freq,
+ 		per_cpu(arch_freq_scale, i) = scale;
+ }
+ 
++DEFINE_PER_CPU(unsigned long, arch_min_freq_scale);
++EXPORT_PER_CPU_SYMBOL_GPL(arch_min_freq_scale);
++
++void topology_set_min_freq_scale(const struct cpumask *cpus,
++				 unsigned long min_freq, unsigned long max_freq)
++{
++	unsigned long scale;
++	int i;
++
++	if (WARN_ON_ONCE(!max_freq))
++		return;
++
++	scale = (min_freq * per_cpu(cpu_scale, cpumask_any(cpus))) / max_freq;
++
++	for_each_cpu(i, cpus)
++		per_cpu(arch_min_freq_scale, i) = scale;
++}
++
+ DEFINE_PER_CPU(unsigned long, cpu_scale) = SCHED_CAPACITY_SCALE;
+ EXPORT_PER_CPU_SYMBOL_GPL(cpu_scale);
+ 
+diff --git a/drivers/cpufreq/cpufreq.c b/drivers/cpufreq/cpufreq.c
+index aa4edf6477..3d26cab7f6 100644
+--- a/drivers/cpufreq/cpufreq.c
++++ b/drivers/cpufreq/cpufreq.c
+@@ -2589,6 +2589,9 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
+ 	policy->max = __resolve_freq(policy, policy->max, CPUFREQ_RELATION_H);
+ 	trace_cpu_frequency_limits(policy);
+ 
++	arch_set_min_freq_scale(policy->related_cpus, policy->min,
++				policy->cpuinfo.max_freq);
++
+ 	policy->cached_target_freq = UINT_MAX;
+ 
+ 	pr_debug("new min and max freqs are %u - %u kHz\n",
+diff --git a/include/linux/arch_topology.h b/include/linux/arch_topology.h
+index c5ce6c5798..59268b0419 100644
+--- a/include/linux/arch_topology.h
++++ b/include/linux/arch_topology.h
+@@ -33,6 +33,16 @@ static inline unsigned long topology_get_freq_scale(int cpu)
+ 
+ void topology_set_freq_scale(const struct cpumask *cpus, unsigned long cur_freq,
+ 			     unsigned long max_freq);
++
++DECLARE_PER_CPU(unsigned long, arch_min_freq_scale);
++
++static inline unsigned long topology_get_min_freq_scale(int cpu)
++{
++	return per_cpu(arch_min_freq_scale, cpu);
++}
++
++void topology_set_min_freq_scale(const struct cpumask *cpus,
++				 unsigned long min_freq, unsigned long max_freq);
+ bool topology_scale_freq_invariant(void);
+ 
+ enum scale_freq_source {
+diff --git a/include/linux/cpufreq.h b/include/linux/cpufreq.h
+index 085d397cf6..a49069e070 100644
+--- a/include/linux/cpufreq.h
++++ b/include/linux/cpufreq.h
+@@ -1094,6 +1094,14 @@ void arch_set_freq_scale(const struct cpumask *cpus,
+ {
+ }
+ #endif
++#ifndef arch_set_min_freq_scale
++static __always_inline
++void arch_set_min_freq_scale(const struct cpumask *cpus,
++			     unsigned long min_freq,
++			     unsigned long max_freq)
++{
++}
++#endif
+ /* the following are really really optional */
+ extern struct freq_attr cpufreq_freq_attr_scaling_available_freqs;
+ extern struct freq_attr cpufreq_freq_attr_scaling_boost_freqs;
 diff --git a/init/Kconfig b/init/Kconfig
-index 2810598ec..7d0c6e321 100644
+index 2810598ec8..7d0c6e3213 100644
 --- a/init/Kconfig
 +++ b/init/Kconfig
 @@ -1266,6 +1266,31 @@ config CHECKPOINT_RESTORE
@@ -36,13 +132,13 @@ index 2810598ec..7d0c6e321 100644
  	select CGROUPS
 diff --git a/kernel/sched/cass.c b/kernel/sched/cass.c
 new file mode 100644
-index 000000000..82e91077a
+index 0000000000..c6d78f68d0
 --- /dev/null
 +++ b/kernel/sched/cass.c
-@@ -0,0 +1,308 @@
+@@ -0,0 +1,337 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
-+ * Copyright (C) 2023-2024 Sultan Alsawaf <sultan@kerneltoast.com>.
++ * Copyright (C) 2023-2025 Sultan Alsawaf <sultan@kerneltoast.com>.
 + */
 +
 +/**
@@ -119,10 +215,25 @@ index 000000000..82e91077a
 +c->cap_no_therm = c->cap_orig - min(c->hard_util, c->cap_orig - 1);
 +}
 +
++/*
++ * Returns true if @c is a CPU with the maximum possible original capacity and
++ * there's only one such CPU in the system (i.e., if @c is the prime CPU).
++ */
++static __always_inline
++bool cass_prime_cpu(const struct cass_cpu_cand *c)
++{
++	/*
++	 * On arm64, the prime CPU is always the last CPU. If it doesn't have
++	 * the same original capacity as the prior CPU, then it is prime.
++	 */
++	return c->cpu == nr_cpu_ids - 1 &&
++	       arch_scale_cpu_capacity(nr_cpu_ids - 2) != SCHED_CAPACITY_SCALE;
++}
++
 +/* Returns true if @a is a better CPU than @b */
 +static __always_inline
 +bool cass_cpu_better(const struct cass_cpu_cand *a,
-+     const struct cass_cpu_cand *b,
++     const struct cass_cpu_cand *b, unsigned long p_util,
 +     int this_cpu, int prev_cpu, bool sync)
 +{
 +#define cass_cmp(a, b) ({ res = (a) - (b); })
@@ -137,6 +248,15 @@ index 000000000..82e91077a
 +if (b->eff_util > b->cap_max && a->eff_util > a->cap_max &&
 +    cass_cmp(b->eff_util * SCHED_CAPACITY_SCALE / b->cap_max,
 +     a->eff_util * SCHED_CAPACITY_SCALE / a->cap_max))
++goto done;
++
++/* Prefer the CPU that fits the task */
++if (cass_cmp(fits_capacity(p_util, a->cap_max),
++     fits_capacity(p_util, b->cap_max)))
++goto done;
++
++/* Prefer the CPU that isn't the single fastest one in the system */
++if (cass_cmp(cass_prime_cpu(b), cass_prime_cpu(a)))
 +goto done;
 +
 +/* Prefer the CPU with lower relative utilization */
@@ -217,23 +337,28 @@ index 000000000..82e91077a
 +if (curr->cap_max < uc_min && curr->cap_max < best->cap_max)
 +continue;
 +
-+/*
-+ * Check if this CPU is idle or only has SCHED_IDLE tasks. For
-+ * sync wakes, treat the current CPU as idle if @current is the
-+ * only running task.
-+ */
-+if ((sync && cpu == this_cpu && rq->nr_running == 1) ||
-+    available_idle_cpu(cpu) || sched_idle_cpu(cpu)) {
-+/*
-+ * A non-idle candidate may be better when @p is uclamp
-+ * boosted. Otherwise, always prefer idle candidates.
-+ */
-+if (!uc_min) {
-+/* Discard any previous non-idle candidate */
-+if (!has_idle)
-+best = curr;
-+has_idle = true;
-+}
++		/*
++		 * Check if this CPU is idle or only has SCHED_IDLE tasks. For
++		 * sync wakes, treat the current CPU as idle if @current is the
++		 * only running task.
++		 */
++		curr->cpu = cpu;
++		if ((sync && cpu == this_cpu && rq->nr_running == 1) ||
++		    available_idle_cpu(cpu) || sched_idle_cpu(cpu)) {
++			/*
++			 * A non-idle candidate may be better for energy
++			 * efficiency when @p is uclamp boosted above @curr's
++			 * minimum capacity, or when the only idle candidate
++			 * found so far is the prime CPU. Otherwise, prefer idle
++			 * candidates.
++			 */
++			if (!has_idle &&
++			    uc_min <= arch_scale_min_freq_capacity(cpu) &&
++			    !cass_prime_cpu(curr)) {
++				/* Discard any previous non-idle candidate */
++				best = curr;
++				has_idle = true;
++			}
 +
 +/* Nonzero exit latency indicates this CPU is idle */
 +curr->exit_lat = 1;
@@ -297,7 +422,7 @@ index 000000000..82e91077a
 + * cidx still needs to be changed to the other candidate slot.
 + */
 +if (best == curr ||
-+    cass_cpu_better(curr, best, this_cpu, prev_cpu, sync)) {
++    cass_cpu_better(curr, best, p_util, this_cpu, prev_cpu, sync)) {
 +best = curr;
 +cidx ^= 1;
 +}
@@ -350,7 +475,7 @@ index 000000000..82e91077a
 +}
 diff --git a/kernel/sched/cass_rt.h b/kernel/sched/cass_rt.h
 new file mode 100644
-index 000000000..65f35dcdf
+index 0000000000..65f35dcdf9
 --- /dev/null
 +++ b/kernel/sched/cass_rt.h
 @@ -0,0 +1,15 @@
@@ -370,10 +495,93 @@ index 000000000..65f35dcdf
 +#define select_task_rq_rt cass_select_task_rq_rt
 +#endif /* CONFIG_SCHED_CASS */
 diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
-index 32597673f..9fdc3e1dd 100644
+index a83cce15de..5a51b9d9e2 100644
 --- a/kernel/sched/fair.c
 +++ b/kernel/sched/fair.c
-@@ -12031,6 +12031,17 @@ static unsigned int get_rr_interval_fair(struct rq *rq, struct task_struct *task
+@@ -9508,6 +9508,82 @@ find_idlest_group(struct sched_domain *sd, struct task_struct *p, int this_cpu)
+ 	return idlest;
+ }
+ 
++static void update_idle_cpu_scan(struct lb_env *env,
++				 unsigned long sum_util)
++{
++	struct sched_domain_shared *sd_share;
++	int llc_weight, pct;
++	u64 x, y, tmp;
++
++	/* CASS doesn't use this, so this can be skipped as an optimization */
++	if (IS_ENABLED(CONFIG_SCHED_CASS))
++		return;
++
++	/*
++	 * Update the number of CPUs to scan in LLC domain, which could
++	 * be used as a hint in select_idle_cpu(). The update of sd_share
++	 * could be expensive because it is within a shared cache line.
++	 * So the write of this hint only occurs during periodic load
++	 * balancing, rather than CPU_NEWLY_IDLE, because the latter
++	 * can fire way more frequently than the former.
++	 */
++	if (!sched_feat(SIS_UTIL) || env->idle == CPU_NEWLY_IDLE)
++		return;
++
++	llc_weight = per_cpu(sd_llc_size, env->dst_cpu);
++	if (env->sd->span_weight != llc_weight)
++		return;
++
++	sd_share = rcu_dereference(per_cpu(sd_llc_shared, env->dst_cpu));
++	if (!sd_share)
++		return;
++
++	/*
++	 * The number of CPUs to search drops as sum_util increases, when
++	 * sum_util hits 85% or above, the scan stops.
++	 * The reason to choose 85% as the threshold is because this is the
++	 * imbalance_pct(117) when a LLC sched group is overloaded.
++	 *
++	 * let y = SCHED_CAPACITY_SCALE - p * x^2                       [1]
++	 * and y'= y / SCHED_CAPACITY_SCALE
++	 *
++	 * x is the ratio of sum_util compared to the CPU capacity:
++	 * x = sum_util / (llc_weight * SCHED_CAPACITY_SCALE)
++	 * y' is the ratio of CPUs to be scanned in the LLC domain,
++	 * and the number of CPUs to scan is calculated by:
++	 *
++	 * nr_scan = llc_weight * y'                                    [2]
++	 *
++	 * When x hits the threshold of overloaded, AKA, when
++	 * x = 100 / pct, y drops to 0. According to [1],
++	 * p should be SCHED_CAPACITY_SCALE * pct^2 / 10000
++	 *
++	 * Scale x by SCHED_CAPACITY_SCALE:
++	 * x' = sum_util / llc_weight;                                  [3]
++	 *
++	 * and finally [1] becomes:
++	 * y = SCHED_CAPACITY_SCALE -
++	 *     x'^2 * pct^2 / (10000 * SCHED_CAPACITY_SCALE)            [4]
++	 *
++	 */
++	/* equation [3] */
++	x = sum_util;
++	do_div(x, llc_weight);
++
++	/* equation [4] */
++	pct = env->sd->imbalance_pct;
++	tmp = x * x * pct * pct;
++	do_div(tmp, 10000 * SCHED_CAPACITY_SCALE);
++	tmp = min_t(long, tmp, SCHED_CAPACITY_SCALE);
++	y = SCHED_CAPACITY_SCALE - tmp;
++
++	/* equation [2] */
++	y *= llc_weight;
++	do_div(y, SCHED_CAPACITY_SCALE);
++	if ((int)y != sd_share->nr_idle_scan)
++		WRITE_ONCE(sd_share->nr_idle_scan, (int)y);
++}
++
+ /**
+  * update_sd_lb_stats - Update sched_domain's statistics for load balancing.
+  * @env: The load balancing environment.
+@@ -12031,6 +12107,17 @@ static unsigned int get_rr_interval_fair(struct rq *rq, struct task_struct *task
  	return rr_interval;
  }
  
@@ -392,7 +600,7 @@ index 32597673f..9fdc3e1dd 100644
   * All the scheduling class methods:
   */
 diff --git a/kernel/sched/rt.c b/kernel/sched/rt.c
-index ec8e02fd1..cc6bdcd35 100644
+index ec8e02fd1a..cc6bdcd35e 100644
 --- a/kernel/sched/rt.c
 +++ b/kernel/sched/rt.c
 @@ -2634,6 +2634,8 @@ static unsigned int get_rr_interval_rt(struct rq *rq, struct task_struct *task)
@@ -404,3 +612,22 @@ index ec8e02fd1..cc6bdcd35 100644
  DEFINE_SCHED_CLASS(rt) = {
  
  	.enqueue_task		= enqueue_task_rt,
+diff --git a/kernel/sched/sched.h b/kernel/sched/sched.h
+index 509643bd01..bb2786a88c 100644
+--- a/kernel/sched/sched.h
++++ b/kernel/sched/sched.h
+@@ -2545,6 +2545,14 @@ unsigned long arch_scale_freq_capacity(int cpu)
+ }
+ #endif
+ 
++#ifndef arch_scale_min_freq_capacity
++static __always_inline
++unsigned long arch_scale_min_freq_capacity(int cpu)
++{
++	return 0;
++}
++#endif
++
+ #ifdef CONFIG_SCHED_DEBUG
+ /*
+  * In double_lock_balance()/double_rq_lock(), we use raw_spin_rq_lock() to
