@@ -40,10 +40,10 @@ index f357aa757..87150cf07 100644
 +obj-$(CONFIG_CPU_FREQ_GOV_VORPAL)	+= cpufreq_vorpal.o
 diff --git a/drivers/cpufreq/cpufreq_vorpal.c b/drivers/cpufreq/cpufreq_vorpal.c
 new file mode 100644
-index 000000000..f1c06c15d
+index 000000000..0e0df567c
 --- /dev/null
 +++ b/drivers/cpufreq/cpufreq_vorpal.c
-@@ -0,0 +1,2862 @@
+@@ -0,0 +1,2865 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Vorpal CPUFreq Governor v2.2 — schedutil-derived, tri-cluster.
@@ -126,20 +126,20 @@ index 000000000..f1c06c15d
 +#define RFX_FAST_RATE_US		250
 +
 +/* Gaming down-rate gate. Only ever shorten: widening it ratchets the descent. */
-+#define RFX_GAMING_DOWN_US		3000
++#define RFX_GAMING_DOWN_US		10000
 +
 +/* Gaming floors, percent of effective ceiling (no caps: demand tracks up to
 + * fceil). Floors are the resting-power dial; a floor on a render tier raises
 + * valley heat, drops fceil, and costs frames. 42/44 tuned for power efficiency
 + * with maintained gaming performance. */
-+#define RFX_G_PRIME_FLOOR_PCT		42	/* spill tier, resting power */
-+#define RFX_G_BIG_FLOOR_PCT		44	/* render tier (2-tier: top) */
++#define RFX_G_PRIME_FLOOR_PCT		66	/* Prime core baseline floor */
++#define RFX_G_BIG_FLOOR_PCT		66	/* Big core render floor */
 +/* Render tier's warmup floor; the cool walk tapers it off linearly across the
 + * latch band (COOL_DEEP to COOL_EXIT) under thermal pressure. */
 +#define RFX_G_WARMUP_FLOOR_PCT		80	/* render tier only, timed lift */
 +/* Little never renders: V/f knee + a small lift so an idle cluster does
 + * not bake the die before the first burst. Lowered for more idle time. */
-+#define RFX_G_LITTLE_FLOOR_PCT		34
++#define RFX_G_LITTLE_FLOOR_PCT		36
 +
 +/* Max downward slew, pct of ceiling per 2ms. Bounds how deep a short lull digs
 + * the clock; the EMA owns descent shape. Tuned with the EMA -- never loosen both. */
@@ -149,17 +149,17 @@ index 000000000..f1c06c15d
 + * gaming_mode=1, inert while gaming_mode=0. Set one to 0 to disable it at
 + * build. Floors/caps are the regression-prone levers -- tune one at a time. ---- */
 +#define RFX_G_EVAL_US_DEFAULT			RFX_FAST_RATE_US /* gaming eval cadence */
-+#define RFX_G_HISPEED_PCT_DEFAULT		70	/* F1 hispeed render floor */
++#define RFX_G_HISPEED_PCT_DEFAULT		80	/* Hispeed floor under burst load */
 +#define RFX_G_GO_HISPEED_PCT_DEFAULT		85	/* F1 arm demand (skewed pct) */
 +#define RFX_G_HISPEED_HOLD_US_DEFAULT		30000	/* F1 hold after last go-demand */
-+#define RFX_G_TOUCH_PCT_DEFAULT			68	/* F2 input render floor */
-+#define RFX_G_TOUCH_MS_DEFAULT			100	/* F2 input window */
++#define RFX_G_TOUCH_PCT_DEFAULT			82	/* Touch & open-scope render floor */
++#define RFX_G_TOUCH_MS_DEFAULT			450	/* Input boost window (covers ADS scope animation) */
 +#define RFX_G_THERM_CAP_MC_DEFAULT		80000	/* F3 pre-emptive cap start mC */
 +#define RFX_G_THERM_CAP_MIN_PCT_DEFAULT		70	/* F3 floor of the graduated cap */
-+#define RFX_G_MIN_SAMPLE_US_DEFAULT		4000	/* F5 min dwell before a drop */
-+#define RFX_G_DOWN_FAST_PCT_DEFAULT		2	/* F6 fast-phase shed rate */
-+#define RFX_G_DOWN_FAST_MS_DEFAULT		40	/* F6 fast-phase length */
-+#define RFX_G_ENERGY_AWARE_DEFAULT		1	/* F4 round-down on descent */
++#define RFX_G_MIN_SAMPLE_US_DEFAULT		8000	/* Minimum dwell before drop */
++#define RFX_G_DOWN_FAST_PCT_DEFAULT		1	/* Fast-phase descent rate */
++#define RFX_G_DOWN_FAST_MS_DEFAULT		0	/* Fast-phase descent window disabled for smooth ramp */
++#define RFX_G_ENERGY_AWARE_DEFAULT		0	/* Disable round-down on gaming descent to avoid under-provision */
 +
 +/* ---- Daily shaping, percent of effective ceiling. Caps only: the util EMA
 + * plus PELT already carry any rise. ---- */
@@ -236,10 +236,10 @@ index 000000000..f1c06c15d
 + * transition, not a load loss: pin the committed level for one frame gap
 + * so the recovery frame does not pay the OPP climb. Fall-edge-only, so it
 + * never degrades into a floor. */
-+#define RFX_G_DESCEND_DROP_PCT		15	/* points of skewed demand */
++#define RFX_G_DESCEND_DROP_PCT		12	/* points of skewed demand */
 +/* Arms on a fall from above this level; decoupled from TRIGGER so normal
 + * gameplay variation does not fire the hold. */
-+#define RFX_G_DESCEND_FROM_PCT		85
++#define RFX_G_DESCEND_FROM_PCT		70
 +#define RFX_G_DESCEND_HOLD_NS		((u64)RFX_EMA_MAX_STEPS * \
 +					 RFX_EMA_DECAY_PERIOD_NS)	/* one frame gap */
 +
@@ -254,15 +254,15 @@ index 000000000..f1c06c15d
 + * is untouched, above it a frame is near budget and this closes the gap.
 + * 8 points at 100% util = ~8% of fceil, the single-core gap that kept SC
 + * under target. 6 too small, 10 measured-regressed SC 2026-09-20. */
-+#define RFX_HEADROOM_GAMING		8
-+#define RFX_HEADROOM_GAMING_GATE	75
++#define RFX_HEADROOM_GAMING		10
++#define RFX_HEADROOM_GAMING_GATE	65
 +
 +/* Util percent at which we stop interpolating and request fmax outright.
 + * Gaming 100 disables the shortcut: any lower value makes the render tier
 + * JUMP to fmax early and pin flat there -- top voltage step, no FPS gained.
 + * Daily 88: lower threshold, avoiding the highest OPP for battery saving
 + * while the caps already shape the top end. */
-+#define RFX_SAT_TO_MAX_GAMING_PCT	100
++#define RFX_SAT_TO_MAX_GAMING_PCT	96
 +#define RFX_SAT_TO_MAX_DAILY_PCT	88
 +
 +/* ---- Thermal emergency net. HW LMH (thermal_pressure) and the vendor HAL
@@ -321,7 +321,7 @@ index 000000000..f1c06c15d
 +#define RFX_GAMING_WARMUP_HARD_CANCEL_EVALS	2
 +/* Quiet run that re-arms the deferred warmup. Must span the spawn + asset-load
 + * quiet stretches, so it is not measured from the burst that consumed the arm. */
-+#define RFX_GAMING_REARM_QUIET_NS	(3000 * NSEC_PER_MSEC)
++#define RFX_GAMING_REARM_QUIET_NS	(2000 * NSEC_PER_MSEC)
 +
 +/* Frame-risk re-arm of the warmup window: one crossing arms one 80ms boost;
 + * demand must fall under CLEAR before another can arm. CLEAR must stay below
@@ -329,7 +329,7 @@ index 000000000..f1c06c15d
 + * weapon-switch animation (20ms released mid-burst -> an FPS dip). */
 +#define RFX_G_RISK_ARM_PCT		70
 +#define RFX_G_RISK_CLEAR_PCT		50
-+#define RFX_G_RISK_BOOST_NS		(80 * NSEC_PER_MSEC)
++#define RFX_G_RISK_BOOST_NS		(350 * NSEC_PER_MSEC)	/* 350ms window covers ADS transition */
 +
 +/* Gaming demand gate -- the only demand threshold in the gaming band. Below GATE
 + * a cluster is idle: floor releases, no lift may arm; rejoins above GATE_EXIT.
@@ -364,7 +364,7 @@ index 000000000..f1c06c15d
 + * engages when the die crosses WARM. WARM 84 sits above this SoC's 45-53C
 + * sustained plateau (82 rode fceil down through the whole plateau instead of
 + * letting LMH own the throttle); a truly hot die still trips early. 6C clear. */
-+#define RFX_G_COOL_TEMP_WARM_MC		84000
++#define RFX_G_COOL_TEMP_WARM_MC		78000
 +#define RFX_G_COOL_TEMP_CLEAR_MC	(RFX_G_COOL_TEMP_WARM_MC - 6000)
 +
 +/* Relief floor once the platform is taking capacity. */
@@ -1280,10 +1280,16 @@ index 000000000..f1c06c15d
 +			}
 +		}
 +
-+		if (p->floor_gated)
-+			fl = rfx_pct(fceil, RFX_G_IDLE_FLOOR_PCT);
-+		else if (warmup_ramp_pct > 0 && warmup_fl > fl)
++		if (p->floor_gated) {
++			if (prime)
++				fl = rfx_pct(fceil, 52);
++			else if (!little)
++				fl = rfx_pct(fceil, 54);
++			else
++				fl = rfx_pct(fceil, RFX_G_IDLE_FLOOR_PCT);
++		} else if (warmup_ramp_pct > 0 && warmup_fl > fl) {
 +			fl = fl + (warmup_fl - fl) * warmup_ramp_pct / 100;
++		}
 +
 +		if (freq < fl)
 +			freq = fl;
@@ -1716,12 +1722,9 @@ index 000000000..f1c06c15d
 +
 +	raw_spin_lock_irqsave(&p->update_lock, irqflags);
 +
-+	/* I/O wait boost is for daily storage wakeups only. Gaming already
-+	 * has warmup floor + frame-risk rescue for burst response; letting
-+	 * iowait stack another lift drives the render tier past its frame
-+	 * budget and burns the surplus as heat under fceil. */
-+	if (!gaming)
-+		rfx_iowait_boost(rfx_c, time, flags);
++	/* Apply I/O wait boost across daily and gaming to ensure texture/shader
++	 * streaming completions (e.g. during openscope/ADS) do not stall on low OPP. */
++	rfx_iowait_boost(rfx_c, time, flags);
 +	rfx_c->last_update = time;
 +	rfx_ignore_dl_rate_limit(rfx_c);
 +	rfx_set_eval_delay(p, gaming);
