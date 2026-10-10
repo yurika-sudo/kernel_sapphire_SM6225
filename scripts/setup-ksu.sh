@@ -148,6 +148,38 @@ print("[OK] exec.c: stripped SukiSU-incompatible SUSFS hooks")
 PYEOF
 }
 
+_fix_susfs_fake_state_ksun() {
+  # SUSFS HEAD (>=4ff360e) injects extern fake_state + my_setprocattr +
+  # my_write_context into hooks.c and selinuxfs.c, expecting fake_state
+  # defined by KSU side. KernelSU-Next dev-susfs dropped fake_state in
+  # favour of backup_sepolicy. Strip those blocks post-patch so KSUN own
+  # selinux_hide implementation is used instead.
+  # Self-deactivates once SUSFS upstream removes these blocks.
+  grep -q "fake_state" security/selinux/hooks.c 2>/dev/null || \
+  grep -q "fake_state" security/selinux/selinuxfs.c 2>/dev/null || return 0
+  python3 - <<PYEOF security/selinux/hooks.c security/selinux/selinuxfs.c
+import sys, re
+for path in sys.argv[1:]:
+    try:
+        txt = open(path).read()
+    except FileNotFoundError:
+        continue
+    orig = txt
+    txt = re.sub(
+        r'#ifdef CONFIG_KSU_SUSFS\n(?:[^#]|#(?!endif\b|ifdef\b))*?fake_state(?:[^#]|#(?!endif\b|ifdef\b))*?#endif[^\n]*\n',
+        '', txt, flags=re.DOTALL)
+    txt = re.sub(
+        r'#ifdef CONFIG_KSU_SUSFS\n(\t[^\n]+my_setprocattr[^\n]+\n)#else\n(\t[^\n]+selinux_setprocattr[^\n]+\n)#endif[^\n]*\n',
+        r'\2', txt)
+    if txt != orig:
+        open(path, 'w').write(txt)
+        print("[OK] " + path + ": fake_state blocks stripped")
+    else:
+        print("[SKIP] " + path + ": no fake_state blocks found")
+PYEOF
+  echo "[OK] _fix_susfs_fake_state_ksun done"
+}
+
 # Checkout an exact tag/ref in the given dir if a pin override was supplied.
 # Hard-fails (not falls back) — this path is only used by the verify gate,
 # so a bad pin should surface loudly rather than silently building HEAD.
@@ -193,6 +225,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
+  _fix_susfs_fake_state_ksun
 
   _inject_susfs_init "KernelSU-Next/kernel/ksu.c"
   _link_ksu_driver "KernelSU-Next"
