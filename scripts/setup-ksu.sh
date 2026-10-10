@@ -152,10 +152,9 @@ _fix_susfs_fake_state_ksun() {
   # SUSFS HEAD (>=4ff360e) injects fake_state/fake_status/ksu_selinux_hide_*
   # externs and replacement functions into hooks.c and selinuxfs.c.
   # KernelSU-Next dev-susfs dropped these in favour of backup_sepolicy.
-  # Strip all three injection sites in selinuxfs.c and the fake_state
-  # block in hooks.c so KSUN own selinux_hide implementation is used.
+  # Strip all injection sites so KSUN own selinux_hide implementation is used.
   # Self-deactivates once SUSFS upstream removes these blocks.
-  grep -q "fake_state\|fake_status\|my_sel_open_handle_status" \
+  grep -q "fake_state\|fake_status\|my_sel_open_handle_status\|my_write_context\|my_write_access" \
     security/selinux/selinuxfs.c 2>/dev/null || \
   grep -q "fake_state" security/selinux/hooks.c 2>/dev/null || return 0
   python3 - <<PYEOF security/selinux/hooks.c security/selinux/selinuxfs.c
@@ -166,14 +165,20 @@ for path in sys.argv[1:]:
     except FileNotFoundError:
         continue
     orig = txt
-    # Strip #ifdef CONFIG_KSU_SUSFS...#endif blocks that contain any of
-    # the fake_* or ksu_selinux_hide_* symbols (extern block + func body)
+    # Strip #ifdef CONFIG_KSU_SUSFS...#endif blocks containing fake_* or
+    # ksu_selinux_hide_* or my_sel_open/my_write_* symbols (extern + func bodies)
     txt = re.sub(
-        r'#ifdef CONFIG_KSU_SUSFS\n(?:(?!#ifdef)[\s\S])*?(?:fake_state|fake_status|ksu_selinux_hide_|initialize_fake_status|my_sel_open_handle_status)(?:(?!#ifdef)[\s\S])*?#endif[^\n]*\n',
+        r'#ifdef CONFIG_KSU_SUSFS\n(?:(?!#ifdef)[\s\S])*?(?:fake_state|fake_status|ksu_selinux_hide_|initialize_fake_status|my_sel_open_handle_status|my_write_context|my_write_access)(?:(?!#ifdef)[\s\S])*?#endif[^\n]*\n',
         '', txt, flags=re.DOTALL)
-    # Restore sel_handle_status_ops .open field:
-    # #ifdef CONFIG_KSU_SUSFS\n\t.open = my_sel_open_handle_status,\n#else\n\t.open = sel_open_handle_status,\n#endif\n
-    # → \t.open = sel_open_handle_status,\n
+    # Restore write_op[] [SEL_ACCESS] entry
+    txt = re.sub(
+        r'#ifdef CONFIG_KSU_SUSFS\n(\t\[SEL_ACCESS\]\s*=\s*my_write_access,[^\n]*\n)#else\n(\t\[SEL_ACCESS\]\s*=\s*sel_write_access,[^\n]*\n)#endif[^\n]*\n',
+        r'\2', txt)
+    # Restore write_op[] [SEL_CONTEXT] entry
+    txt = re.sub(
+        r'#ifdef CONFIG_KSU_SUSFS\n(\t\[SEL_CONTEXT\]\s*=\s*my_write_context,[^\n]*\n)#else\n(\t\[SEL_CONTEXT\]\s*=\s*sel_write_context,[^\n]*\n)#endif[^\n]*\n',
+        r'\2', txt)
+    # Restore sel_handle_status_ops .open field
     txt = re.sub(
         r'#ifdef CONFIG_KSU_SUSFS\n(\t\.open\s*=\s*my_sel_open_handle_status,[^\n]*\n)#else\n(\t\.open\s*=\s*sel_open_handle_status,[^\n]*\n)#endif[^\n]*\n',
         r'\2', txt)
