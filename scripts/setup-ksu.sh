@@ -149,14 +149,15 @@ PYEOF
 }
 
 _fix_susfs_fake_state_ksun() {
-  # SUSFS HEAD (>=4ff360e) injects extern fake_state + my_setprocattr +
-  # my_write_context into hooks.c and selinuxfs.c, expecting fake_state
-  # defined by KSU side. KernelSU-Next dev-susfs dropped fake_state in
-  # favour of backup_sepolicy. Strip those blocks post-patch so KSUN own
-  # selinux_hide implementation is used instead.
+  # SUSFS HEAD (>=4ff360e) injects fake_state/fake_status/ksu_selinux_hide_*
+  # externs and replacement functions into hooks.c and selinuxfs.c.
+  # KernelSU-Next dev-susfs dropped these in favour of backup_sepolicy.
+  # Strip all three injection sites in selinuxfs.c and the fake_state
+  # block in hooks.c so KSUN own selinux_hide implementation is used.
   # Self-deactivates once SUSFS upstream removes these blocks.
-  grep -q "fake_state" security/selinux/hooks.c 2>/dev/null || \
-  grep -q "fake_state" security/selinux/selinuxfs.c 2>/dev/null || return 0
+  grep -q "fake_state\|fake_status\|my_sel_open_handle_status" \
+    security/selinux/selinuxfs.c 2>/dev/null || \
+  grep -q "fake_state" security/selinux/hooks.c 2>/dev/null || return 0
   python3 - <<PYEOF security/selinux/hooks.c security/selinux/selinuxfs.c
 import sys, re
 for path in sys.argv[1:]:
@@ -165,17 +166,26 @@ for path in sys.argv[1:]:
     except FileNotFoundError:
         continue
     orig = txt
+    # Strip #ifdef CONFIG_KSU_SUSFS...#endif blocks that contain any of
+    # the fake_* or ksu_selinux_hide_* symbols (extern block + func body)
     txt = re.sub(
-        r'#ifdef CONFIG_KSU_SUSFS\n(?:[^#]|#(?!endif\b|ifdef\b))*?fake_state(?:[^#]|#(?!endif\b|ifdef\b))*?#endif[^\n]*\n',
+        r'#ifdef CONFIG_KSU_SUSFS\n(?:(?!#ifdef)[\s\S])*?(?:fake_state|fake_status|ksu_selinux_hide_|initialize_fake_status|my_sel_open_handle_status)(?:(?!#ifdef)[\s\S])*?#endif[^\n]*\n',
         '', txt, flags=re.DOTALL)
+    # Restore sel_handle_status_ops .open field:
+    # #ifdef CONFIG_KSU_SUSFS\n\t.open = my_sel_open_handle_status,\n#else\n\t.open = sel_open_handle_status,\n#endif\n
+    # → \t.open = sel_open_handle_status,\n
+    txt = re.sub(
+        r'#ifdef CONFIG_KSU_SUSFS\n(\t\.open\s*=\s*my_sel_open_handle_status,[^\n]*\n)#else\n(\t\.open\s*=\s*sel_open_handle_status,[^\n]*\n)#endif[^\n]*\n',
+        r'\2', txt)
+    # Strip LSM_HOOK_INIT replacement (hooks.c setprocattr)
     txt = re.sub(
         r'#ifdef CONFIG_KSU_SUSFS\n(\t[^\n]+my_setprocattr[^\n]+\n)#else\n(\t[^\n]+selinux_setprocattr[^\n]+\n)#endif[^\n]*\n',
         r'\2', txt)
     if txt != orig:
         open(path, 'w').write(txt)
-        print("[OK] " + path + ": fake_state blocks stripped")
+        print("[OK] " + path + ": SUSFS fake_state/fake_status blocks stripped")
     else:
-        print("[SKIP] " + path + ": no fake_state blocks found")
+        print("[SKIP] " + path + ": no target blocks found")
 PYEOF
   echo "[OK] _fix_susfs_fake_state_ksun done"
 }
