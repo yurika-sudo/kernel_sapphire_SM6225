@@ -1,0 +1,35 @@
+diff --git a/fs/dcache.c b/fs/dcache.c
+index 06db7c5f3..1299dd880 100644
+--- a/fs/dcache.c
++++ b/fs/dcache.c
+@@ -2331,7 +2331,17 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
+ 		if (d_unhashed(dentry))
+ 			continue;
+ 
+-		if (unlikely(parent->d_flags & DCACHE_OP_COMPARE)) {
++		/*
++		 * Fast path: check 64-bit hash_len before checking compare flags.
++		 * Vast majority of dentries use standard comparison; checking
++		 * hash_len early avoids the flag branch and d_op lookup for mismatches.
++		 */
++		if (likely(!(parent->d_flags & DCACHE_OP_COMPARE))) {
++			if (dentry->d_name.hash_len != hashlen)
++				continue;
++			if (dentry_cmp(dentry, str, hashlen_len(hashlen)) != 0)
++				continue;
++		} else {
+ 			int tlen;
+ 			const char *tname;
+ 			if (dentry->d_name.hash != hashlen_hash(hashlen))
+@@ -2346,11 +2356,6 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
+ 			if (parent->d_op->d_compare(dentry,
+ 						    tlen, tname, name) != 0)
+ 				continue;
+-		} else {
+-			if (dentry->d_name.hash_len != hashlen)
+-				continue;
+-			if (dentry_cmp(dentry, str, hashlen_len(hashlen)) != 0)
+-				continue;
+ 		}
+ 		*seqp = seq;
+ 		return dentry;

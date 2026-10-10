@@ -1,0 +1,22 @@
+diff --git a/kernel/locking/rwsem.c b/kernel/locking/rwsem.c
+index 97ebacb05..7e6e0b624 100644
+--- a/kernel/locking/rwsem.c
++++ b/kernel/locking/rwsem.c
+@@ -780,6 +780,17 @@ rwsem_spin_on_owner(struct rw_semaphore *sem)
+ 			break;
+ 		}
+ 
++		/*
++		 * Bound optimistic spinning to prevent starvation on
++		 * asymmetric big.LITTLE systems. Indefinite spinning while
++		 * the owner runs on a slower LITTLE core burns power and
++		 * causes thermal throttling; yield to slowpath instead.
++		 */
++		if (++cnt > 1024) {
++			state = OWNER_NONSPINNABLE;
++			break;
++		}
++
+ 		cpu_relax();
+ 	}
+ 	rcu_read_unlock();

@@ -1,0 +1,27 @@
+diff --git a/fs/pipe.c b/fs/pipe.c
+index 6c76ca69d..05376b561 100644
+--- a/fs/pipe.c
++++ b/fs/pipe.c
+@@ -665,10 +665,18 @@ pipe_poll(struct file *filp, poll_table *wait)
+ 	 * But because this is racy, the code has to add the
+ 	 * entry to the poll table _first_ ..
+ 	 */
+-	if (filp->f_mode & FMODE_READ)
+-		poll_wait(filp, &pipe->rd_wait, wait);
+-	if (filp->f_mode & FMODE_WRITE)
+-		poll_wait(filp, &pipe->wr_wait, wait);
++	/*
++	 * If the caller does not wait (e.g. non-blocking epoll iterations),
++	 * bypass poll_wait() registration on rd_wait and wr_wait queues.
++	 * Eliminates redundant waitqueue spinlock overhead on high-frequency
++	 * Android IPC paths (vsync, input dispatch, logcat).
++	 */
++	if (!poll_does_not_wait(wait)) {
++		if (filp->f_mode & FMODE_READ)
++			poll_wait(filp, &pipe->rd_wait, wait);
++		if (filp->f_mode & FMODE_WRITE)
++			poll_wait(filp, &pipe->wr_wait, wait);
++	}
+ 
+ 	/*
+ 	 * .. and only then can you do the racy tests. That way,
