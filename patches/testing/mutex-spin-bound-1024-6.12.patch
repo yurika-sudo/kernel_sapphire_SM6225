@@ -1,0 +1,22 @@
+diff --git a/kernel/locking/mutex.c b/kernel/locking/mutex.c
+index 00ba9bc9a..c31c321c2 100644
+--- a/kernel/locking/mutex.c
++++ b/kernel/locking/mutex.c
+@@ -388,6 +388,17 @@ bool mutex_spin_on_owner(struct mutex *lock, struct task_struct *owner,
+ 			break;
+ 		}
+ 
++		/*
++		 * Bound optimistic spinning to prevent starvation on
++		 * asymmetric big.LITTLE systems. Indefinite spinning while
++		 * the owner runs on a slower LITTLE core burns power and
++		 * causes thermal throttling; yield to slowpath instead.
++		 */
++		if (++cnt > 1024) {
++			ret = false;
++			break;
++		}
++
+ 		cpu_relax();
+ 	}
+ 	rcu_read_unlock();

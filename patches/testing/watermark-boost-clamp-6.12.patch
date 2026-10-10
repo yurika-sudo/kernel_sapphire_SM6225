@@ -1,0 +1,18 @@
+diff --git a/mm/page_alloc.c b/mm/page_alloc.c
+index a5fb0cedb..6143eb43c 100644
+--- a/mm/page_alloc.c
++++ b/mm/page_alloc.c
+@@ -2822,6 +2822,13 @@ static inline bool boost_watermark(struct zone *zone)
+ 
+ 	max_boost = max(pageblock_nr_pages, max_boost);
+ 
++	/*
++	 * Clamp watermark boost ceiling to prevent runaway reclaim thrashing.
++	 * Excessive boosts during burst allocations (camera, gaming) spin
++	 * kswapd unnecessarily and cause direct-reclaim UI stutter.
++	 */
++	max_boost = min(max_boost, zone_managed_pages(zone) >> 3);
++
+ 	zone->watermark_boost = min(zone->watermark_boost + pageblock_nr_pages,
+ 		max_boost);
+ 
