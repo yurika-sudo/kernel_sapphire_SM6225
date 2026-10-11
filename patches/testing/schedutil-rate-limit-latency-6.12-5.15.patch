@@ -1,0 +1,58 @@
+diff --git a/kernel/sched/cpufreq_schedutil.c b/kernel/sched/cpufreq_schedutil.c
+index b8826f5dd..cf878a60c 100644
+--- a/kernel/sched/cpufreq_schedutil.c
++++ b/kernel/sched/cpufreq_schedutil.c
+@@ -359,10 +359,33 @@ static inline bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu) { return false; }
+  * Make sugov_should_update_freq() ignore the rate limit when DL
+  * has increased the utilization.
+  */
+-static inline void ignore_dl_rate_limit(struct sugov_cpu *sg_cpu)
++/*
++ * BACKPORT (Linux 6.12):
++ * Make sugov_should_update_freq() ignore the rate limit when DL/RT,
++ * iowait boost, or latency-sensitive/boosted tasks request higher
++ * CPU capacity. Prevents frame drops and UI jitter by allowing
++ * immediate frequency ramp-up.
++ */
++static inline void ignore_rate_limit_latency_sensitive(struct sugov_cpu *sg_cpu,
++						      unsigned int flags)
+ {
+-	if (cpu_bw_dl(cpu_rq(sg_cpu->cpu)) > sg_cpu->bw_dl)
++	struct rq *rq = cpu_rq(sg_cpu->cpu);
++
++	if (cpu_bw_dl(rq) > sg_cpu->bw_dl) {
++		WRITE_ONCE(sg_cpu->sg_policy->limits_changed, true);
++		return;
++	}
++
++	if ((flags & SCHED_CPUFREQ_IOWAIT) || (rq->rt.rt_nr_running > 0)) {
+ 		WRITE_ONCE(sg_cpu->sg_policy->limits_changed, true);
++		return;
++	}
++
++	if (uclamp_is_used() && rq->curr &&
++	    (uclamp_latency_sensitive(rq->curr) || uclamp_boosted(rq->curr))) {
++		WRITE_ONCE(sg_cpu->sg_policy->limits_changed, true);
++		return;
++	}
+ }
+ 
+ static inline bool sugov_update_single_common(struct sugov_cpu *sg_cpu,
+@@ -371,7 +394,7 @@ static inline bool sugov_update_single_common(struct sugov_cpu *sg_cpu,
+ 	sugov_iowait_boost(sg_cpu, time, flags);
+ 	sg_cpu->last_update = time;
+ 
+-	ignore_dl_rate_limit(sg_cpu);
++	ignore_rate_limit_latency_sensitive(sg_cpu, flags);
+ 
+ 	if (!sugov_should_update_freq(sg_cpu->sg_policy, time))
+ 		return false;
+@@ -491,7 +514,7 @@ sugov_update_shared(struct update_util_data *hook, u64 time, unsigned int flags)
+ 	sugov_iowait_boost(sg_cpu, time, flags);
+ 	sg_cpu->last_update = time;
+ 
+-	ignore_dl_rate_limit(sg_cpu);
++	ignore_rate_limit_latency_sensitive(sg_cpu, flags);
+ 
+ 	if (sugov_should_update_freq(sg_policy, time)) {
+ 		next_f = sugov_next_freq_shared(sg_cpu, time);
