@@ -27,6 +27,56 @@ _link_ksu_driver() {
     echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
 }
 
+_fix_susfs_fake_state() {
+  # Replace fake_state API (simonpunk) with backup_sepolicy API (pershoot KSU-Next)
+  for f in security/selinux/hooks.c security/selinux/selinuxfs.c; do
+    [ -f "$f" ] || continue
+    python3 - "$f" <<'EOF'
+import sys, re
+path = sys.argv[1]
+src = open(path).read()
+
+if 'extern struct selinux_policy *backup_sepolicy;' not in src:
+    src = src.replace(
+        '#ifdef CONFIG_KSU_SUSFS\nextern struct selinux_state fake_state;\nextern bool ksu_selinux_hide_running',
+        '#ifdef CONFIG_KSU_SUSFS\nextern struct selinux_policy *backup_sepolicy;\nextern bool ksu_selinux_hide_running'
+    )
+    src = src.replace(
+        '#ifdef CONFIG_KSU_SUSFS\nextern struct selinux_state fake_state;\nextern struct page *fake_status',
+        '#ifdef CONFIG_KSU_SUSFS\nextern struct selinux_policy *backup_sepolicy;\nextern struct page *fake_status'
+    )
+
+src = src.replace(
+    'security_context_to_sid(&fake_state, value, size,\n\t\t\t\t\t&sid, GFP_KERNEL)',
+    'security_context_to_sid_with_policy(backup_sepolicy, value, size,\n\t\t\t\t\t&sid, SECSID_NULL, GFP_KERNEL, NULL, NULL)'
+)
+src = src.replace(
+    'security_context_to_sid(&fake_state, buf, size, &sid, GFP_KERNEL)',
+    'security_context_to_sid_with_policy(backup_sepolicy, buf, size, &sid, SECSID_NULL, GFP_KERNEL, NULL, NULL)'
+)
+src = src.replace(
+    'security_sid_to_context(&fake_state, sid, &canon, &len)',
+    'security_sid_to_context_with_policy(backup_sepolicy, sid, &canon, &len)'
+)
+src = src.replace(
+    'security_context_str_to_sid(&fake_state, scon, &ssid, GFP_KERNEL)',
+    'security_context_to_sid_with_policy(backup_sepolicy, scon, strlen(scon), &ssid, SECSID_NULL, GFP_KERNEL, NULL, NULL)'
+)
+src = src.replace(
+    'security_context_str_to_sid(&fake_state, tcon, &tsid, GFP_KERNEL)',
+    'security_context_to_sid_with_policy(backup_sepolicy, tcon, strlen(tcon), &tsid, SECSID_NULL, GFP_KERNEL, NULL, NULL)'
+)
+src = src.replace(
+    'security_compute_av_user(&fake_state, ssid, tsid, tclass, &avd)',
+    'security_compute_av_user_with_policy(backup_sepolicy, ssid, tsid, tclass, &avd)'
+)
+
+open(path, 'w').write(src)
+print(f'[OK] fake_state -> backup_sepolicy in {path}')
+EOF
+  done
+}
+
 _inject_susfs_init() {
   local KSU_C="$1"
   [ ! -f "$KSU_C" ] && return 0
@@ -193,6 +243,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
+  _fix_susfs_fake_state
 
   _inject_susfs_init "KernelSU-Next/kernel/ksu.c"
   _link_ksu_driver "KernelSU-Next"
@@ -239,6 +290,7 @@ elif [ "$KSU_TYPE" = "rsku" ]; then
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
+  _fix_susfs_fake_state
 
   _inject_susfs_init "ReSukiSU/kernel/ksu.c"
   # ReSukiSU keeps its kernel integration under ReSukiSU/kernel/ (not root),
