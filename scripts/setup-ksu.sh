@@ -28,34 +28,40 @@ _link_ksu_driver() {
 }
 
 _fix_susfs_fake_state() {
-  # Replace fake_state API (simonpunk) with backup_sepolicy API (pershoot KSU-Next)
+  # Replace fake_state with selinux_state (pershoot KSU-Next dropped fake_state)
   for f in security/selinux/hooks.c security/selinux/selinuxfs.c; do
     [ -f "$f" ] || continue
     python3 - "$f" <<'EOF'
-import sys
-replacements = [
-    ('extern struct selinux_state fake_state;',
-     'extern struct selinux_policy *backup_sepolicy;\nextern int security_context_to_sid_with_policy(struct selinux_policy *policy, const char *scontext, u32 scontext_len, u32 *sid, u32 def_sid, gfp_t gfp_flags, u32 *orig_sid_p, int *orig_rc_p);\nextern int security_sid_to_context_with_policy(struct selinux_policy *policy, u32 sid, char **scontext, u32 *scontext_len);\nextern void security_compute_av_user_with_policy(struct selinux_policy *policy, u32 ssid, u32 tsid, u16 tclass, struct av_decision *avd);'),
-    ('error = security_context_to_sid(&fake_state, value, size,\n\t\t\t\t\t\t&sid, GFP_KERNEL);',
-     'error = security_context_to_sid_with_policy(backup_sepolicy, value, size,\n\t\t\t\t\t\t&sid, SECSID_NULL, GFP_KERNEL, NULL, NULL);'),
-    ('security_context_to_sid(&fake_state, buf, size, &sid, GFP_KERNEL)',
-     'security_context_to_sid_with_policy(backup_sepolicy, buf, size, &sid, SECSID_NULL, GFP_KERNEL, NULL, NULL)'),
-    ('security_sid_to_context(&fake_state, sid, &canon, &len)',
-     'security_sid_to_context_with_policy(backup_sepolicy, sid, &canon, &len)'),
-    ('security_context_str_to_sid(&fake_state, scon, &ssid, GFP_KERNEL)',
-     'security_context_to_sid_with_policy(backup_sepolicy, scon, strlen(scon), &ssid, SECSID_NULL, GFP_KERNEL, NULL, NULL)'),
-    ('security_context_str_to_sid(&fake_state, tcon, &tsid, GFP_KERNEL)',
-     'security_context_to_sid_with_policy(backup_sepolicy, tcon, strlen(tcon), &tsid, SECSID_NULL, GFP_KERNEL, NULL, NULL)'),
-    ('security_compute_av_user(&fake_state, ssid, tsid, tclass, &avd)',
-     'security_compute_av_user_with_policy(backup_sepolicy, ssid, tsid, tclass, &avd)'),
-]
+import sys, subprocess
 path = sys.argv[1]
 src = open(path).read()
+replacements = [
+    ('#ifdef CONFIG_KSU_SUSFS\nextern struct selinux_state fake_state;\nextern bool ksu_selinux_hide_running __read_mostly;\n#endif // #ifdef CONFIG_KSU_SUSFS',
+     '#ifdef CONFIG_KSU_SUSFS\nextern bool ksu_selinux_hide_running __read_mostly;\n#endif // #ifdef CONFIG_KSU_SUSFS'),
+    ('int fake_error = security_context_to_sid(&fake_state, value, size, &tmp_sid, GFP_KERNEL);',
+     'int fake_error = security_context_to_sid(&selinux_state, value, size, &tmp_sid, GFP_KERNEL);'),
+    ('extern struct selinux_state fake_state;\n',
+     ''),
+    ('security_context_to_sid(&fake_state, buf, size, &sid, GFP_KERNEL)',
+     'security_context_to_sid(&selinux_state, buf, size, &sid, GFP_KERNEL)'),
+    ('security_sid_to_context(&fake_state, sid, &canon, &len)',
+     'security_sid_to_context(&selinux_state, sid, &canon, &len)'),
+    ('security_context_str_to_sid(&fake_state, scon, &ssid, GFP_KERNEL)',
+     'security_context_str_to_sid(&selinux_state, scon, &ssid, GFP_KERNEL)'),
+    ('security_context_str_to_sid(&fake_state, tcon, &tsid, GFP_KERNEL)',
+     'security_context_str_to_sid(&selinux_state, tcon, &tsid, GFP_KERNEL)'),
+    ('security_compute_av_user(&fake_state, ssid, tsid, tclass, &avd)',
+     'security_compute_av_user(&selinux_state, ssid, tsid, tclass, &avd)'),
+]
 for old, new in replacements:
     if old in src:
         src = src.replace(old, new)
 open(path, 'w').write(src)
-print(f'[OK] fake_state -> backup_sepolicy in {path}')
+result = subprocess.run(['grep', '-n', 'fake_state', path], capture_output=True, text=True)
+if result.stdout:
+    print(f'[FAIL] fake_state still in {path}')
+else:
+    print(f'[OK] fake_state -> selinux_state in {path}')
 EOF
   done
 }
