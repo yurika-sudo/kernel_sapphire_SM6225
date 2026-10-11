@@ -17,18 +17,10 @@ index b0ff03cfe..7bc58273b 100644
  
  	return dev->poll_limit_ns;
 diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
-index b747c5495..7864a9305 100644
+index b747c5495..7a117941b 100644
 --- a/net/ipv4/tcp_ipv4.c
 +++ b/net/ipv4/tcp_ipv4.c
-@@ -3146,6 +3146,7 @@ static void __net_exit tcp_sk_exit(struct net *net)
- static int __net_init tcp_sk_init(struct net *net)
- {
- 	int res, cpu, cnt;
-+	struct tcp_plb_net_context *ctx, *init_ctx;
- 
- 	net->ipv4.tcp_sk = alloc_percpu(struct sock *);
- 	if (!net->ipv4.tcp_sk)
-@@ -3216,8 +3217,8 @@ static int __net_init tcp_sk_init(struct net *net)
+@@ -3216,8 +3216,8 @@ static int __net_init tcp_sk_init(struct net *net)
  	 * which are too large can cause TCP streams to be bursty.
  	 */
  	net->ipv4.sysctl_tcp_tso_win_divisor = 3;
@@ -39,22 +31,3 @@ index b747c5495..7864a9305 100644
  	/* rfc5961 challenge ack rate limiting */
  	net->ipv4.sysctl_tcp_challenge_ack_limit = 1000;
  	net->ipv4.sysctl_tcp_min_tso_segs = 2;
-@@ -3241,6 +3242,18 @@ static int __net_init tcp_sk_init(struct net *net)
- 	net->ipv4.sysctl_tcp_fastopen_blackhole_timeout = 0;
- 	atomic_set(&net->ipv4.tfo_active_disable_times, 0);
- 
-+	ctx = tcp_get_plb_ctx(net);
-+	init_ctx = tcp_get_plb_ctx(&init_net);
-+
-+	if (ctx && init_ctx && !net_eq(net, &init_net))
-+	{
-+		ctx->params.sysctl_tcp_plb_enabled = init_ctx->params.sysctl_tcp_plb_enabled; 
-+		ctx->params.sysctl_tcp_plb_idle_rehash_rounds = init_ctx->params.sysctl_tcp_plb_idle_rehash_rounds; 
-+		ctx->params.sysctl_tcp_plb_rehash_rounds = init_ctx->params.sysctl_tcp_plb_rehash_rounds; 
-+		ctx->params.sysctl_tcp_plb_suspend_rto_sec = init_ctx->params.sysctl_tcp_plb_suspend_rto_sec; 
-+		ctx->params.sysctl_tcp_plb_cong_thresh = init_ctx->params.sysctl_tcp_plb_cong_thresh; 
-+	}
-+
- 	/* Reno is always built in */
- 	if (!net_eq(net, &init_net) &&
- 	    bpf_try_module_get(init_net.ipv4.tcp_congestion_control,
