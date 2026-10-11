@@ -35,7 +35,7 @@ _fix_susfs_fake_state() {
 import sys
 replacements = [
     ('extern struct selinux_state fake_state;',
-     'extern struct selinux_policy *backup_sepolicy;'),
+     'extern struct selinux_policy *backup_sepolicy;\nextern int security_context_to_sid_with_policy(struct selinux_policy *policy, const char *scontext, u32 scontext_len, u32 *sid, u32 def_sid, gfp_t gfp_flags, u32 *orig_sid_p, int *orig_rc_p);\nextern int security_sid_to_context_with_policy(struct selinux_policy *policy, u32 sid, char **scontext, u32 *scontext_len);\nextern void security_compute_av_user_with_policy(struct selinux_policy *policy, u32 ssid, u32 tsid, u16 tclass, struct av_decision *avd);'),
     ('error = security_context_to_sid(&fake_state, value, size,\n\t\t\t\t\t\t&sid, GFP_KERNEL);',
      'error = security_context_to_sid_with_policy(backup_sepolicy, value, size,\n\t\t\t\t\t\t&sid, SECSID_NULL, GFP_KERNEL, NULL, NULL);'),
     ('security_context_to_sid(&fake_state, buf, size, &sid, GFP_KERNEL)',
