@@ -18,6 +18,7 @@ BASE="https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/ma
 
 apply_patch "$BASE/ntsync/ntsync_base.patch"                       "ntsync_base"
 apply_patch "$BASE/ntsync/ntsync_compat_android13-5.15.patch"      "ntsync_compat_android13-5.15"
+python3 "$WORK_DIR/scripts/ntsync-compat.py" "$KERNEL_SRC"
 apply_patch "$BASE/IPv6_NAT_FIX.patch"                             "IPv6_NAT_FIX"
 apply_patch "$BASE/add_limitation_scaling_min_freq.patch"          "add_limitation_scaling_min_freq"
 apply_patch "$BASE/add_timeout_wakelocks_globally.patch"           "add_timeout_wakelocks_globally"
