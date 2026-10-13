@@ -229,7 +229,18 @@ _pin_lvc_after() {
 _pin_ksun_lvc() {
   # KernelSU-Next takes the 6.12 LSM static_call path under the release spoof.
   _pin_lvc_after "KernelSU-Next/kernel/hook/lsm_hook.h" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "KernelSU-Next/kernel/hook/lsm_hook.c" '#include "klog.h" // IWYU pragma: keep'
+  _pin_lvc_after "KernelSU-Next/kernel/hook/lsm_hook.c" '#include "klog.h" // IWYU pragma: keep' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/infra/file_wrapper.c" '#include "infra/file_wrapper.h"' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/extras.c" '#include "arch.h"' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/feature/selinux_hide.c" '#include "hook/lsm_hook.h"' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/infra/seccomp_cache.c" '#include "infra/seccomp_cache.h"' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/infra/symbol_resolver.c" '#include "infra/symbol_resolver.h"' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/manager/apk_sign.c" '#include <linux/version.h>' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/manager/pkg_observer.c" '#include "manager/throne_tracker.h"' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/manager/throne_tracker.c" '#include "manager/throne_tracker.h"' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/policy/app_profile.c" '#include "hook/tp_marker.h"' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/selinux/rules.c" '#include "xfrm.h"' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/selinux/sepolicy.c" '#include "ss/symtab.h"' || return 1
 }
 
 if [ "$KSU_TYPE" = "ksun" ]; then
