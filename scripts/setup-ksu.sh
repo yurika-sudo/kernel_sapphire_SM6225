@@ -213,6 +213,25 @@ _checkout_pin() {
   }
 }
 
+_pin_lvc_after() {
+  local F="$1" ANCHOR="$2"
+  [ -f "$F" ] || { echo "[FAIL] _pin_lvc_after: $F not found"; return 1; }
+  grep -q "sapphire: pin LINUX_VERSION_CODE" "$F" && return 0
+  if [ "$(grep -cFx -- "$ANCHOR" "$F")" != 1 ]; then
+    echo "[FAIL] _pin_lvc_after: expected exactly 1 '$ANCHOR' in $F"
+    return 1
+  fi
+  awk -v a="$ANCHOR" '{ print } $0 == a { print "/* sapphire: pin LINUX_VERSION_CODE to real 5.15.220 (spoofed to 6.12) */"; print "#undef LINUX_VERSION_CODE"; print "#define LINUX_VERSION_CODE KERNEL_VERSION(5, 15, 220)" }' "$F" > "$F.sapphire.tmp" \
+    && cat "$F.sapphire.tmp" > "$F" && rm -f "$F.sapphire.tmp"
+  echo "[OK] $F: LINUX_VERSION_CODE pinned to 5.15.220"
+}
+
+_pin_ksun_lvc() {
+  # KernelSU-Next takes the 6.12 LSM static_call path under the release spoof.
+  _pin_lvc_after "KernelSU-Next/kernel/hook/lsm_hook.h" '#include <linux/version.h>' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/hook/lsm_hook.c" '#include "klog.h" // IWYU pragma: keep'
+}
+
 if [ "$KSU_TYPE" = "ksun" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu ./KernelSU-Next
   curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" \
@@ -247,6 +266,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
   _pin_susfs_lvc
+  _pin_ksun_lvc
   _fix_susfs_fake_state
 
   _inject_susfs_init "KernelSU-Next/kernel/ksu.c"
