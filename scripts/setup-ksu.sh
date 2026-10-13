@@ -80,6 +80,20 @@ _inject_susfs_init() {
 }
 
 # KernelSU-Next
+_pin_susfs_lvc() {
+  # kernel-release-spoof sets VERSION=6 PATCHLEVEL=12, so susfs.c took 6.x branches.
+  # Pin LINUX_VERSION_CODE after the last include, same pattern as nomount.h.
+  local F="fs/susfs.c"
+  [ -f "$F" ] || return 0
+  grep -q "sapphire: pin LINUX_VERSION_CODE" "$F" && return 0
+  if [ "$(grep -c '^#include "mount.h"$' "$F")" != 1 ]; then
+    echo "[FAIL] _pin_susfs_lvc: expected exactly 1 mount.h include in $F"
+    return 1
+  fi
+  sed -i '/^#include "mount.h"$/a /* sapphire: pin LINUX_VERSION_CODE to real 5.15.220 (spoofed to 6.12) */\n#undef LINUX_VERSION_CODE\n#define LINUX_VERSION_CODE KERNEL_VERSION(5, 15, 220)' "$F"
+  echo "[OK] susfs.c: LINUX_VERSION_CODE pinned to 5.15.220"
+}
+
 _patch_susfs_def_h() {
   # Latest susfs_def.h calls current_uid() without <linux/cred.h>.
   # Breaks compile mid-file — everything declared after call site is unseen.
@@ -232,6 +246,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
+  _pin_susfs_lvc
   _fix_susfs_fake_state
 
   _inject_susfs_init "KernelSU-Next/kernel/ksu.c"
@@ -279,6 +294,7 @@ elif [ "$KSU_TYPE" = "rsku" ]; then
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
+  _pin_susfs_lvc
   _fix_susfs_fake_state
 
   _inject_susfs_init "ReSukiSU/kernel/ksu.c"
