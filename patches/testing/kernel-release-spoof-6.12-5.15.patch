@@ -1,0 +1,140 @@
+diff --git a/Makefile b/Makefile
+index dff38ec7c..6c5c7d1d7 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,7 +1,7 @@
+ # SPDX-License-Identifier: GPL-2.0
+-VERSION = 5
+-PATCHLEVEL = 15
+-SUBLEVEL = 220
++VERSION = 6
++PATCHLEVEL = 12
++SUBLEVEL = 25
+ EXTRAVERSION =
+ NAME = Trick or Treat
+ 
+diff --git a/kernel/sys.c b/kernel/sys.c
+index 3c670ee13..2770458f1 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -1291,6 +1291,24 @@ static int override_release(char __user *release, size_t len)
+ 	return ret;
+ }
+ 
++static inline bool should_fake_uname(void)
++{
++	const char *comm = current->comm;
++
++	if (strstr(comm, "bpfloader") ||
++	    strstr(comm, "netbpfload") ||
++	    strstr(comm, "netd") ||
++	    strstr(comm, "init") ||
++	    strstr(comm, "vintf") ||
++	    strstr(comm, "system_server") ||
++	    strstr(comm, "modprobe") ||
++	    strstr(comm, "ueventd") ||
++	    strstr(comm, "clatd"))
++		return true;
++
++	return false;
++}
++
+ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
+ {
+ 	struct new_utsname tmp;
+@@ -1298,6 +1316,19 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
+ 	down_read(&uts_sem);
+ 	memcpy(&tmp, utsname(), sizeof(tmp));
+ 	up_read(&uts_sem);
++
++	if (should_fake_uname()) {
++		char fake_release[sizeof(tmp.release)];
++		const char *dash = strchr(tmp.release, '-');
++
++		if (dash)
++			snprintf(fake_release, sizeof(fake_release), "5.15.220%s", dash);
++		else
++			snprintf(fake_release, sizeof(fake_release), "5.15.220");
++
++		strlcpy(tmp.release, fake_release, sizeof(tmp.release));
++	}
++
+ 	if (copy_to_user(name, &tmp, sizeof(tmp)))
+ 		return -EFAULT;
+ 
+@@ -1322,6 +1353,19 @@ SYSCALL_DEFINE1(uname, struct old_utsname __user *, name)
+ 	down_read(&uts_sem);
+ 	memcpy(&tmp, utsname(), sizeof(tmp));
+ 	up_read(&uts_sem);
++
++	if (should_fake_uname()) {
++		char fake_release[sizeof(tmp.release)];
++		const char *dash = strchr(tmp.release, '-');
++
++		if (dash)
++			snprintf(fake_release, sizeof(fake_release), "5.15.220%s", dash);
++		else
++			snprintf(fake_release, sizeof(fake_release), "5.15.220");
++
++		strlcpy(tmp.release, fake_release, sizeof(tmp.release));
++	}
++
+ 	if (copy_to_user(name, &tmp, sizeof(tmp)))
+ 		return -EFAULT;
+ 
+@@ -1348,6 +1392,19 @@ SYSCALL_DEFINE1(olduname, struct oldold_utsname __user *, name)
+ 	memcpy(&tmp.version, &utsname()->version, __OLD_UTS_LEN);
+ 	memcpy(&tmp.machine, &utsname()->machine, __OLD_UTS_LEN);
+ 	up_read(&uts_sem);
++
++	if (should_fake_uname()) {
++		char fake_release[__OLD_UTS_LEN + 1];
++		const char *dash = strchr(tmp.release, '-');
++
++		if (dash)
++			snprintf(fake_release, sizeof(fake_release), "5.15.220%s", dash);
++		else
++			snprintf(fake_release, sizeof(fake_release), "5.15.220");
++
++		memcpy(tmp.release, fake_release, __OLD_UTS_LEN);
++	}
++
+ 	if (copy_to_user(name, &tmp, sizeof(tmp)))
+ 		return -EFAULT;
+ 
+diff --git a/kernel/utsname_sysctl.c b/kernel/utsname_sysctl.c
+index 4ca61d498..688ac26f1 100644
+--- a/kernel/utsname_sysctl.c
++++ b/kernel/utsname_sysctl.c
+@@ -48,6 +48,31 @@ static int proc_do_uts_string(struct ctl_table *table, int write,
+ 	down_read(&uts_sem);
+ 	memcpy(tmp_data, get_uts(table), sizeof(tmp_data));
+ 	up_read(&uts_sem);
++
++	if (!write && table->procname && !strcmp(table->procname, "osrelease")) {
++		const char *comm = current->comm;
++
++		if (strstr(comm, "bpfloader") ||
++		    strstr(comm, "netbpfload") ||
++		    strstr(comm, "netd") ||
++		    strstr(comm, "init") ||
++		    strstr(comm, "vintf") ||
++		    strstr(comm, "system_server") ||
++		    strstr(comm, "modprobe") ||
++		    strstr(comm, "ueventd") ||
++		    strstr(comm, "clatd")) {
++			char fake[__NEW_UTS_LEN + 1];
++			const char *dash = strchr(tmp_data, '-');
++
++			if (dash)
++				snprintf(fake, sizeof(fake), "5.15.220%s", dash);
++			else
++				snprintf(fake, sizeof(fake), "5.15.220");
++
++			strlcpy(tmp_data, fake, sizeof(tmp_data));
++		}
++	}
++
+ 	r = proc_dostring(&uts_table, write, buffer, lenp, ppos);
+ 
+ 	if (write) {
