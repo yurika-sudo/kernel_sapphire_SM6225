@@ -1,5 +1,5 @@
 diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
-index a83cce15d..ccf9c1568 100644
+index a83cce15d..719140e7d 100644
 --- a/kernel/sched/fair.c
 +++ b/kernel/sched/fair.c
 @@ -7051,6 +7051,19 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu, int sy
@@ -12,7 +12,7 @@ index a83cce15d..ccf9c1568 100644
 +	 * waking task's capacity requirement, bypass the expensive multi-domain
 +	 * compute_energy() traversal and settle on prev_cpu immediately.
 +	 */
-+	if (cpu_rq(prev_cpu)->nr_running <= 1 &&
++	if ((available_idle_cpu(prev_cpu) || cpu_rq(prev_cpu)->nr_running == 0) &&
 +	    cpumask_test_cpu(prev_cpu, p->cpus_ptr) &&
 +	    task_fits_cpu(p, prev_cpu)) {
 +		rcu_read_unlock();
