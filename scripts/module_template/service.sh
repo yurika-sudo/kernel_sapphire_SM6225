@@ -15,28 +15,21 @@ if [ -f "${MODDIR}/module/ath9k_htc.ko" ]; then
   insmod ${MODDIR}/module/ath9k_htc.ko 2>/dev/null
 fi
 # Reflex cpufreq governor — SM6225 has 2 fixed clusters (little: policy0, big: policy4)
-echo vorpal > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
-echo vorpal > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null
+echo reflex > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
+echo reflex > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null
 # PowerSuspend + Big core hotplug — brightness-triggered via inotifywait
 # close_write fires once per write cycle (after each dimming step)
 # State guard prevents redundant writes on multi-step brightness transitions
 BRIGHTNESS_NODE="/sys/class/backlight/panel0-backlight/brightness"
 POWERSUSPEND_STATE="/sys/kernel/power_suspend/power_suspend_state"
 POWERSUSPEND_MODE="/sys/kernel/power_suspend/power_suspend_mode"
-BIG_CORES="4 5 6 7"
 INOTIFY="${MODDIR}/tools/inotifywait"
 
 _screen_off() {
   echo 1 > "$POWERSUSPEND_STATE" 2>/dev/null
-  for c in $BIG_CORES; do
-    echo 0 > /sys/devices/system/cpu/cpu${c}/online 2>/dev/null
-  done
 }
 
 _screen_on() {
-  for c in $BIG_CORES; do
-    echo 1 > /sys/devices/system/cpu/cpu${c}/online 2>/dev/null
-  done
   echo 0 > "$POWERSUSPEND_STATE" 2>/dev/null
 }
 

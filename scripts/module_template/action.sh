@@ -14,14 +14,30 @@ fi
 echo "cpuidle: $(cat /sys/devices/system/cpu/cpuidle/current_governor 2>/dev/null || echo unknown)"
 echo "I/O scheduler: $(cat $(find /sys/block/sd*/queue/scheduler 2>/dev/null | head -1) 2>/dev/null | grep -oE '\[[^]]+\]' | tr -d '[]' || echo unknown)"
 echo "cpufreq policy0: $(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null || echo unknown)"
-GOV4=$(cat /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null || echo unknown)
-if [ "$GOV4" = "vorpal" ]; then
-  GM=$(cat /sys/devices/system/cpu/cpufreq/policy4/vorpal/gaming_mode 2>/dev/null)
-  [ "$GM" = "1" ] && GM_LABEL="gaming" || GM_LABEL="daily"
-  echo "cpufreq policy4: vorpal [$GM_LABEL]"
+echo "cpufreq policy4: $(cat /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null || echo unknown)"
+
+# -- Battery & storage health --
+FULL=$(cat /sys/class/power_supply/battery/charge_full 2>/dev/null)
+DESIGN=$(cat /sys/class/power_supply/battery/charge_full_design 2>/dev/null)
+if [ -n "$FULL" ] && [ -n "$DESIGN" ] && [ "$DESIGN" -gt 0 ]; then
+  FULL_MAH=$((FULL/1000))
+  DESIGN_MAH=$((DESIGN/1000))
+  WEAR=$((DESIGN_MAH-FULL_MAH))
+  HEALTH=$((FULL*100/DESIGN))
+  HEALTH_DEC=$(((FULL*1000/DESIGN)%10))
+  echo "battery: ${FULL_MAH}/${DESIGN_MAH} mAh | wear: ${WEAR} mAh | health: ${HEALTH}.${HEALTH_DEC}%"
 else
-  echo "cpufreq policy4: $GOV4"
+  echo "battery: unavailable"
 fi
+UFS_BASE=/sys/devices/platform/soc/4804000.ufshc/health_descriptor
+LTA=$(cat ${UFS_BASE}/life_time_estimation_a 2>/dev/null)
+LTB=$(cat ${UFS_BASE}/life_time_estimation_b 2>/dev/null)
+if [ -n "$LTA" ] && [ -n "$LTB" ]; then
+  echo "ufs: slot A $LTA | slot B $LTB"
+else
+  echo "ufs health: unavailable"
+fi
+echo "mem_sleep: $(cat /sys/power/mem_sleep 2>/dev/null || echo unknown)"
 echo ""
 
 # -- Dongle status --
@@ -38,20 +54,6 @@ echo "wlan: $(lsmod | grep -q '^wlan' && echo 'loaded' || echo 'not loaded')"
 echo "wlan0/wlan0mon: $(ip link show 2>/dev/null | grep -qE 'wlan0|wlan0mon' && echo 'up/present' || echo 'not present')"
 echo ""
 
-# -- Vorpal gaming_mode toggle (no arg) --
-GOV4=$(cat /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null)
-if [ -z "$1" ] && [ "$GOV4" = "vorpal" ]; then
-  GM_PATH=/sys/devices/system/cpu/cpufreq/policy4/vorpal/gaming_mode
-  GM=$(cat "$GM_PATH" 2>/dev/null)
-  if [ "$GM" = "1" ]; then
-    echo 0 > "$GM_PATH"
-    echo ">> Vorpal: switched to daily mode"
-  else
-    echo 1 > "$GM_PATH"
-    echo ">> Vorpal: switched to gaming mode"
-  fi
-  exit 0
-fi
 
 # -- Smart toggle (no arg) --
 if [ -z "$1" ]; then
