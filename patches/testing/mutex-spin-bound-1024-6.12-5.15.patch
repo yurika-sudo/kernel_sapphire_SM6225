@@ -1,0 +1,23 @@
+diff --git a/kernel/locking/mutex.c b/kernel/locking/mutex.c
+index 00ba9bc9a..da02d5e37 100644
+--- a/kernel/locking/mutex.c
++++ b/kernel/locking/mutex.c
+@@ -389,6 +389,18 @@ bool mutex_spin_on_owner(struct mutex *lock, struct task_struct *owner,
+ 		}
+ 
+ 		cpu_relax();
++
++		/*
++		 * BACKPORT (Linux 6.12):
++		 * Bound optimistic spinning loop iterations. On asymmetric
++		 * big.LITTLE architectures, indefinite spinning while the owner
++		 * executes on a lower-frequency core burns excessive power and
++		 * causes thermal throttling. Yield to slowpath if threshold reached.
++		 */
++		if (++cnt > 1024) {
++			ret = false;
++			break;
++		}
+ 	}
+ 	rcu_read_unlock();
+ 
