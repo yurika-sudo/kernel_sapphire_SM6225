@@ -96,7 +96,7 @@ jobs:
         run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
           ln -sf ../Baseband-guard security/baseband-guard
-          printf '%s\n' 'ccflags-y += -DLINUX_VERSION_CODE=331228' >> security/baseband-guard/Makefile
+          python3 "$GITHUB_WORKSPACE/scripts/bbg-compat.py" security/baseband-guard
           grep -q "baseband-guard" security/Makefile || \
             echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' \
