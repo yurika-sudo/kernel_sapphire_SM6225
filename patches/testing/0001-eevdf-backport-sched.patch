@@ -101,7 +101,7 @@ index 90d974cd0..1e5b5d389 100644
  
  #ifdef CONFIG_FAIR_GROUP_SCHED
 diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
-index 6780abdf7..2aee90377 100644
+index ddb8605b6..645b1e3d2 100644
 --- a/kernel/sched/fair.c
 +++ b/kernel/sched/fair.c
 @@ -25,6 +25,7 @@
@@ -441,7 +441,7 @@ index 6780abdf7..2aee90377 100644
  
  }
  
-@@ -4422,58 +4622,76 @@ static inline bool entity_is_long_sleeper(struct sched_entity *se)
+@@ -4422,57 +4622,75 @@ static inline bool entity_is_long_sleeper(struct sched_entity *se)
  	return false;
  }
  
@@ -532,7 +532,6 @@ index 6780abdf7..2aee90377 100644
 -		se->vruntime = vruntime;
 -	else
 -		se->vruntime = max_vruntime(se->vruntime, vruntime);
--	trace_android_rvh_place_entity(cfs_rq, se, initial, &vruntime);
 +		load = cfs_rq->avg_load;
 +		if (curr && curr->on_rq)
 +			load += scale_load_down(curr->load.weight);
@@ -556,10 +555,9 @@ index 6780abdf7..2aee90377 100644
 +	 */
 +	se->deadline = se->vruntime + vslice;
 +
-+	trace_android_rvh_place_entity(cfs_rq, se, initial, vruntime);
+ 	trace_android_rvh_place_entity(cfs_rq, se, initial, &vruntime);
  }
  
- static void check_enqueue_throttle(struct cfs_rq *cfs_rq);
 @@ -4540,8 +4758,10 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
  	 * If we're the current task, we must renormalise before calling
  	 * update_curr().
@@ -1202,6 +1200,3 @@ index 509643bd0..57868ab9e 100644
  };
  
  static inline int rt_bandwidth_enabled(void)
--- 
-2.52.0
-
