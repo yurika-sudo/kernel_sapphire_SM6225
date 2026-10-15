@@ -1,192 +1,182 @@
 #!/usr/bin/env bash
-# resolve-versions.sh — read version info from artifacts + GitHub API
-# env: BUILD_TYPE, GITHUB_ENV (implicit)
+# resolve-versions.sh — turn the build's version records + upstream APIs into
+# the variables the release steps need (tag, name, manager links, notes data).
+#
+# env: BUILD_TYPE, GITHUB_REPOSITORY, GITHUB_TOKEN (optional — public repos read
+#      fine unauthenticated, and sending an empty token only gets a 401)
+#      (the build's *.txt version records are read back from ./artifacts)
+#
+# Everything degrades to the pinned value in sources/source-pins.json when a
+# lookup fails, so a flaky API never produces "unknown" in a release body.
 set -e
 
 : "${BUILD_TYPE:-stable}"
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PINS_FILE="${PINS_FILE:-$SCRIPT_DIR/../sources/source-pins.json}"
+_gh() {   # curl with the auth header only when a token is present
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    curl -sf --max-time 20 -H "Authorization: Bearer ${GITHUB_TOKEN}" "$@"
+  else
+    curl -sf --max-time 20 "$@"
+  fi
+}
+
+_pin() {
+  local V
+  V=$(jq -r ".${1} // empty" "$PINS_FILE" 2>/dev/null || true)
+  echo "${V:-${2:-unknown}}"
+}
+
+_read_rec() {  # <file> <fallback> — records come back inside the build artifact
+  local F V=""
+  F=$(find ./artifacts -name "$1" 2>/dev/null | head -1)
+  [ -n "$F" ] && [ -f "$F" ] && V=$(tr -d '[:space:]' < "$F")
+  echo "${V:-$2}"
+}
+
+# ---------------------------------------------------------------------------
+# Kernel + KSU/SUSFS versions
+# ---------------------------------------------------------------------------
 VERSION_FILE=$(find ./artifacts -name "kernel_version.txt" | head -1)
-KERNEL_VERSION=$([ -f "$VERSION_FILE" ] && cat "$VERSION_FILE" || echo "5.15.x")
+KERNEL_VERSION=$([ -f "$VERSION_FILE" ] && tr -d '[:space:]' < "$VERSION_FILE" || echo "5.15.x")
 
 UNAME_FILE=$(find ./artifacts -name "kernel_uname.txt" | head -1)
-KERNEL_UNAME=$([ -f "$UNAME_FILE" ] && cat "$UNAME_FILE" || echo "$KERNEL_VERSION")
+KERNEL_UNAME=$([ -f "$UNAME_FILE" ] && tr -d '[:space:]' < "$UNAME_FILE" || echo "$KERNEL_VERSION")
 
-# GKI and CLO pin different upstream sublevels (see sources/source-pins.json), so an
-# aio release (both sources bundled together) actually has two distinct kernel bases,
-# not one. KERNEL_VERSION/KERNEL_UNAME above collapse to whichever artifact `find`
-# happens to list first (alphabetically "clo-*" beats "gki-*"), which silently hid
-# the GKI side. Resolve each source independently here so downstream scripts can show
-# both. Artifact dirs are named "gki-<ksu>" / "clo-<ksu>" (see build-aio.yml matrix);
-# GKI-Compat artifacts are "gkicompat-<ksu>", which doesn't match "gki-*", so on a
-# compat build these two just come back empty and callers fall back to the single
-# KERNEL_VERSION/KERNEL_UNAME above — no separate compat-specific branch needed.
-GKI_VERSION_FILE=$(find ./artifacts -path "*gki-*" -name "kernel_version.txt" | head -1)
-CLO_VERSION_FILE=$(find ./artifacts -path "*clo-*" -name "kernel_version.txt" | head -1)
-GKI_UNAME_FILE=$(find ./artifacts -path "*gki-*" -name "kernel_uname.txt" | head -1)
-CLO_UNAME_FILE=$(find ./artifacts -path "*clo-*" -name "kernel_uname.txt" | head -1)
+KSUN_TAG=$(_read_rec ksun_tag.txt        "$(_pin ksun_tag unknown)")
+KSUN_SHA=$(_read_rec ksun_sha.txt        "")
+KSUN_BASE_SHA=$(_read_rec ksun_base_sha.txt "")
+KSUN_VERSION=$(_read_rec ksun_version.txt "")
+SUSFS_VERSION=$(_read_rec susfs_version.txt "$(_pin susfs_version unknown)")
+SUSFS_COMMIT=$(_read_rec susfs_commit.txt "")
 
-KERNEL_VERSION_GKI=$([ -f "$GKI_VERSION_FILE" ] && cat "$GKI_VERSION_FILE" || echo "")
-KERNEL_VERSION_CLO=$([ -f "$CLO_VERSION_FILE" ] && cat "$CLO_VERSION_FILE" || echo "")
-KERNEL_UNAME_GKI=$([ -f "$GKI_UNAME_FILE" ] && cat "$GKI_UNAME_FILE" || echo "$KERNEL_VERSION_GKI")
-KERNEL_UNAME_CLO=$([ -f "$CLO_UNAME_FILE" ] && cat "$CLO_UNAME_FILE" || echo "$KERNEL_VERSION_CLO")
+SUSFS_MODULE_VERSION=$(_pin susfs_module_tag "")
+DROIDSPACES_VERSION=$(_pin droidspaces_tag "")
 
-# NOTE: pipeline exit code is from last cmd (tr), so jq failures are swallowed
-# without pipefail. Use two-step fetch + explicit fallback instead.
-_susfs_raw=$(curl -sf "https://api.github.com/repos/sidex15/susfs4ksu-module/tags" 2>/dev/null \
-  | jq -r '.[0].name // empty' 2>/dev/null | tr -d ' \n')
-SUSFS_VERSION="${_susfs_raw:-v1.5.2+_R27}"
+# ---------------------------------------------------------------------------
+# Manager build that matches this kernel
+#
+# The kernel's KSU version code is 30000 + <commits on the base branch up to the
+# merge-base of the fork branch> (that is how KernelSU-Next's Kbuild derives it),
+# so the manager APK that matches is the CI build of that *merge-base commit*,
+# not the newest manager on dev. A newer manager against an older kernel is what
+# shows up on the device as "Failed to update App Profile".
+# Order: merge-base sha → driver sha → latest successful run.
+# ---------------------------------------------------------------------------
+KSUN_MANAGER_URL=""
+KSUN_MANAGER_ARTIFACT_ID=""
+KSUN_MANAGER_SPOOFED_ARTIFACT_ID=""
 
-_wf=$(find ./artifacts -name "ksun_tag.txt" | head -1)
-KSUN_TAG=$([ -f "$_wf" ] && cat "$_wf" | tr -d '[:space:]' || echo "unknown")
-_sf=$(find ./artifacts -name "rsku_tag.txt" | head -1)
-RSKU_TAG=$([ -f "$_sf" ] && cat "$_sf" | tr -d '[:space:]' || echo "unknown")
-# Version codes (for manager matching)
-_kv=$(find ./artifacts -name "ksun_version.txt" | head -1)
-KSUN_VERSION=$([ -f "$_kv" ] && cat "$_kv" | tr -d '[:space:]' || echo "")
-
-_sv=$(find ./artifacts -name "rsku_version.txt" | head -1)
-RSKU_VERSION=$([ -f "$_sv" ] && cat "$_sv" | tr -d '[:space:]' || echo "")
-
-# Commit SHAs recorded at build time — used to match exact manager CI run
-_ks=$(find ./artifacts -name "ksun_sha.txt" | head -1)
-KSUN_SHA=$([ -f "$_ks" ] && cat "$_ks" | tr -d '[:space:]' || echo "")
-_rs=$(find ./artifacts -name "rsku_sha.txt" | head -1)
-RSKU_SHA=$([ -f "$_rs" ] && cat "$_rs" | tr -d '[:space:]' || echo "")
-
-# Find manager CI run whose head_sha matches the kernel driver SHA recorded at build time.
-# Falls back to latest successful run if no SHA match found (e.g. testing build or old artifact).
 _ksun_find_run() {
-  local sha="$1" page run_id
+  local SHA="$1" page runs run_id count
+  [ -n "$SHA" ] || return 0
   for page in 1 2 3; do
-    local runs
-    runs=$(curl -sf --max-time 15 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-      "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml/runs?status=success&branch=dev&per_page=20&page=${page}")
-    run_id=$(echo "$runs" | python3 -c "
-import sys,json
-d=json.load(sys.stdin)
-sha=sys.argv[1] if len(sys.argv)>1 else ""
-for r in d.get("workflow_runs",[]):
-    if r["head_sha"]==sha:
+    runs=$(_gh \
+      "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml/runs?status=success&branch=dev&per_page=20&page=${page}" \
+      || true)
+    [ -n "$runs" ] || return 0
+    run_id=$(echo "$runs" | python3 -c '
+import sys, json
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+sha = sys.argv[1].lower()
+for r in d.get("workflow_runs", []):
+    if r.get("head_sha", "").lower().startswith(sha):
         print(r["id"]); break
-" "$sha" 2>/dev/null | tr -d "[:space:]")
+' "$SHA" 2>/dev/null | tr -d '[:space:]')
     [ -n "$run_id" ] && { echo "$run_id"; return 0; }
-    # Stop paging if no more runs
-    local count
-    count=$(echo "$runs" | python3 -c 'import sys,json; print(len(json.load(sys.stdin).get("workflow_runs",[])))') 2>/dev/null
+    count=$(echo "$runs" | python3 -c 'import sys,json; print(len(json.load(sys.stdin).get("workflow_runs",[])))' 2>/dev/null || echo 0)
     [ "${count:-0}" -lt 20 ] && break
   done
-  # Fallback: latest run
-  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-    "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml/runs?status=success&branch=dev&per_page=1" \
-    | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["workflow_runs"][0]["id"] if d["workflow_runs"] else "")' 2>/dev/null | tr -d "[:space:]"
+  return 0
 }
-_kr=$(_ksun_find_run "$KSUN_SHA")
-KSUN_MANAGER_URL="${_kr:+https://github.com/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}}"
-KSUN_MANAGER_URL="${KSUN_MANAGER_URL:-https://github.com/KernelSU-Next/KernelSU-Next/actions}"
-KSUN_MANAGER_ARTIFACT_ID=$([ -n "$_kr" ] && \
-  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name == "manager") | .id // empty' | head -1 || true)
-  
-KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_kr" ] && \
-  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name == "manager-spoofed") | .id // empty' | head -1 || true)  
 
-_rsku_find_run() {
-  local sha="$1" page run_id
-  for page in 1 2 3; do
-    local runs
-    runs=$(curl -sf --max-time 15 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-      "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=20&page=${page}")
-    run_id=$(echo "$runs" | python3 -c "
-import sys,json
-d=json.load(sys.stdin)
-sha=sys.argv[1] if len(sys.argv)>1 else ""
-for r in d.get("workflow_runs",[]):
-    if r["head_sha"]==sha:
-        print(r["id"]); break
-" "$sha" 2>/dev/null | tr -d "[:space:]")
-    [ -n "$run_id" ] && { echo "$run_id"; return 0; }
-    local count
-    count=$(echo "$runs" | python3 -c 'import sys,json; print(len(json.load(sys.stdin).get("workflow_runs",[])))') 2>/dev/null
-    [ "${count:-0}" -lt 20 ] && break
-  done
-  # Fallback: latest run
-  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-    "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
-    | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["workflow_runs"][0]["id"] if d["workflow_runs"] else "")' 2>/dev/null | tr -d "[:space:]"
+_latest_ksun_run() {
+  _gh "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml/runs?status=success&branch=dev&per_page=1" \
+    | python3 -c 'import sys,json
+try:
+    d = json.load(sys.stdin)
+    runs = d.get("workflow_runs", [])
+    print(runs[0]["id"] if runs else "")
+except Exception:
+    print("")' 2>/dev/null || true
 }
-_sr=$(_rsku_find_run "$RSKU_SHA")
-RSKU_MANAGER_URL="${_sr:+https://github.com/ReSukiSU/ReSukiSU/actions/runs/${_sr}}"
-RSKU_MANAGER_URL="${RSKU_MANAGER_URL:-https://github.com/ReSukiSU/ReSukiSU/actions/workflows/build-manager.yml}"
-RSKU_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \
-  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/runs/${_sr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name == "Manager-release") | select(.expired == false) | .id // empty' | head -1 || true)
 
-RSKU_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_sr" ] && \
-  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/runs/${_sr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name == "Spoofed-Manager-release") | select(.expired == false) | .id // empty' | head -1 || true)
+# Candidate order: the commit the kernel's version code derives from, then the
+# driver HEAD, then the newest successful run. A candidate only wins if it still
+# has a downloadable "manager" artifact — CI artifacts expire, and a release
+# asset that 410s is worse than a manager build a few commits newer.
+for _SHA in "$KSUN_BASE_SHA" "$KSUN_SHA" ""; do
+  if [ -n "$_SHA" ]; then
+    _KRUN=$(_ksun_find_run "$_SHA")
+  else
+    _KRUN=$(_latest_ksun_run)
+  fi
+  [ -n "$_KRUN" ] || continue
+  _ARTS=$(_gh "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/runs/${_KRUN}/artifacts" || true)
+  _ID=$(echo "$_ARTS" | jq -r '.artifacts[] | select(.name=="manager") | select(.expired==false) | .id // empty' 2>/dev/null | head -1 || true)
+  [ -n "$_ID" ] || continue
+  KSUN_MANAGER_URL="https://github.com/KernelSU-Next/KernelSU-Next/actions/runs/${_KRUN}"
+  KSUN_MANAGER_ARTIFACT_ID="$_ID"
+  KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$(echo "$_ARTS" \
+    | jq -r '.artifacts[] | select(.name=="manager-spoofed") | select(.expired==false) | .id // empty' 2>/dev/null | head -1 || true)
+  [ -n "$_SHA" ] && echo "[OK] Manager CI build matched ${_SHA:0:12}"
+  break
+done
 
-DATE_TAG=$(date +'%Y%m%d')
+if [ -z "$KSUN_MANAGER_ARTIFACT_ID" ]; then
+  echo "[WARN] No usable manager CI build found (kernel base ${KSUN_BASE_SHA:-?} / head ${KSUN_SHA:-?}) — linking the workflow page instead"
+fi
+KSUN_MANAGER_URL="${KSUN_MANAGER_URL:-https://github.com/KernelSU-Next/KernelSU-Next/actions/workflows/build-manager-ci.yml}"
 
-: "${WORKFLOW_TYPE:-aio}"
+# ---------------------------------------------------------------------------
+# Release identity
+# ---------------------------------------------------------------------------
+RELEASE_NAME="Seiran-GKI"
 
-if [ "$WORKFLOW_TYPE" = "compat" ]; then
-  _tag_prefix="compat-"
-  RELEASE_NAME="Seiran-GKI-Compat"
-else
-  _tag_prefix=""
-  RELEASE_NAME="Seiran-GKI"
+if [ -z "$SUSFS_MODULE_VERSION" ] || [ "$SUSFS_MODULE_VERSION" = "unknown" ]; then
+  echo "[ERROR] SUSFS module version unresolved — refusing to publish a release tagged 'unknown'." >&2
+  echo "        Check sources/source-pins.json (susfs_module_tag) and the API above." >&2
+  exit 1
 fi
 
 if [ "$BUILD_TYPE" = "testing" ]; then
-  RELEASE_TAG="${_tag_prefix}${SUSFS_VERSION}-testing"
+  RELEASE_TAG="${SUSFS_MODULE_VERSION}-testing"
   IS_PRERELEASE="true"
 else
-  RELEASE_TAG="${_tag_prefix}${SUSFS_VERSION}"
+  RELEASE_TAG="$SUSFS_MODULE_VERSION"
   IS_PRERELEASE="false"
 fi
 
-ENCODED_TAG=$(echo "$RELEASE_TAG" | sed 's/+/%2B/g')
+ENCODED_TAG=$(printf '%s' "$RELEASE_TAG" | sed 's/+/%2B/g')
 RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${ENCODED_TAG}"
 
 {
+  echo "KSUN_TAG=$KSUN_TAG"
   echo "KSUN_VERSION=$KSUN_VERSION"
-  echo "RSKU_VERSION=$RSKU_VERSION"
+  echo "KSUN_SHA=$KSUN_SHA"
+  echo "SUSFS_VERSION=$SUSFS_VERSION"
+  echo "SUSFS_COMMIT=$SUSFS_COMMIT"
+  echo "SUSFS_MODULE_VERSION=$SUSFS_MODULE_VERSION"
+  echo "DROIDSPACES_VERSION=$DROIDSPACES_VERSION"
   echo "KSUN_MANAGER_URL=$KSUN_MANAGER_URL"
-  echo "RSKU_MANAGER_URL=$RSKU_MANAGER_URL"
   echo "KSUN_MANAGER_ARTIFACT_ID=$KSUN_MANAGER_ARTIFACT_ID"
   echo "KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$KSUN_MANAGER_SPOOFED_ARTIFACT_ID"
-  echo "RSKU_MANAGER_ARTIFACT_ID=$RSKU_MANAGER_ARTIFACT_ID"
-  echo "RSKU_MANAGER_SPOOFED_ARTIFACT_ID=$RSKU_MANAGER_SPOOFED_ARTIFACT_ID"
   echo "KERNEL_VERSION=$KERNEL_VERSION"
   echo "KERNEL_UNAME=$KERNEL_UNAME"
-  echo "KERNEL_VERSION_GKI=$KERNEL_VERSION_GKI"
-  echo "KERNEL_VERSION_CLO=$KERNEL_VERSION_CLO"
-  echo "KERNEL_UNAME_GKI=$KERNEL_UNAME_GKI"
-  echo "KERNEL_UNAME_CLO=$KERNEL_UNAME_CLO"
-  echo "SUSFS_VERSION=$SUSFS_VERSION"
-  echo "KSUN_TAG=$KSUN_TAG"
-  echo "RSKU_TAG=$RSKU_TAG"
-  echo "DATE_TAG=$DATE_TAG"
   echo "RELEASE_TAG=$RELEASE_TAG"
   echo "RELEASE_NAME=$RELEASE_NAME"
   echo "IS_PRERELEASE=$IS_PRERELEASE"
   echo "RELEASE_URL=$RELEASE_URL"
-  echo "SUSFS_MODULE_URL=https://github.com/sidex15/susfs4ksu-module/releases/latest"
+  echo "SUSFS_MODULE_URL=https://github.com/$(_pin susfs_module_repo sidex15/susfs4ksu-module)/releases/latest"
 } >> "${GITHUB_ENV:-/dev/null}"
 
 echo "[OK] Versions resolved"
-if [ -n "$KERNEL_UNAME_GKI" ] && [ -n "$KERNEL_UNAME_CLO" ]; then
-  echo "  GKI base: $KERNEL_UNAME_GKI"
-  echo "  CLO base: $KERNEL_UNAME_CLO"
-else
-  echo "  Kernel  : $KERNEL_VERSION"
-fi
-echo "  SUSFS   : $SUSFS_VERSION"
-echo "  KSU-Next: $KSUN_TAG"
-echo "  ReSukiSU: $RSKU_TAG"
+echo "  Kernel  : $KERNEL_UNAME"
+echo "  KSU-Next: $KSUN_TAG (code ${KSUN_VERSION:-?})"
+echo "  SUSFS   : $SUSFS_VERSION kernel-side, module $SUSFS_MODULE_VERSION"
+echo "  DroidSp : $DROIDSPACES_VERSION"
 echo "  Tag     : $RELEASE_TAG"

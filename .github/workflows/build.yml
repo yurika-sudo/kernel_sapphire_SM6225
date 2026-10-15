@@ -1,0 +1,359 @@
+name: "Build & Release — Seiran GKI"
+
+# One build: GKI android13-5.15-lts + KernelSU-Next (built-in SUSFS) + DroidSpaces.
+# Build, package, release and notify all live here — there is no matrix, no
+# reusable sub-workflow and no CLO/AIO bundle to keep in sync any more.
+#
+# Upstream versions are pinned in sources/source-pins.json and refreshed by the
+# "Check Source Updates" workflow, which verifies a candidate compiles before it
+# lets the pin move.
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  WORK_DIR:       ${{ github.workspace }}
+  KERNEL_SRC:     ${{ github.workspace }}/kernel_src
+  DEFCONFIG:      gki_defconfig
+  DEFCONFIG_PATH: ${{ github.workspace }}/kernel_src/arch/arm64/configs/gki_defconfig
+
+on:
+  schedule:
+    - cron: '0 0 */5 * *'   # every 5 days — also keeps the GHA cache warm (caches evict at 7d)
+
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Build type"
+        type: choice
+        options: [stable, testing]
+        default: stable
+      nuke_release:
+        description: "Replace all assets on this release instead of adding to them"
+        type: boolean
+        default: true
+      skip_release:
+        description: "Build only — no release, no manager fetch"
+        type: boolean
+        default: false
+
+  # Used by check-updates.yml as a compile gate for a candidate upstream version
+  # before its pin is allowed to move.
+  workflow_call:
+    inputs:
+      build_type:          { type: string,  required: false, default: "stable" }
+      droidspaces_tag_pin: { type: string,  required: false, default: "" }
+      skip_release:        { type: boolean, required: false, default: true }
+      nuke_release:        { type: boolean, required: false, default: false }
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+
+  # Both trigger paths (dispatch/schedule and workflow_call) are folded into one
+  # set of outputs, so every later step reads needs.setup.outputs.* instead of
+  # having to know which event started the run.
+  setup:
+    name: "Setup"
+    runs-on: ubuntu-latest
+    outputs:
+      start_time:   ${{ steps.p.outputs.start_time }}
+      build_type:   ${{ steps.p.outputs.build_type }}
+      ds_tag_pin:   ${{ steps.p.outputs.ds_tag_pin }}
+      skip_release: ${{ steps.p.outputs.skip_release }}
+      nuke_release: ${{ steps.p.outputs.nuke_release }}
+    steps:
+      - id: p
+        run: |
+          set -e
+          echo "start_time=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+          # First non-empty value wins: workflow_call fills inputs.*, dispatch
+          # fills both inputs.* and github.event.inputs.*, schedule fills
+          # neither — so the last argument is the fallback for scheduled runs.
+          pick() { local v="$1"; [ -n "$v" ] || v="$2"; [ -n "$v" ] || v="$3"; printf '%s' "$v"; }
+          out()  { echo "$1=$2" >> "$GITHUB_OUTPUT"; echo "  $1=$2"; }
+
+          out build_type  "$(pick '${{ inputs.build_type }}'        '${{ github.event.inputs.build_type }}'        'stable')"
+          out ds_tag_pin   "$(pick '${{ inputs.droidspaces_tag_pin }}' ''                                        '')"
+          out skip_release "$(pick '${{ inputs.skip_release }}'     '${{ github.event.inputs.skip_release }}'     'false')"
+          out nuke_release "$(pick '${{ inputs.nuke_release }}'     '${{ github.event.inputs.nuke_release }}'     'true')"
+
+  build:
+    name: "Seiran GKI"
+    needs: [setup]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 1
+
+      - name: "Setup env"
+        uses: ./.github/actions/setup-env
+
+      - name: "Clone kernel source"
+        run: bash scripts/clone-source.sh
+
+      - name: "Fix source warnings"
+        run: bash scripts/fix-source-warnings.sh "${{ env.KERNEL_SRC }}"
+
+      - name: "Configure ccache"
+        if: ${{ needs.setup.outputs.build_type != 'testing' }}
+        run: |
+          sudo apt-get install -y ccache
+          echo "CCACHE_DIR=$HOME/.ccache"                                                                          >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=1G"                                                                                 >> $GITHUB_ENV
+          echo "CCACHE_COMPILERCHECK=content"                                                                      >> $GITHUB_ENV
+          echo "CCACHE_DIRECT=true"                                                                                >> $GITHUB_ENV
+          echo "CCACHE_NOHASHDIR=true"                                                                             >> $GITHUB_ENV
+          echo "CCACHE_BASEDIR=${{ github.workspace }}"                                                           >> $GITHUB_ENV
+          echo "CCACHE_IGNOREOPTIONS=--sysroot*"                                                                  >> $GITHUB_ENV
+          echo "CCACHE_COMPRESSION=true"                                                                           >> $GITHUB_ENV
+          echo "CCACHE_COMPRESSLEVEL=3"                                                                            >> $GITHUB_ENV
+          echo "CCACHE_SLOPPINESS=file_macro,time_macros,include_file_mtime,include_file_ctime,pch_defines,system_headers,locale" >> $GITHUB_ENV
+
+      - name: "Restore ccache"
+        if: ${{ needs.setup.outputs.build_type != 'testing' }}
+        id: ccache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.ccache
+          key:  ccache-gki-${{ hashFiles('sources/source-pins.json') }}
+          restore-keys: |
+            ccache-gki-
+
+      - name: "Setup toolchain"
+        run: bash scripts/setup-toolchain.sh
+
+      - name: "Apply patches"
+        env:
+          BUILD_TYPE: ${{ needs.setup.outputs.build_type }}
+        run: bash scripts/apply-patches.sh
+
+      - name: "Setup NoMount"
+        working-directory: ${{ env.KERNEL_SRC }}
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh" \
+            | bash -s dev
+
+      - name: "Setup BBG"
+        working-directory: ${{ env.KERNEL_SRC }}
+        run: |
+          git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
+          ln -sf ../Baseband-guard security/baseband-guard
+          grep -q "baseband-guard" security/Makefile || \
+            echo 'obj-$(CONFIG_BBG) += baseband-guard/' >> security/Makefile
+          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' \
+            security/Kconfig
+          grep -q "baseband-guard/Kconfig" security/Kconfig || \
+            sed -i '/source "security\/keys\/Kconfig"/a source "security/baseband-guard/Kconfig"' \
+            security/Kconfig
+
+      - name: "Setup KernelSU-Next + SUSFS"
+        env:
+          KERNEL_DIR: ${{ env.KERNEL_SRC }}
+          WORK_DIR:   ${{ env.WORK_DIR }}
+        run: bash scripts/setup-ksu.sh
+
+      - name: "DroidSpaces"
+        working-directory: ${{ env.KERNEL_SRC }}
+        env:
+          DROIDSPACES_TAG_PIN: ${{ needs.setup.outputs.ds_tag_pin }}
+        run: bash ${{ github.workspace }}/scripts/droidspaces.sh "${{ env.DEFCONFIG_PATH }}"
+
+      - name: "Kernel configs"
+        env:
+          DEFCONFIG:  ${{ env.DEFCONFIG_PATH }}
+          KERNEL_DIR: ${{ env.KERNEL_SRC }}
+        run: bash scripts/setup-configs.sh
+
+      - name: "Localversion"
+        working-directory: ${{ env.KERNEL_SRC }}
+        run: |
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:8}"
+          sed -i "\$s|echo \\\"\$res\\\"|echo \\\"\$res-ab${SHORT_SHA}\\\"|" ./scripts/setlocalversion
+          sed -i 's/-dirty//' ./scripts/setlocalversion
+          KERNEL_TIMESTAMP=$(git log -1 --format=%ct)
+          echo "KBUILD_BUILD_TIMESTAMP=$(date -u -d @${KERNEL_TIMESTAMP} +'%a %b %d %T UTC %Y')" >> $GITHUB_ENV
+          echo "SOURCE_DATE_EPOCH=${KERNEL_TIMESTAMP}" >> $GITHUB_ENV
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add . && git commit -m "clean dirty flag" || true
+
+      - name: "Build kernel"
+        id: build
+        timeout-minutes: 50
+        run: bash scripts/build.sh
+
+      - name: "Save ccache"
+        if: ${{ needs.setup.outputs.build_type != 'testing' && steps.ccache-restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ccache
+          key:  ccache-gki-${{ hashFiles('sources/source-pins.json') }}
+
+      - name: "Verify kernel"
+        run: bash scripts/verify-kernel.sh
+
+      - name: "Pack ZIP"
+        env:
+          BUILD_TYPE: ${{ needs.setup.outputs.build_type }}
+        run: bash scripts/pack-zip.sh
+
+      - name: "Pack Seiran Core module"
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          BUILD_NUM:  ${{ github.run_number }}
+        run: bash scripts/pack-module.sh
+
+      - name: "Capture uname"
+        run: |
+          for UTS in "${{ env.WORK_DIR }}/out/dist/include/generated/utsrelease.h" \
+                     "${{ env.WORK_DIR }}/out/include/generated/utsrelease.h"; do
+            [ -f "$UTS" ] || continue
+            UNAME=$(grep UTS_RELEASE "$UTS" | cut -d'"' -f2)
+            [ -n "$UNAME" ] && break
+          done
+          UNAME="${UNAME:-unknown}"
+          echo "$UNAME" > "${{ env.WORK_DIR }}/out/dist/kernel_uname.txt"
+          echo "Kernel uname: $UNAME"
+
+      - name: "Upload artifact"
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: seiran-gki
+          path: |
+            ${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}
+            ${{ env.WORK_DIR }}/out/seiran-core.zip
+            ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
+            ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
+            ${{ env.WORK_DIR }}/ksun_tag.txt
+            ${{ env.WORK_DIR }}/ksun_sha.txt
+            ${{ env.WORK_DIR }}/ksun_base_sha.txt
+            ${{ env.WORK_DIR }}/ksun_version.txt
+            ${{ env.WORK_DIR }}/susfs_version.txt
+            ${{ env.WORK_DIR }}/susfs_commit.txt
+          retention-days: 7
+
+      - name: "Notify failure"
+        if: failure() || cancelled()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_TOPIC_ID:  ${{ secrets.TELEGRAM_TOPIC_ID }}
+          BUILD_TYPE:   ${{ needs.setup.outputs.build_type }}
+          RUN_URL:      "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_NUMBER:   "${{ github.run_number }}"
+          BUILD_STATUS: "${{ job.status }}"
+        run: bash scripts/notify.sh failure
+
+  release:
+    name: "Package & Release"
+    needs: [setup, build]
+    if: ${{ needs.build.result == 'success'
+             && github.event_name != 'schedule'
+             && needs.setup.outputs.skip_release != 'true' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 1
+
+      - name: "Download build artifact"
+        uses: actions/download-artifact@v4.3.0
+        with:
+          name: seiran-gki
+          path: ./artifacts/
+
+      - name: "Resolve versions"
+        env:
+          BUILD_TYPE:   ${{ needs.setup.outputs.build_type }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/resolve-versions.sh
+
+      - name: "Collect release ZIPs"
+        run: bash scripts/pack-release.sh
+
+      - name: "Fetch manager APKs"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KSUN_MANAGER_ARTIFACT_ID:         ${{ env.KSUN_MANAGER_ARTIFACT_ID }}
+          KSUN_MANAGER_SPOOFED_ARTIFACT_ID: ${{ env.KSUN_MANAGER_SPOOFED_ARTIFACT_ID }}
+          KSUN_VERSION:                     ${{ env.KSUN_VERSION }}
+        run: bash scripts/fetch-manager-apks.sh
+
+      - name: "Release body"
+        env:
+          BUILD_TYPE: ${{ needs.setup.outputs.build_type }}
+          REPO:       ${{ github.repository }}
+          SHA:        ${{ github.sha }}
+          RUN_URL:    "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: bash scripts/release-notes.sh
+
+      - name: "Replace existing release assets"
+        if: ${{ needs.setup.outputs.nuke_release == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "[INFO] Replacing all assets on $RELEASE_TAG"
+          gh release view "$RELEASE_TAG" --json assets \
+            -q '.assets[].name' 2>/dev/null \
+            | xargs -r -I{} gh release delete-asset "$RELEASE_TAG" {} --yes 2>/dev/null || true
+
+      - name: "Create release"
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          overwrite: true
+          files: |
+            ./release_zips/*.zip
+            ./manager_apks/*.apk
+          tag_name:   ${{ env.RELEASE_TAG }}
+          name:       ${{ env.RELEASE_NAME }}
+          prerelease: ${{ env.IS_PRERELEASE }}
+          body:       ${{ env.RELEASE_BODY }}
+
+      - name: "Notify success"
+        if: success()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_TOPIC_ID:  ${{ secrets.TELEGRAM_TOPIC_ID }}
+          BUILD_TYPE:      ${{ needs.setup.outputs.build_type }}
+          RUN_URL:         "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_NUMBER:      "${{ github.run_number }}"
+          SHA:             ${{ github.sha }}
+          START_TIME:      ${{ needs.setup.outputs.start_time }}
+          KERNEL_UNAME:    ${{ env.KERNEL_UNAME }}
+          KSUN_TAG:        ${{ env.KSUN_TAG }}
+          KSUN_VERSION:    ${{ env.KSUN_VERSION }}
+          SUSFS_VERSION:   ${{ env.SUSFS_VERSION }}
+          SUSFS_MODULE_VERSION: ${{ env.SUSFS_MODULE_VERSION }}
+          DROIDSPACES_VERSION:  ${{ env.DROIDSPACES_VERSION }}
+          RELEASE_TAG:     ${{ env.RELEASE_TAG }}
+          RELEASE_URL:     ${{ env.RELEASE_URL }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME:   ${{ github.ref_name }}
+          GITHUB_ACTOR:      ${{ github.actor }}
+        run: bash scripts/notify.sh success
+
+      # A red release job usually means the assets or the tag, not the kernel —
+      # worth a message, because the artifact is built and someone will ask why
+      # nothing was published.
+      - name: "Notify release failure"
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_TOPIC_ID:  ${{ secrets.TELEGRAM_TOPIC_ID }}
+          BUILD_TYPE:   ${{ needs.setup.outputs.build_type }}
+          BUILD_STATUS: "release step failed (kernel build succeeded)"
+          RUN_URL:      "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_NUMBER:   "${{ github.run_number }}"
+        run: bash scripts/notify.sh failure

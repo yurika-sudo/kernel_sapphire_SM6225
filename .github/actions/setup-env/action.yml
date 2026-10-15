@@ -1,5 +1,5 @@
 name: setup-env
-description: install deps, record timestamps, copy apply_patch helper
+description: install build deps and record the build timestamps
 
 runs:
   using: composite
@@ -14,4 +14,3 @@ runs:
           git libelf-dev libssl-dev curl jq \
           gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
           dwarves
-        cp ${{ github.workspace }}/scripts/apply_patch.sh /tmp/apply_patch.sh

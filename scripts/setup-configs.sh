@@ -1,21 +1,31 @@
 #!/usr/bin/env bash
-# setup-configs.sh — inject kernel configs into defconfig
-# env: KSU_TYPE, SOURCE_TYPE, DEFCONFIG (full path), KERNEL_DIR, CLO_FRAGMENT (optional)
+# setup-configs.sh — inject kernel configs into the defconfig
+#
+# env: DEFCONFIG   full path to the defconfig file being edited
+#      KERNEL_DIR  kernel source root (used to read the KSU Kconfig)
+#
+# Two halves: the tuning block (everything the kernel carries regardless of
+# root setup) and the KSU/SUSFS block. The KSU block is then reconciled against
+# the *actual* Kconfig of the checked-out KernelSU-Next, because SUSFS renames
+# and drops symbols between releases and a defconfig line that matches no
+# Kconfig symbol is dropped in silence.
 set -e
 
-: "${KSU_TYPE:?}"
-: "${SOURCE_TYPE:?}"
 : "${DEFCONFIG:?}"
-: "${KERNEL_DIR:?}"
+: "${KERNEL_DIR:=$PWD}"
 
 CF="$DEFCONFIG"
+[ -f "$CF" ] || { echo "[ERROR] defconfig not found: $CF" >&2; exit 1; }
 
+# ---------------------------------------------------------------------------
 # Base cleanup
+# ---------------------------------------------------------------------------
 sed -i 's/ cgroup_disable=pressure//'                    "$CF"
 sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off noirqdebug mitigations=off /' "$CF"
 sed -i 's/kasan\.stacktrace=off/kasan=off/'               "$CF"
 
-# Strip symbols already in base defconfig to avoid "reassigning" warnings
+# Strip symbols already in the base defconfig so the append below can't produce
+# a "reassigning symbol" warning (last write wins only by accident).
 for SYM in WLAN_VENDOR_ATH \
            PID_NS DEBUG_KINFO \
            NET_SCH_CODEL NET_SCH_FQ_CODEL UBSAN NET_SCH_DEFAULT DEFAULT_NET_SCH DEFAULT_NET_SCH_FQ_CODEL \
@@ -23,11 +33,13 @@ for SYM in WLAN_VENDOR_ATH \
            ZRAM_DEF_COMP_LZORLE ZRAM_DEF_COMP_ZSTD ZRAM_DEF_COMP_LZ4 ZRAM_DEF_COMP_LZO ZRAM_DEF_COMP \
            SCHED_WALT SCHED_WALT_DEBUG CPU_FREQ_GOV_SCHEDUTIL CPU_FREQ_DEFAULT_GOV_SCHEDUTIL \
            TCP_CONG_ADVANCED TCP_CONG_BBR TCP_CONG_BBR3 TCP_CONG_WESTWOOD DEFAULT_TCP_CONG \
-		   NET_SCH_DEFAULT DEFAULT_NET_SCH; do
+           NET_SCH_DEFAULT DEFAULT_NET_SCH; do
   sed -i "/^CONFIG_${SYM}[= ]/d; /^# CONFIG_${SYM} /d" "$CF"
 done
 
-# Common configs (all variants)
+# ---------------------------------------------------------------------------
+# Tuning
+# ---------------------------------------------------------------------------
 cat >> "$CF" << 'EOF'
 CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y
 CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y
@@ -107,8 +119,13 @@ CONFIG_CGROUP_PIDS=y
 CONFIG_SUSPEND_SKIP_SYNC=y
 EOF
 
-# KSU-Next
-if [ "$KSU_TYPE" = "ksun" ]; then
+# ---------------------------------------------------------------------------
+# Root: KernelSU-Next + built-in SUSFS + Baseband Guard
+# ---------------------------------------------------------------------------
+# Drop any earlier KSU/BBG lines (a fork may have added its own) so the block
+# below is the only one — duplicated symbols make olddefconfig pick by luck.
+sed -i "/^CONFIG_KSU[A-Z0-9_]*[= ]/d; /^# CONFIG_KSU[A-Z0-9_]* /d; /^CONFIG_BBG[= ]/d" "$CF"
+
 cat >> "$CF" << 'EOF'
 CONFIG_KSU=y
 CONFIG_KSU_SUSFS=y
@@ -117,45 +134,45 @@ CONFIG_KSU_SUSFS_SUS_PATH=y
 CONFIG_KSU_SUSFS_SUS_MOUNT=y
 CONFIG_KSU_SUSFS_SUS_KSTAT=y
 CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
-CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-CONFIG_KSU_SUSFS_ENABLE_LOG=n
-CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
 CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
 CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-CONFIG_KSU_SUSFS_SUS_SU=y
+CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+# CONFIG_KSU_SUSFS_ENABLE_LOG is not set
 CONFIG_BBG=y
 EOF
 
-# SukiSU
-elif [ "$KSU_TYPE" = "rsku" ]; then
-cat >> "$CF" << 'EOF'
-CONFIG_KSU=y
-CONFIG_KSU_SUSFS=y
-CONFIG_KSU_SUSFS_SUS_MAP=y
-CONFIG_KSU_SUSFS_SUS_PATH=y
-CONFIG_KSU_SUSFS_SUS_MOUNT=y
-CONFIG_KSU_SUSFS_SUS_KSTAT=y
-CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
-CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-CONFIG_KSU_SUSFS_ENABLE_LOG=n
-CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-CONFIG_KSU_SUSFS_SUS_SU=y
-CONFIG_KSU_MULTI_MANAGER_SUPPORT=n
-CONFIG_KSU_TOOLKIT_SUPPORT=y
-EOF
+# ---------------------------------------------------------------------------
+# Reconcile the KSU block with the Kconfig that is actually checked out.
+# ---------------------------------------------------------------------------
+KCFG="KernelSU-Next/kernel/Kconfig"
+[ -L "drivers/kernelsu" ] && KCFG="$(readlink -f drivers/kernelsu)/Kconfig"
 
-# NoKSU — no extras, common configs above apply
-# (only common configs above apply — nothing extra here)
+if [ -f "$KCFG" ]; then
+  AVAIL=$(grep -oE '^[[:space:]]*config (KSU|KSU_SUSFS)[A-Z0-9_]*' "$KCFG" \
+            | awk '{print $2}' | sort -u)
+  WANTED=$(grep -oE '^#? ?CONFIG_((KSU_SUSFS|KSU)[A-Z0-9_]*)' "$CF" | sed 's/^#* *CONFIG_//' | sort -u)
+
+  for SYM in $WANTED; do
+    grep -qx "$SYM" <<< "$AVAIL" && continue
+    echo "[WARN] $SYM is not a Kconfig symbol of this KernelSU-Next — dropped"
+    sed -i "/^CONFIG_${SYM}[= ]/d; /^# CONFIG_${SYM} /d" "$CF"
+  done
+
+  # A SUSFS feature we never mention is a feature that is on/off purely by
+  # upstream's default — worth one line in the log whenever that changes.
+  for SYM in $AVAIL; do
+    case "$SYM" in KSU_SUSFS_*) ;; *) continue ;; esac
+    grep -q "^CONFIG_${SYM}[= ]\|^# CONFIG_${SYM} " "$CF" && continue
+    echo "[INFO] $SYM not set here — inherits its Kconfig default"
+  done
+
+  REQUIRED="KSU KSU_SUSFS KSU_SUSFS_SUS_PATH KSU_SUSFS_SUS_MOUNT KSU_SUSFS_SUS_KSTAT"
+  for SYM in $REQUIRED; do
+    grep -q "^CONFIG_${SYM}=y$" "$CF" \
+      || { echo "[ERROR] $SYM must be =y for the SUSFS build; check the Kconfig upstream" >&2; exit 1; }
+  done
+else
+  echo "[WARN] $KCFG not found — KSU config symbols not validated"
 fi
 
-echo "[OK] Configs written for KSU_TYPE=$KSU_TYPE SOURCE_TYPE=$SOURCE_TYPE"
+echo "[OK] Configs written"

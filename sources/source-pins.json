@@ -1,7 +1,14 @@
 {
+  "gki_branch": "android13-5.15-lts",
   "gki_sublevel": "v5.15.220",
-  "clo_sublevel": "v5.15.197",
-  "ksun_tag": "v3.4.0",
-  "rsku_tag": "v4.2.0-rc3",
-  "susfs_tag": "v1.5.2+_R28"
+  "ksun_repo": "pershoot/KernelSU-Next",
+  "ksun_branch": "dev-susfs",
+  "ksun_tag": "v3.4.2",
+  "susfs_repo": "gitlab.com/simonpunk/susfs4ksu",
+  "susfs_branch": "gki-android13-5.15",
+  "susfs_version": "v2.3.0",
+  "susfs_module_repo": "sidex15/susfs4ksu-module",
+  "susfs_module_tag": "v1.5.2+_R28",
+  "droidspaces_repo": "ravindu644/Droidspaces-OSS",
+  "droidspaces_tag": "v7.0.0"
 }

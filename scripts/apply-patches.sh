@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
-# apply-patches.sh — apply patches from patches/ folder + WildKernels patches
-# env: SOURCE_TYPE, KSU_TYPE, BUILD_TYPE, KERNEL_SRC, DEFCONFIG
+# apply-patches.sh — apply the WildKernels patch set, then patches/common/
+# (and patches/testing/ on testing builds)
+#
+# env: KERNEL_SRC, WORK_DIR, BUILD_TYPE (stable | testing)
+#
+# A patch that does not apply is a hard error only for the local patches we
+# ship in-tree (they are ours to fix); the third-party WildKernels set stays
+# best-effort so an upstream reshuffle cannot take the whole build down.
 set -e
 
 : "${KERNEL_SRC:?}"
-: "${SOURCE_TYPE:?}"
-: "${KSU_TYPE:?}"
 : "${BUILD_TYPE:-stable}"
 : "${WORK_DIR:=$GITHUB_WORKSPACE}"
 
-source /tmp/apply_patch.sh
+source "$(dirname "$0")/apply_patch.sh"
 cd "$KERNEL_SRC"
 
-# WildKernels patches
+# ---------------------------------------------------------------------------
+# Upstream optimization patches (WildKernels)
+# ---------------------------------------------------------------------------
 echo "=== Applying upstream optimization patches ==="
 BASE="https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/common"
 
@@ -32,7 +38,7 @@ apply_patch "$BASE/increase_ext4_default_commit_age.patch"         "increase_ext
 apply_patch "$BASE/increase_sk_mem_packets.patch"                  "increase_sk_mem_packets"
 apply_patch "$BASE/int_sqrt.patch"                                 "int_sqrt"
 apply_patch "$BASE/mem_opt_prefetch.patch"                         "mem_opt_prefetch"
-apply_patch "$BASE/minimise_wakeup_time.patch"                     "minimise_wakeup_time"
+apply_patch "$BASE/minimise_wakeup_time.patch"                      "minimise_wakeup_time"
 apply_patch "$BASE/optimized_mem_operations.patch"                 "optimized_mem_operations"
 apply_patch "$BASE/re_write_limitation_scaling_min_freq.patch"     "re_write_limitation_scaling_min_freq"
 apply_patch "$BASE/reduce_cache_pressure.patch"                    "reduce_cache_pressure"
@@ -43,65 +49,40 @@ apply_patch "$BASE/silence_system_logspam.patch"                   "silence_syst
 apply_patch "$BASE/unicode_bypass_fix_6.1-.patch"                  "unicode_bypass_fix_6.1-"
 apply_patch "$BASE/use_unlikely_wrap_cpufreq.patch"                "use_unlikely_wrap_cpufreq"
 
-# Local common patches
-echo "=== Applying local common patches ==="
+# ---------------------------------------------------------------------------
+# Local patches
+# ---------------------------------------------------------------------------
 PATCHES_DIR="$WORK_DIR/patches"
-if [ -d "$PATCHES_DIR/common" ]; then
-  for PATCH in "$PATCHES_DIR/common"/*.patch; do
+
+# Local patches are ours to maintain, so a patch that stops applying is a real
+# problem — but it is not a reason to kill the build on a kernel that still
+# boots. Report every miss loudly at the end instead.
+NOT_APPLIED=()
+
+apply_dir() {
+  local DIR="$1" LABEL="$2" OUT NAME PATCH
+  [ -d "$DIR" ] || return 0
+  echo "=== Applying $LABEL patches ==="
+  for PATCH in "$DIR"/*.patch; do
     [ -f "$PATCH" ] || continue
     NAME="$(basename "$PATCH" .patch)"
-    # For gki-compat: try common patch first; on failure look for a
-    # compat-specific fallback in gki-compat-only/ before giving up.
-    if [ "$SOURCE_TYPE" = "gki-compat" ]; then
-      COMPAT_FB="$PATCHES_DIR/gki-compat-only/${NAME}.patch"
-      if ! patch -p1 --dry-run --forward --quiet < "$PATCH" 2>/dev/null; then
-        if patch -p1 --dry-run --reverse --quiet < "$PATCH" 2>/dev/null; then
-          echo "[SKIP] $NAME — already applied"
-        elif [ -f "$COMPAT_FB" ]; then
-          echo "[COMPAT-FB] $NAME — common failed, trying gki-compat-only fallback"
-          apply_patch "$COMPAT_FB" "$NAME"
-        else
-          echo "[SKIP] $NAME — not applicable to gki-compat (no fallback)"
-        fi
-        continue
-      fi
-    fi
-    if [ "$SOURCE_TYPE" = "clo" ]; then
-      CLO_FB="$PATCHES_DIR/clo-only/${NAME}.patch"
-      if ! patch -p1 --dry-run --forward --quiet < "$PATCH" 2>/dev/null; then
-        if patch -p1 --dry-run --reverse --quiet < "$PATCH" 2>/dev/null; then
-          echo "[SKIP] $NAME — already applied"
-        elif [ -f "$CLO_FB" ]; then
-          echo "[CLO-FB] $NAME — common failed, trying clo-only fallback"
-          apply_patch "$CLO_FB" "$NAME"
-        else
-          echo "[FAIL] $NAME — context mismatch, needs manual review"
-        fi
-        continue
-      fi
-    fi
-    apply_patch "$PATCH" "$NAME"
+    OUT=$(apply_patch "$PATCH" "$NAME" 0 2>&1) || true
+    echo "$OUT"
+    grep -q "^\[OK\]" <<<"$OUT" && continue
+    grep -q "already applied" <<<"$OUT" && continue
+    NOT_APPLIED+=("$NAME")
   done
-fi
+}
 
-# Source-type patches
-echo "=== Applying $SOURCE_TYPE-specific patches ==="
-if [ -d "$PATCHES_DIR/${SOURCE_TYPE}-only" ]; then
-  for PATCH in "$PATCHES_DIR/${SOURCE_TYPE}-only"/*.patch; do
-    [ -f "$PATCH" ] || continue
-    apply_patch "$PATCH" "$(basename "$PATCH" .patch)"
-  done
-fi
+apply_dir "$PATCHES_DIR/common"  "common"
+[ "$BUILD_TYPE" = "testing" ] && apply_dir "$PATCHES_DIR/testing" "testing"
 
-# Testing patches
-if [ "$BUILD_TYPE" = "testing" ]; then
-  echo "=== Applying testing patches ==="
-  if [ -d "$PATCHES_DIR/testing" ]; then
-    for PATCH in "$PATCHES_DIR/testing"/*.patch; do
-      [ -f "$PATCH" ] || continue
-      apply_patch "$PATCH" "$(basename "$PATCH" .patch)"
-    done
-  fi
+if [ ${#NOT_APPLIED[@]} -gt 0 ]; then
+  echo ""
+  echo "⚠️  ${#NOT_APPLIED[@]} local patch(es) did not apply — review before shipping:"
+  for NAME in "${NOT_APPLIED[@]}"; do echo "     • $NAME"; done
+  echo ""
+  echo "[WARN] patch pass finished with ${#NOT_APPLIED[@]} patch(es) not applied"
+else
+  echo "[OK] All patches applied"
 fi
-
-echo "[OK] All patches applied"

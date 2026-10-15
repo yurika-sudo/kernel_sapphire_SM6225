@@ -1,15 +1,17 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# fix-source-warnings.sh — silence host-tool warnings that would otherwise
+# spam the log or trip a -Werror in the GKI tree.
+#
+# env: KERNEL_SRC (defaults to ./kernel_src)
 set -e
 
 KERNEL_SRC="${1:-kernel_src}"
 
-[ "$KSU_TYPE" = "none" ] && { echo "[SKIP] NoKSU — config injections skipped (vanilla)"; exit 0; }
-
 # Fix bpf_doc.py SyntaxWarnings
 BPF_DOC="$KERNEL_SRC/scripts/bpf_doc.py"
 if [ -f "$BPF_DOC" ]; then
-    sed -i "s/re\.compile('\(.*\)')/re.compile(r'\1')/g" "$BPF_DOC"
-    sed -i 's/\*\*\\ /\*\*\\\\ /g' "$BPF_DOC"
+    sed -i "s/re\\.compile('\\(.*\\)')/re.compile(r'\\1')/g" "$BPF_DOC"
+    sed -i 's/\\*\\*\\\\ /\\*\\*\\\\\\\\ /g' "$BPF_DOC"
     echo "[OK] fixed $BPF_DOC"
 fi
 
