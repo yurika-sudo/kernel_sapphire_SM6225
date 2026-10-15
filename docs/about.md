@@ -16,9 +16,10 @@ This started as a way to learn kernel building properly — CI/CD, GKI complianc
 
 ## Stack
 
-- Kernel: `android13-5.15-lts` (GKI) + CodeLinaro `msm-5.15` (CLO)
-- Root: KernelSU-Next / SukiSU-Ultra / NoKSU
-- SUSFS for filesystem spoofing
+- Kernel: `android13-5.15-lts` (GKI 2.0), single build
+- Root: KernelSU-Next on the built-in-SUSFS fork branch
+- SUSFS (v2.x) in-tree for path/mount/kstat/uname/cmdline hiding, plus Baseband Guard and NoMount
+- DroidSpaces container support, built in
 - CI/CD: GitHub Actions — fully automated build, package, release, notify
 - Built with: too much caffeine and a lot of help from **Claude (Anthropic)** for CI debugging and docs 🤝
 

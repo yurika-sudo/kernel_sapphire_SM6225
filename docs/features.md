@@ -25,6 +25,11 @@
 - BBRv3 + Westwood TCP congestion control · FQ default qdisc (CAKE / PIE also available)
 - TCP write buffer increased to 16MB
 
+**Root / hiding**
+- KernelSU-Next (built-in SUSFS, `dev-susfs` integration) — see [variants.md](variants.md)
+- [Baseband Guard](https://github.com/vc-teahouse/Baseband-guard) (`CONFIG_BBG`)
+- NoMount
+
 **Security / stability**
 - CVE-2026-43499 rtmutex ghostlock UAF fix
 - CVE-2026-64560 posix CPU timers UAF fix
@@ -55,24 +60,33 @@ The kernel ZIP alone is not enough. `CONFIG_ZRAM=m` means `zram.ko`/`zsmalloc.ko
 - **GitHub Release:** `seiran-core.zip` attached alongside the kernel ZIP.
 - **Telegram:** [t.me/tmplogchat](https://t.me/tmplogchat)
 
-**Install:** requires a module manager (KSU/Magisk). Install from the Modules tab — do not flash from recovery.
-- **NoKSU:** root first via Magisk or KSU-Next/SukiSU-Ultra, then install from there.
+**Install:** requires a module manager (KernelSU-Next or Magisk). Install from the Modules tab — do not flash from recovery.
 
 > [!NOTE]
-> Universal — works across all variants (GKI/CLO × KSU-Next/SukiSU/NoKSU).
+> One module for the one kernel this repo builds — `seiran-core.zip` is attached to every release.
 
 ---
 
 ## Droidspaces Support
 
-This kernel ships with full [Droidspaces](https://github.com/ravindu644/Droidspaces-OSS) container support out of the box.
+Full [Droidspaces](https://github.com/ravindu644/Droidspaces-OSS) container support is built in — no extra module, no defconfig editing on your side.
 
-Enabled configs: `SYSVIPC` · `IPC_NS` · `PID_NS` · `POSIX_MQUEUE` · `DEVTMPFS` · Netfilter extras
+Enabled by the build ([pinned release upstream](../sources/source-pins.json) → `droidspaces_tag`):
 
-kABI fix applied for GKI < 6.12 to prevent vendor module crashes on boot.
+| Group | Configs |
+|---|---|
+| Required | `SYSVIPC` · `POSIX_MQUEUE` · `IPC_NS` · `PID_NS` · `DEVTMPFS` · `NETFILTER_XT_MATCH_ADDRTYPE` |
+| Networking | `USER_NS` · `IP6_NF_NAT` · `IP6_NF_TARGET_MASQUERADE` · `MACVLAN` (`--net=macvlan`) |
+| Firewall in containers | `NETFILTER_XT_TARGET_REJECT` · `_TARGET_LOG` · `NETFILTER_XT_MATCH_RECENT` · `NETFILTER_XT_SET` · full `IP_SET_*` family (UFW / fail2ban) |
+| Storage | `OVERLAY_FS` (+ redirect/index/xino/metacopy) · `TMPFS_POSIX_ACL` · `TMPFS_XATTR` (NixOS rootfs) |
+| Process limits | `CGROUP_PIDS` (`--pids-limit`) — enabled in [setup-configs.sh](../scripts/setup-configs.sh) |
+
+`SYSVIPC`/`POSIX_MQUEUE` move `struct task_struct`, which would break the KMI — so the build applies upstream's **kABI padding patch** (`ANDROID_KABI_USE` on the reserved slots) before enabling them, and the build **fails** if that patch does not apply. Shipping the configs without the padding is a bootloop, not a warning.
+
+`--cpus` needs `CONFIG_CFS_BANDWIDTH`, which resizes scheduler structs with no padding trick available; it stays off on purpose. Memory limits work — `MEMCG` is already on in GKI.
 
 > [!CAUTION]
-> Droidspaces isn't compatible with SuSFS. Disable SuSFS before using Droidspaces.
+> DroidSpaces and SUSFS fight over the same mount table: SUSFS `SUS_MOUNT` / `try_umount` hides and unmounts the bind + overlay mounts a container needs. If a container misbehaves, disable SuSFS (or the SUS_MOUNT feature in the SuSFS manager) before reporting it.
 
 Confirmed working on sapphire — see [community-supported devices](https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/community-supported-devices.md).
 
@@ -82,15 +96,20 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 
 ### Stable (`patches/common/`)
 
-Stable patches applied to all variants (GKI, CLO, GKI-Compat). See [`patches/common/`](../patches/common/) for the full list.
+Applied to every build. See [`patches/common/`](../patches/common/) for the list, and the file name as the label in the build log.
 
-### GKI-Compat only (`patches/gki-compat-only/`)
+A local patch that no longer applies is reported at the end of the "Apply patches" step:
 
-Compatibility shims on top of `patches/common/` to keep the GKI-Compat tree (pinned to 5.15.123) building clean. See [`patches/gki-compat-only/`](../patches/gki-compat-only/).
+```
+⚠️  1 local patch(es) did not apply — review before shipping:
+     • 0005-zram-read-priority-fix
+```
+
+The build continues (the kernel is still bootable), but that feature is missing from the result, so treat it as a to-do, not noise.
 
 ### Testing (`patches/testing/`)
 
-Patches under evaluation — may be unstable or variant-specific. See [`patches/testing/`](../patches/testing/).
+Patches under evaluation — only applied when the build is started with `build_type: testing`. See [`patches/testing/`](../patches/testing/).
 
 ---
 

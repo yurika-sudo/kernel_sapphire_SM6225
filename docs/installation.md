@@ -5,12 +5,13 @@
 >
 > Not strictly mandatory, but if you're unsure: from recovery, delete the `/adb` folder (path: `/data/adb`) before flashing, particularly if you're coming from a different kernel or root setup.
 
-## Which variant do I flash?
+## What you need
 
-- **On an Android 13 / 14 ROM →** use a **GKI-Compat** variant.
-- **On an Android 15+ ROM →** use the main **Seiran-GKI** (or **CLO**) variant.
+1. **The kernel ZIP** — `AK3-Seiran-GKI-<version>-<yyyy-mm>.zip` (AnyKernel3, flashes `Image` only).
+2. **`seiran-core.zip`** — KSU/Magisk module with `zram.ko` + `zsmalloc.ko` and the governor tweaks. Without it ZRAM does not exist. Flash it *after* the kernel.
+3. **The KernelSU-Next manager APK** whose version code matches the kernel — the release body links the exact CI build.
 
-See [variants.md](./variants.md) for the full list and why GKI-Compat is the one to pick on older ROMs.
+There is one kernel build; nothing to choose. [variants.md](./variants.md) covers why, and how to get the older-ABI build back if you are on an Android 13/14 ROM.
 
 ## Flashing
 
@@ -24,7 +25,7 @@ Pick whichever fits your setup:
 
 **B. Any flasher app** — Any kernel flasher, it's simple, just follow the menu according to the app you are using.
 
-**C. KSU-Next / SukiSU manager's built-in flash feature** — open the manager app → flash kernel → select the AnyKernel3 ZIP. No recovery needed.
+**C. KernelSU-Next manager's built-in flash feature** — open the manager app → Flash Recovery ZIP / flash kernel → pick the AnyKernel3 ZIP. No recovery needed.
 
 > Using **Magisk**? Re-patch your boot image after flashing.
 
@@ -53,26 +54,18 @@ fastboot flash boot path-to-boot.img
 
 ## Known Issues
 
-**KSU / SukiSU manager shows "Failed to update App Profile"**
-Affects older stable manager builds. Update to the latest CI manager build — [get it here](https://t.me/tmplogchat/310).
+**Manager shows "Failed to update App Profile" / root is never granted**
+Almost always a manager-to-kernel version mismatch. See below.
 
 ## Manager
 
-The kernel embeds a specific KSU version code (shown in release notes, e.g. `33169`).
-Your manager APK must match that code — a mismatch means apps can't be granted root.
+The kernel embeds a KernelSU version code — `30000 + <commit count>`, e.g. `32906` — and it is printed in every release body. Your manager APK has to be the build for that code; a *newer* manager against this kernel is exactly what produces `Failed to update App Profile`.
 
-**Use the CI Build links in the release notes, not the stable release.**
+**Use the CI link in the release body, not the stable release.** The link points at the KernelSU-Next `Build Manager CI` run for the commit this kernel's version code derives from, and the two APKs from that run (`KernelSU-Next` release / spoofed) are attached to the release as well.
 
-- If it shows `Failed to update App Profile` → wrong manager version.
-- Correct manager build is always linked directly in the release body.
+If you only see a raw artifact list: download the `manager` ZIP and install the `*-arm64-v8a-release.apk` inside (the `universal` one works too).
 
-> This applies to both KSU-Next and SukiSU variants, on Android 13, 14, and 15+.
-
-### Finding the Manager in CI Artifacts
-
-Click the CI Build link → download the artifact ZIP → look for the file named `manager` or `manager-spoofed` (depending on variant). Unzip and install the APK.
-
-If you see "absolute gibberish" on the artifacts page: you're looking at the raw artifact list. Just grab any ZIP and extract it — the `manager` APK is inside.
+> KernelSU-Next's CI artifacts expire after 90 days. If the linked run has expired, the newest successful `Build Manager CI` run on `dev` is the next best thing — and if the version codes differ, flash the kernel build that matches instead.
 
 ---
 
