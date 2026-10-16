@@ -56,10 +56,10 @@ The kernel ZIP alone is not enough. `CONFIG_ZRAM=m` means `zram.ko`/`zsmalloc.ko
 - **Telegram:** [t.me/tmplogchat](https://t.me/tmplogchat)
 
 **Install:** requires a module manager (KSU/Magisk). Install from the Modules tab — do not flash from recovery.
-- **NoKSU:** root first via Magisk or KSU-Next/SukiSU-Ultra, then install from there.
+- **NoKSU:** root first via Magisk or KSU-Next/BakaSU, then install from there.
 
 > [!NOTE]
-> Universal — works across all variants (GKI × KSU-Next/SukiSU/NoKSU).
+> Universal — works across all variants (GKI × KSU-Next/BakaSU/NoKSU).
 
 ---
 

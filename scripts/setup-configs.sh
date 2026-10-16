@@ -136,7 +136,7 @@ CONFIG_KSU_SUSFS_SUS_SU=y
 CONFIG_BBG=y
 EOF
 
-# SukiSU
+# BakaSU
 elif [ "$KSU_TYPE" = "rsku" ]; then
 cat >> "$CF" << 'EOF'
 CONFIG_KSU=y

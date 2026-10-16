@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup-toolchain.sh — Neutron Clang for GKI, ZyC-14 for CLO
+# setup-toolchain.sh — Neutron Clang for GKI
 # env: WORK_DIR, KERNEL_SRC, SOURCE_TYPE
 set -e
 
@@ -10,9 +10,9 @@ set -e
 if [[ "$SOURCE_TYPE" == gki* ]]; then
   CLANG_VER="06092026"
   CLANG_URL="https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/${CLANG_VER}/neutron-clang-${CLANG_VER}.tar.zst"
- else
-  CLANG_VER="ZyC-Clang-14.0.6"
-  CLANG_URL="https://github.com/yurika-sudo/clang-repo/releases/download/clang-1/${CLANG_VER}.tar.gz"
+else
+  echo "[ERROR] Unsupported SOURCE_TYPE: $SOURCE_TYPE" >&2
+  exit 1
 fi
 
 CLANG_DIR="${WORK_DIR}/prebuilts/clang/host/linux-x86/clang-${CLANG_VER}"

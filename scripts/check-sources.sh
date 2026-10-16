@@ -17,10 +17,10 @@ KSUN_TAG=$(_curl "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/tags"
 [ -z "$KSUN_TAG" ] && KSUN_TAG="unknown"
 echo "KSU-Next     : $KSUN_TAG"
 
-RSKU_TAG=$(_curl "https://api.github.com/repos/ReSukiSU/ReSukiSU/tags" \
+RSKU_TAG=$(_curl "https://api.github.com/repos/Baka-SU/BakaSU/tags" \
   | jq -r 'if type=="array" and length>0 then .[0].name else "unknown" end' 2>/dev/null || echo "unknown")
 [ -z "$RSKU_TAG" ] && RSKU_TAG="unknown"
-echo "ReSukiSU     : $RSKU_TAG"
+echo "BakaSU     : $RSKU_TAG"
 
 SUSFS_TAG=$(_curl "https://api.github.com/repos/sidex15/susfs4ksu-module/tags" \
   | jq -r 'if type=="array" and length>0 then .[0].name else "unknown" end' 2>/dev/null \
@@ -81,9 +81,9 @@ elif [ "$KSUN_TAG" != "$PIN_KSUN" ]; then
 fi
 
 if [ "$RSKU_TAG" = "unknown" ]; then
-  FAILED+=("ReSukiSU"); RSKU_TAG="$PIN_RSKU"
+  FAILED+=("BakaSU"); RSKU_TAG="$PIN_RSKU"
 elif [ "$RSKU_TAG" != "$PIN_RSKU" ]; then
-  UPDATES+=("ReSukiSU: ${PIN_RSKU} → ${RSKU_TAG}")
+  UPDATES+=("BakaSU: ${PIN_RSKU} → ${RSKU_TAG}")
   RSKU_CHANGED="true"
 fi
 

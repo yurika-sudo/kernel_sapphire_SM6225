@@ -24,7 +24,7 @@ Pick whichever fits your setup:
 
 **B. Any flasher app** — Any kernel flasher, it's simple, just follow the menu according to the app you are using.
 
-**C. KSU-Next / SukiSU manager's built-in flash feature** — open the manager app → flash kernel → select the AnyKernel3 ZIP. No recovery needed.
+**C. KSU-Next / BakaSU manager's built-in flash feature** — open the manager app → flash kernel → select the AnyKernel3 ZIP. No recovery needed.
 
 > Using **Magisk**? Re-patch your boot image after flashing.
 
@@ -53,7 +53,7 @@ fastboot flash boot path-to-boot.img
 
 ## Known Issues
 
-**KSU / SukiSU manager shows "Failed to update App Profile"**
+**KSU / BakaSU manager shows "Failed to update App Profile"**
 Affects older stable manager builds. Update to the latest CI manager build — [get it here](https://t.me/tmplogchat/310).
 
 ## Manager
@@ -66,7 +66,7 @@ Your manager APK must match that code — a mismatch means apps can't be granted
 - If it shows `Failed to update App Profile` → wrong manager version.
 - Correct manager build is always linked directly in the release body.
 
-> This applies to both KSU-Next and SukiSU variants, on Android 13, 14, and 15+.
+> This applies to both KSU-Next and BakaSU variants, on Android 13, 14, and 15+.
 
 ### Finding the Manager in CI Artifacts
 

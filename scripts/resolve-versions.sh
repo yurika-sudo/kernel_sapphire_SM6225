@@ -87,7 +87,7 @@ _rsku_find_run() {
   for page in 1 2 3; do
     local runs
     runs=$(curl -sf --max-time 15 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-      "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=20&page=${page}")
+      "https://api.github.com/repos/Baka-SU/BakaSU/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=20&page=${page}")
     run_id=$(echo "$runs" | python3 -c "
 import sys,json
 d=json.load(sys.stdin)
@@ -103,20 +103,20 @@ for r in d.get("workflow_runs",[]):
   done
   # Fallback: latest run
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-    "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
+    "https://api.github.com/repos/Baka-SU/BakaSU/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
     | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["workflow_runs"][0]["id"] if d["workflow_runs"] else "")' 2>/dev/null | tr -d "[:space:]"
 }
 _sr=$(_rsku_find_run "$RSKU_SHA")
-RSKU_MANAGER_URL="${_sr:+https://github.com/ReSukiSU/ReSukiSU/actions/runs/${_sr}}"
-RSKU_MANAGER_URL="${RSKU_MANAGER_URL:-https://github.com/ReSukiSU/ReSukiSU/actions/workflows/build-manager.yml}"
+RSKU_MANAGER_URL="${_sr:+https://github.com/Baka-SU/BakaSU/actions/runs/${_sr}}"
+RSKU_MANAGER_URL="${RSKU_MANAGER_URL:-https://github.com/Baka-SU/BakaSU/actions/workflows/build-manager.yml}"
 RSKU_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/runs/${_sr}/artifacts" \
+  "https://api.github.com/repos/Baka-SU/BakaSU/actions/runs/${_sr}/artifacts" \
   | jq -r '.artifacts[] | select(.name == "Manager-release") | select(.expired == false) | .id // empty' | head -1 || true)
 
 RSKU_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/ReSukiSU/ReSukiSU/actions/runs/${_sr}/artifacts" \
+  "https://api.github.com/repos/Baka-SU/BakaSU/actions/runs/${_sr}/artifacts" \
   | jq -r '.artifacts[] | select(.name == "Spoofed-Manager-release") | select(.expired == false) | .id // empty' | head -1 || true)
 
 DATE_TAG=$(date +'%Y%m%d')
@@ -174,5 +174,5 @@ else
 fi
 echo "  SUSFS   : $SUSFS_VERSION"
 echo "  KSU-Next: $KSUN_TAG"
-echo "  ReSukiSU: $RSKU_TAG"
+echo "  BakaSU: $RSKU_TAG"
 echo "  Tag     : $RELEASE_TAG"

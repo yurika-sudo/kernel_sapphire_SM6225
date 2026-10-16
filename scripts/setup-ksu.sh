@@ -18,7 +18,7 @@ git config --global advice.addEmbeddedRepo false
 cd "$KERNEL_DIR"
 
 _link_ksu_driver() {
-  local DIR="$1"   # KernelSU-Next or SukiSU-Ultra
+  local DIR="$1"   # KernelSU-Next or BakaSU
   [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
     ln -sf "../${DIR}" drivers/kernelsu
   grep -q "obj-.*kernelsu" drivers/Makefile || \
@@ -135,7 +135,7 @@ EOF
 }
 
 _fix_ksu_umount_missing_set() {
-  # SukiSU-Ultra `builtin` sync commit d13e8a75 (2026-09-01, "Sync with the
+  # BakaSU — builtin SUSFS integration
   # official KernelSU main repo") dropped kernel_umount_feature_set()'s
   # definition but left the struct reference to it -- breaks compile.
   # Still unfixed on builtin HEAD as of 2026-09-04. Self-deactivates once
@@ -171,7 +171,7 @@ EOF
 
 _fix_susfs_exec_suki() {
   # ShirkNeko SUSFS patch injects ksu_handle_execveat / ksu_install_su_fd
-  # hooks into fs/exec.c, but SukiSU-Ultra uses a different hook mechanism
+  # hooks into fs/exec.c — not applicable to BakaSU (no exec.c injection)
   # (syscall_event_bridge.c) and never ships these symbols. Strip all
   # CONFIG_KSU_SUSFS blocks from exec.c except the susfs_def.h include.
   # Self-deactivates if exec.c no longer has the markers.
@@ -197,7 +197,7 @@ txt = re.sub(
     '', txt, count=1, flags=re.DOTALL)
 
 open(path, 'w').write(txt)
-print("[OK] exec.c: stripped SukiSU-incompatible SUSFS hooks")
+print("[OK] exec.c: stripped exec.c SUSFS hooks")
 PYEOF
 }
 
@@ -285,16 +285,16 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   _link_ksu_driver "KernelSU-Next"
   rm -rf susfs4ksu
 
-# SukiSU-Ultra
+# BakaSU
 elif [ "$KSU_TYPE" = "rsku" ]; then
-  rm -rf ./KernelSU ./drivers/kernelsu ./ReSukiSU
-  git clone --depth=1 https://github.com/ReSukiSU/ReSukiSU.git
-  [ -d "ReSukiSU" ] || { echo "[ERROR] ReSukiSU not found"; exit 1; }
+  rm -rf ./KernelSU ./drivers/kernelsu ./BakaSU
+  git clone --depth=1 https://github.com/Baka-SU/BakaSU.git
+  [ -d "BakaSU" ] || { echo "[ERROR] BakaSU not found"; exit 1; }
 
-  cd ReSukiSU
+  cd BakaSU
   git fetch --tags 2>/dev/null || true
   git fetch --deepen=50 2>/dev/null || true
-  _checkout_pin "." "${RSKU_TAG_PIN:-}" "ReSukiSU"
+  _checkout_pin "." "${RSKU_TAG_PIN:-}" "BakaSU"
   RSKU_SHA=$(git rev-parse HEAD)
   # 1. Exact match on HEAD (HEAD is directly tagged).
   # 2. Nearest ancestor tag via describe (HEAD is ahead of last tag — most common case
@@ -302,7 +302,7 @@ elif [ "$KSU_TYPE" = "rsku" ]; then
   # 3. SHA-exact match via ls-remote as last resort.
   RSKU_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null | tr -d '[:space:]')
   RSKU_TAG=${RSKU_TAG:-$(git describe --tags --abbrev=0 HEAD 2>/dev/null | tr -d '[:space:]')}
-  RSKU_TAG=${RSKU_TAG:-$(git ls-remote --tags https://github.com/ReSukiSU/ReSukiSU.git 2>/dev/null | awk -v sha="$RSKU_SHA" '/\^\{\}$/ {next} $0 ~ sha {match($2,/refs\/tags\/(.+)/,a); print a[1]}' | tail -1)}
+  RSKU_TAG=${RSKU_TAG:-$(git ls-remote --tags https://github.com/Baka-SU/BakaSU.git 2>/dev/null | awk -v sha="$RSKU_SHA" '/\^\{\}$/ {next} $0 ~ sha {match($2,/refs\/tags\/(.+)/,a); print a[1]}' | tail -1)}
   RSKU_TAG=${RSKU_TAG:-unknown}
   echo "RSKU_TAG=$RSKU_TAG"    >> "${GITHUB_ENV:-/dev/null}"
   echo "RSKU_SHA=$RSKU_SHA"    >> "${GITHUB_ENV:-/dev/null}"
@@ -313,7 +313,7 @@ elif [ "$KSU_TYPE" = "rsku" ]; then
   echo "${_rsku_ver:-}" > "$WORK_DIR/rsku_version.txt"
   cd ..
 
-  # SUSFS — simonpunk main branch (ReSukiSU already ships SUSFS built-in)
+  # SUSFS — simonpunk main branch (BakaSU already ships SUSFS built-in)
   git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
   SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
   echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
@@ -329,11 +329,11 @@ elif [ "$KSU_TYPE" = "rsku" ]; then
   _pin_susfs_lvc
   _fix_susfs_fake_state
 
-  _inject_susfs_init "ReSukiSU/kernel/ksu.c"
-  # ReSukiSU keeps its kernel integration under ReSukiSU/kernel/ (not root),
+  _inject_susfs_init "BakaSU/kernel/ksu.c"
+  # BakaSU keeps its kernel integration under BakaSU/kernel/ (not root),
   # so link that subdirectory directly instead of using _link_ksu_driver.
   [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
-    ln -sf "../ReSukiSU/kernel" drivers/kernelsu
+    ln -sf "../BakaSU/kernel" drivers/kernelsu
   grep -q "obj-.*kernelsu" drivers/Makefile || \
     echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
   grep -q "kernelsu/Kconfig" drivers/Kconfig || \
