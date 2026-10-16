@@ -241,6 +241,7 @@ _pin_ksun_lvc() {
   _pin_lvc_after "KernelSU-Next/kernel/policy/app_profile.c" '#include "hook/tp_marker.h"' || return 1
   _pin_lvc_after "KernelSU-Next/kernel/selinux/rules.c" '#include "xfrm.h"' || return 1
   _pin_lvc_after "KernelSU-Next/kernel/selinux/sepolicy.c" '#include "ss/symtab.h"' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/compat/samsung_kdp.c" '#include <linux/version.h>' || return 1
 }
 
 if [ "$KSU_TYPE" = "ksun" ]; then
