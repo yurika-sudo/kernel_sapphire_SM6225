@@ -105,7 +105,7 @@ index 000000000..4d58e2e0f
 +
 +/* Cluster identification by arch capacity */
 +#define RFX_LITTLE_CAP_THRESHOLD	614
-+#define RFX_PRIME_CAP_THRESHOLD		1000
++#define RFX_PRIME_CAP_THRESHOLD		1025	/* SM6225 gold cap=1024; must be > 1024 to avoid false prime detection on 2-tier SoC */
 +
 +/* Daily evaluation rate limits (us) */
 +#define RFX_LITTLE_RATE_US		3000
