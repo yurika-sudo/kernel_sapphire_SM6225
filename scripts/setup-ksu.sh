@@ -234,7 +234,14 @@ _checkout_pin() {
 _pin_lvc_after() {
   local F="$1" ANCHOR="$2"
   [ -f "$F" ] || { echo "[FAIL] _pin_lvc_after: $F not found"; return 1; }
-  grep -q "sapphire: pin LINUX_VERSION_CODE" "$F" && return 0
+  if [ "$(grep -cFx -- "$ANCHOR" "$F")" != 1 ]; then
+    echo "[FAIL] _pin_lvc_after: expected exactly 1 '$ANCHOR' in $F"
+    return 1
+  fi
+  # skip if pin already exists immediately after this specific anchor
+  if grep -A1 -Fx -- "$ANCHOR" "$F" | grep -q "sapphire: pin LINUX_VERSION_CODE"; then
+    return 0
+  fi
   if [ "$(grep -cFx -- "$ANCHOR" "$F")" != 1 ]; then
     echo "[FAIL] _pin_lvc_after: expected exactly 1 '$ANCHOR' in $F"
     return 1
@@ -244,23 +251,36 @@ _pin_lvc_after() {
   echo "[OK] $F: LINUX_VERSION_CODE pinned to 5.15.220"
 }
 
+_pin_lvc_before() {
+  local F="$1" ANCHOR="$2"
+  [ -f "$F" ] || { echo "[FAIL] _pin_lvc_before: $F not found"; return 1; }
+  if [ "$(grep -cF -- "$ANCHOR" "$F")" != 1 ]; then
+    echo "[FAIL] _pin_lvc_before: expected exactly 1 '$ANCHOR' in $F"
+    return 1
+  fi
+  # skip if pin already exists immediately before this specific anchor
+  if grep -B1 -F -- "$ANCHOR" "$F" | grep -q "sapphire: pin LINUX_VERSION_CODE"; then
+    return 0
+  fi
+  awk -v a="$ANCHOR" '{ if ($0 == a) { print "/* sapphire: pin LINUX_VERSION_CODE to real 5.15.220 (spoofed to 6.12) */"; print "#undef LINUX_VERSION_CODE"; print "#define LINUX_VERSION_CODE KERNEL_VERSION(5, 15, 220)" } print }' "$F" > "$F.sapphire.tmp" \
+    && cat "$F.sapphire.tmp" > "$F" && rm -f "$F.sapphire.tmp"
+  echo "[OK] $F: LINUX_VERSION_CODE pinned before '$ANCHOR'"
+}
+
 _pin_suki_lvc() {
-  # version.h has no include guard: any later include re-defines
-  # LINUX_VERSION_CODE (spoofed 6.12) and wipes an earlier pin.
-  # So anchor on the LAST include of each file, not the first.
-  _pin_lvc_after "SukiSU-Ultra/kernel/hook/lsm_hook.h" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/hook/lsm_hook.c" '#include <linux/compiler.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/hook/patch_memory.h" '#include "linux/version.h"' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/infra/file_wrapper.c" '#include "infra/file_wrapper.h"' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/infra/seccomp_cache.c" '#include "infra/seccomp_cache.h"' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/infra/symbol_resolver.c" '#include "infra/symbol_resolver.h"' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/manager/throne_tracker.c" '#include "manager/throne_tracker.h"' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/policy/app_profile.c" '#include "hook/tp_marker.h"' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/selinux/rules.c" '#include "xfrm.h"' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/feature/selinux_hide.c" '#include "hook/lsm_hook.h"' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/manager/apk_sign.c" '#include <crypto/hash.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/manager/pkg_observer.c" '#include "manager/throne_tracker.h"' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/selinux/sepolicy.c" '#include "ss/symtab.h"' || return 1
+  # builtin branch is a unity build: all fragments included into ksu.c.
+  # version.h is pulled once in kernel_includes.h (line 72) and nowhere
+  # else in ksu.c, so a single anchor there covers the entire build.
+  # pkg_observer_compat.h pulls version.h independently at line 3.
+  _pin_lvc_after "SukiSU-Ultra/kernel/kernel_includes.h" '#include "arch.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/arch.h" '#include <linux/version.h>' || return 1
+  _pin_lvc_after "include/linux/susfs.h" '#include <linux/version.h>' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/kpm/kpm.c" '#include <linux/kallsyms.h>' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/kpm/super_access.c" '#include <linux/kallsyms.h>' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/kpm/compact.c" '#include <linux/set_memory.h>' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/kpm/super_access.c" '#include <linux/set_memory.h>' || return 1
+  _pin_lvc_before "SukiSU-Ultra/kernel/ksu.c" '// unity build' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/manager/pkg_observer_compat.h" '#include <linux/version.h>' || return 1
 }
 
 _pin_ksun_lvc() {
@@ -326,7 +346,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
 elif [ "$KSU_TYPE" = "suki" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Ultra
 
-  git clone --depth=1 --branch v4.2.1 \
+  git clone --depth=1 --branch builtin \
     https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
   [ -d "SukiSU-Ultra" ] || { echo "[ERROR] SukiSU-Ultra not found"; exit 1; }
 
@@ -359,10 +379,10 @@ elif [ "$KSU_TYPE" = "suki" ]; then
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
   _pin_susfs_lvc
-  _fix_susfs_fake_state
+  # builtin defines fake_state itself (selinux_hide.c) — skip _fix_susfs_fake_state
+  # builtin ksu.c already calls susfs_init() at line ~136 — skip _inject_susfs_init
 
   _pin_suki_lvc
-  _inject_susfs_init "SukiSU-Ultra/kernel/core/init.c"
   _link_ksu_driver "SukiSU-Ultra/kernel"
   rm -rf susfs4ksu
 
