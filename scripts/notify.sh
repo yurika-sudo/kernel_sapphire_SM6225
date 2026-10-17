@@ -119,6 +119,41 @@ elif [ "$MODE" = "failure" ]; then
   _tg_msg "$MSG"
 
 # ---------------------------------------------------------------------------
+# compat-check — called from build-compat-check.yml notify job
+# ---------------------------------------------------------------------------
+elif [ "$MODE" = "compat-check" ]; then
+  : "${RUN_URL:?}" "${RUN_NUMBER:?}" "${CHECK_RESULT:?}"
+
+  DATE_STR=$(date -u +'%Y-%m-%d')
+
+  if [ "$CHECK_RESULT" = "success" ]; then
+    MSG="<b>[compat-check] Seiran Kernel</b>%0A%0A"
+    MSG="${MSG}Run: #${RUN_NUMBER}%0A"
+    MSG="${MSG}Branch: ${GITHUB_REF_NAME:-unknown}%0A"
+    MSG="${MSG}Actor: ${GITHUB_ACTOR:-yurika-sudo}%0A"
+    MSG="${MSG}Date: ${DATE_STR}%0A"
+    MSG="${MSG}%0A"
+    MSG="${MSG}GKI-KSU-Next: passed%0A"
+    MSG="${MSG}GKI-SukiSU: passed%0A"
+    MSG="${MSG}%0A"
+    MSG="${MSG}Safe to dispatch AIO build.%0A"
+    MSG="${MSG}%0A"
+    MSG="${MSG}<a href=\'${RUN_URL}\'>Logs</a>"
+  else
+    MSG="<b>[compat-check] Build failed</b>%0A%0A"
+    MSG="${MSG}Run: #${RUN_NUMBER}%0A"
+    MSG="${MSG}Branch: ${GITHUB_REF_NAME:-unknown}%0A"
+    MSG="${MSG}Actor: ${GITHUB_ACTOR:-yurika-sudo}%0A"
+    MSG="${MSG}Date: ${DATE_STR}%0A"
+    MSG="${MSG}%0A"
+    MSG="${MSG}One or more variants failed.%0A"
+    MSG="${MSG}Check upstream KSU / SUSFS for breaking changes.%0A"
+    MSG="${MSG}%0A"
+    MSG="${MSG}<a href=\'${RUN_URL}\'>Logs</a>"
+  fi
+  _tg_msg "$MSG"
+  exit 0
+
 # check — called from check-updates.yml notify job
 # ---------------------------------------------------------------------------
 elif [ "$MODE" = "check" ]; then

@@ -1,0 +1,57 @@
+name: "Compat Check"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions:  read
+
+jobs:
+
+  check:
+    name: "${{ matrix.variant.name }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - name:     "GKI-KSU-Next"
+            source:   "gki"
+            ksu:      "ksun"
+            artifact: "compat-check-ksun"
+          - name:     "GKI-SukiSU"
+            source:   "gki"
+            ksu:      "suki"
+            artifact: "compat-check-suki"
+    uses: ./.github/workflows/build-kernel.yml
+    with:
+      variant_name:  ${{ matrix.variant.name }}
+      source_type:   ${{ matrix.variant.source }}
+      ksu_type:      ${{ matrix.variant.ksu }}
+      zip_prefix:    "CompatCheck"
+      artifact_name: ${{ matrix.variant.artifact }}
+      defconfig:     "gki_defconfig"
+      build_type:    "testing"
+    secrets: inherit
+
+  notify:
+    name: "Notify"
+    runs-on: ubuntu-latest
+    needs: [check]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 1
+      - name: "Telegram"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_TOPIC_ID:  ${{ secrets.TELEGRAM_TOPIC_ID }}
+          RUN_URL:    "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_NUMBER: "${{ github.run_number }}"
+          CHECK_RESULT: ${{ needs.check.result }}
+        run: bash scripts/notify.sh compat-check
