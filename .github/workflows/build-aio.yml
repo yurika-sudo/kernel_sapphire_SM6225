@@ -83,11 +83,11 @@ jobs:
             artifact:  "gki-ksun"
             defconfig: "gki_defconfig"
 
-          - name:      "GKI-ReSukiSU"
+          - name:      "GKI-SukiSU-Ultra"
             source:    "gki"
-            ksu:       "rsku"
-            prefix:    "GKI_ReSukiSU"
-            artifact:  "gki-rsku"
+            ksu:       "suki"
+            prefix:    "GKI_SukiSU-Ultra"
+            artifact:  "gki-suki"
             defconfig: "gki_defconfig"
 
           - name:      "GKI-NoKSU"

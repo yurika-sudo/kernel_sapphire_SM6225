@@ -27,20 +27,20 @@ SUSFS_VERSION="${_susfs_raw:-v1.5.2+_R27}"
 
 _wf=$(find ./artifacts -name "ksun_tag.txt" | head -1)
 KSUN_TAG=$([ -f "$_wf" ] && cat "$_wf" | tr -d '[:space:]' || echo "unknown")
-_sf=$(find ./artifacts -name "rsku_tag.txt" | head -1)
-RSKU_TAG=$([ -f "$_sf" ] && cat "$_sf" | tr -d '[:space:]' || echo "unknown")
+_sf=$(find ./artifacts -name "suki_tag.txt" | head -1)
+SUKI_TAG=$([ -f "$_sf" ] && cat "$_sf" | tr -d '[:space:]' || echo "unknown")
 # Version codes (for manager matching)
 _kv=$(find ./artifacts -name "ksun_version.txt" | head -1)
 KSUN_VERSION=$([ -f "$_kv" ] && cat "$_kv" | tr -d '[:space:]' || echo "")
 
-_sv=$(find ./artifacts -name "rsku_version.txt" | head -1)
-RSKU_VERSION=$([ -f "$_sv" ] && cat "$_sv" | tr -d '[:space:]' || echo "")
+_sv=$(find ./artifacts -name "suki_version.txt" | head -1)
+SUKI_VERSION=$([ -f "$_sv" ] && cat "$_sv" | tr -d '[:space:]' || echo "")
 
 # Commit SHAs recorded at build time — used to match exact manager CI run
 _ks=$(find ./artifacts -name "ksun_sha.txt" | head -1)
 KSUN_SHA=$([ -f "$_ks" ] && cat "$_ks" | tr -d '[:space:]' || echo "")
-_rs=$(find ./artifacts -name "rsku_sha.txt" | head -1)
-RSKU_SHA=$([ -f "$_rs" ] && cat "$_rs" | tr -d '[:space:]' || echo "")
+_rs=$(find ./artifacts -name "suki_sha.txt" | head -1)
+SUKI_SHA=$([ -f "$_rs" ] && cat "$_rs" | tr -d '[:space:]' || echo "")
 
 # Find manager CI run whose head_sha matches the kernel driver SHA recorded at build time.
 # Falls back to latest successful run if no SHA match found (e.g. testing build or old artifact).
@@ -82,12 +82,12 @@ KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_kr" ] && \
   "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}/artifacts" \
   | jq -r '.artifacts[] | select(.name == "manager-spoofed") | .id // empty' | head -1 || true)  
 
-_rsku_find_run() {
+_suki_find_run() {
   local sha="$1" page run_id
   for page in 1 2 3; do
     local runs
     runs=$(curl -sf --max-time 15 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-      "https://api.github.com/repos/Baka-SU/BakaSU/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=20&page=${page}")
+      "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build.yml/runs?status=success&branch=main&per_page=20&page=${page}")
     run_id=$(echo "$runs" | python3 -c "
 import sys,json
 d=json.load(sys.stdin)
@@ -103,21 +103,21 @@ for r in d.get("workflow_runs",[]):
   done
   # Fallback: latest run
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-    "https://api.github.com/repos/Baka-SU/BakaSU/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1" \
+    "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build.yml/runs?status=success&branch=main&per_page=1" \
     | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["workflow_runs"][0]["id"] if d["workflow_runs"] else "")' 2>/dev/null | tr -d "[:space:]"
 }
-_sr=$(_rsku_find_run "$RSKU_SHA")
-RSKU_MANAGER_URL="${_sr:+https://github.com/Baka-SU/BakaSU/actions/runs/${_sr}}"
-RSKU_MANAGER_URL="${RSKU_MANAGER_URL:-https://github.com/Baka-SU/BakaSU/actions/workflows/build-manager.yml}"
-RSKU_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \
+_sr=$(_suki_find_run "$SUKI_SHA")
+SUKI_MANAGER_URL="${_sr:+https://github.com/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}}"
+SUKI_MANAGER_URL="${SUKI_MANAGER_URL:-https://github.com/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build.yml}"
+SUKI_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/Baka-SU/BakaSU/actions/runs/${_sr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name == "Manager-release") | select(.expired == false) | .id // empty' | head -1 || true)
+  "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}/artifacts" \
+  | jq -r '.artifacts[] | select(.name == "manager") | select(.expired == false) | .id // empty' | head -1 || true)
 
-RSKU_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_sr" ] && \
+SUKI_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/Baka-SU/BakaSU/actions/runs/${_sr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name == "Spoofed-Manager-release") | select(.expired == false) | .id // empty' | head -1 || true)
+  "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}/artifacts" \
+  | jq -r '.artifacts[] | select(.name == "manager-spoofed") | select(.expired == false) | .id // empty' | head -1 || true)
 
 DATE_TAG=$(date +'%Y%m%d')
 
@@ -144,20 +144,20 @@ RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${ENCODED_TAG}
 
 {
   echo "KSUN_VERSION=$KSUN_VERSION"
-  echo "RSKU_VERSION=$RSKU_VERSION"
+  echo "SUKI_VERSION=$SUKI_VERSION"
   echo "KSUN_MANAGER_URL=$KSUN_MANAGER_URL"
-  echo "RSKU_MANAGER_URL=$RSKU_MANAGER_URL"
+  echo "SUKI_MANAGER_URL=$SUKI_MANAGER_URL"
   echo "KSUN_MANAGER_ARTIFACT_ID=$KSUN_MANAGER_ARTIFACT_ID"
   echo "KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$KSUN_MANAGER_SPOOFED_ARTIFACT_ID"
-  echo "RSKU_MANAGER_ARTIFACT_ID=$RSKU_MANAGER_ARTIFACT_ID"
-  echo "RSKU_MANAGER_SPOOFED_ARTIFACT_ID=$RSKU_MANAGER_SPOOFED_ARTIFACT_ID"
+  echo "SUKI_MANAGER_ARTIFACT_ID=$SUKI_MANAGER_ARTIFACT_ID"
+  echo "SUKI_MANAGER_SPOOFED_ARTIFACT_ID=$SUKI_MANAGER_SPOOFED_ARTIFACT_ID"
   echo "KERNEL_VERSION=$KERNEL_VERSION"
   echo "KERNEL_UNAME=$KERNEL_UNAME"
   echo "KERNEL_VERSION_GKI=$KERNEL_VERSION_GKI"
   echo "KERNEL_UNAME_GKI=$KERNEL_UNAME_GKI"
   echo "SUSFS_VERSION=$SUSFS_VERSION"
   echo "KSUN_TAG=$KSUN_TAG"
-  echo "RSKU_TAG=$RSKU_TAG"
+  echo "SUKI_TAG=$SUKI_TAG"
   echo "DATE_TAG=$DATE_TAG"
   echo "RELEASE_TAG=$RELEASE_TAG"
   echo "RELEASE_NAME=$RELEASE_NAME"
@@ -174,5 +174,5 @@ else
 fi
 echo "  SUSFS   : $SUSFS_VERSION"
 echo "  KSU-Next: $KSUN_TAG"
-echo "  BakaSU: $RSKU_TAG"
+echo "  SukiSU-Ultra: $SUKI_TAG"
 echo "  Tag     : $RELEASE_TAG"

@@ -38,7 +38,6 @@ _fetch() {
 
   local apk
   # Prefer arm64-v8a; fall back to universal; last resort: whatever find gives first.
-  # BakaSU artifact ships 4 ABIs — without this filter head -1 may pick x86_64.
   apk=$(find "${tmp}" -name "*arm64-v8a*.apk" | head -1)
   [ -z "$apk" ] && apk=$(find "${tmp}" -name "*universal*.apk" | head -1)
   [ -z "$apk" ] && apk=$(find "${tmp}" -name "*.apk" | head -1)
@@ -46,33 +45,6 @@ _fetch() {
 
   local apk_name
   apk_name=$(basename "$apk")
-
-  # BakaSU's manager artifact ships with a bare "Manager.apk" /
-  # "Spoofed-Manager.apk" — no version/commit baked in like KSUN's does.
-  # Prefix so it's identifiable in the release asset list at a glance.
-  case "$(echo "$apk_name" | tr '[:upper:]' '[:lower:]')" in
-    manager.apk)
-      _ver="${RSKU_VERSION:-}"
-      apk_name="BakaSU-Manager${_ver:+-${_ver}}.apk"
-      ;;
-    spoofed-manager.apk)
-      _ver="${RSKU_VERSION:-}"
-      apk_name="BakaSU-Spoofed-Manager${_ver:+-${_ver}}.apk"
-      ;;
-  esac
-
-  # BakaSU ships identical filenames in both Manager-release and
-  # Spoofed-Manager-release artifacts (e.g. both contain arm64-v8a-release.apk).
-  # Disambiguate by prefixing spoofed labels so collision guard never fires.
-  case "$label" in
-    *-spoofed)
-      case "$(echo "$apk_name" | tr '[:upper:]' '[:lower:]')" in
-        resukisu_*-release.apk) apk_name="${apk_name/-release.apk/-spoofed-release.apk}" ;;
-        resukisu_*-debug.apk)   apk_name="${apk_name/-debug.apk/-spoofed-debug.apk}" ;;
-        *)                      apk_name="Spoofed-${apk_name}" ;;
-      esac
-      ;;
-  esac
 
   # Keep upstream's own Gradle-generated filename (e.g.
   # KernelSU_Next_v3.3.0_33214-release.apk) instead of inventing ours.
@@ -88,5 +60,4 @@ _fetch() {
 
 _fetch "KernelSU-Next/KernelSU-Next" "${KSUN_MANAGER_ARTIFACT_ID:-}"         "ksun"
 _fetch "KernelSU-Next/KernelSU-Next" "${KSUN_MANAGER_SPOOFED_ARTIFACT_ID:-}" "ksun-spoofed"
-_fetch "Baka-SU/BakaSU"   "${RSKU_MANAGER_ARTIFACT_ID:-}"         "rsku"
-_fetch "Baka-SU/BakaSU"   "${RSKU_MANAGER_SPOOFED_ARTIFACT_ID:-}" "rsku-spoofed"
+_fetch "SukiSU-Ultra/SukiSU-Ultra" "${SUKI_MANAGER_ARTIFACT_ID:-}" "suki"

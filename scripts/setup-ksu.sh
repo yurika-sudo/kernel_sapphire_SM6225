@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # setup-ksu.sh — integrate KSU variant + SUSFS into kernel source
-# env: KSU_TYPE (ksun|rsku|none), KERNEL_DIR, WORK_DIR
-# optional env: KSUN_TAG_PIN, RSKU_TAG_PIN — if set, checkout that exact tag
+# env: KSU_TYPE (ksun|suki|none), KERNEL_DIR, WORK_DIR
+# optional env: KSUN_TAG_PIN, SUKI_TAG_PIN — if set, checkout that exact tag
 #   instead of floating branch HEAD. Used only by check-updates.yml's verify
 #   gate to test a specific candidate tag before it's committed to
 #   source-pins.json. Normal builds never set these, so day-to-day behavior
@@ -18,7 +18,7 @@ git config --global advice.addEmbeddedRepo false
 cd "$KERNEL_DIR"
 
 _link_ksu_driver() {
-  local DIR="$1"   # KernelSU-Next or BakaSU
+  local DIR="$1"   # KernelSU-Next or SukiSU-Ultra
   [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
     ln -sf "../${DIR}" drivers/kernelsu
   grep -q "obj-.*kernelsu" drivers/Makefile || \
@@ -71,13 +71,33 @@ _inject_susfs_init() {
   [ ! -f "$KSU_C" ] && return 0
   grep -q "susfs_init" "$KSU_C" && return 0
 
-  grep -q "#include <linux/susfs.h>" "$KSU_C" || \
-    sed -i '/#include <linux\/fs\.h>/a #include <linux\/susfs.h>/' "$KSU_C" || true
-  grep -q "susfs_init()" "$KSU_C" || \
-    sed -i '/ksu_core_init();/a \\tsusfs_init();' "$KSU_C" || \
-    sed -i '/int __init ksu_init(/,/^}/{ /return 0;/i \\tsusfs_init(); }' "$KSU_C" || true
-  echo "[OK] susfs_init injected into $KSU_C"
+  # inject include
+  if ! grep -q "#include <linux/susfs.h>" "$KSU_C"; then
+    if grep -q '#include "ksu.h"' "$KSU_C"; then
+      sed -i '/#include "ksu.h"/a #include <linux\/susfs.h>' "$KSU_C"
+    else
+      sed -i '1i#include <linux/susfs.h>' "$KSU_C"
+    fi
+  fi
+
+  # inject susfs_init() — 3 fallback anchors
+  if grep -q "ksu_feature_init();" "$KSU_C"; then
+    awk '/ksu_feature_init\(\);/{print; printf "#ifdef CONFIG_KSU_SUSFS\n\tsusfs_init();\n#endif\n"; next}1' "$KSU_C" > "$KSU_C.tmp" && mv "$KSU_C.tmp" "$KSU_C"
+  elif grep -q "ksu_supercalls_init();" "$KSU_C"; then
+    awk '/ksu_supercalls_init\(\);/{printf "#ifdef CONFIG_KSU_SUSFS\n\tsusfs_init();\n#endif\n"; print; next}1' "$KSU_C" > "$KSU_C.tmp" && mv "$KSU_C.tmp" "$KSU_C"
+  elif grep -q "ksu_core_init();" "$KSU_C"; then
+    awk '/ksu_core_init\(\);/{print; printf "#ifdef CONFIG_KSU_SUSFS\n\tsusfs_init();\n#endif\n"; next}1' "$KSU_C" > "$KSU_C.tmp" && mv "$KSU_C.tmp" "$KSU_C"
+  else
+    echo "[ERROR] _inject_susfs_init: no anchor found in $KSU_C"; return 1
+  fi
+
+  if grep -q "susfs_init" "$KSU_C"; then
+    echo "[OK] susfs_init injected into $KSU_C"
+  else
+    echo "[ERROR] susfs_init injection failed in $KSU_C"; return 1
+  fi
 }
+
 
 # KernelSU-Next
 _pin_susfs_lvc() {
@@ -135,8 +155,7 @@ EOF
 }
 
 _fix_ksu_umount_missing_set() {
-  # BakaSU — builtin SUSFS integration
-  # official KernelSU main repo") dropped kernel_umount_feature_set()'s
+    # official KernelSU main repo") dropped kernel_umount_feature_set()'s
   # definition but left the struct reference to it -- breaks compile.
   # Still unfixed on builtin HEAD as of 2026-09-04. Self-deactivates once
   # upstream restores the definition (grep guard below).
@@ -171,7 +190,6 @@ EOF
 
 _fix_susfs_exec_suki() {
   # ShirkNeko SUSFS patch injects ksu_handle_execveat / ksu_install_su_fd
-  # hooks into fs/exec.c — not applicable to BakaSU (no exec.c injection)
   # (syscall_event_bridge.c) and never ships these symbols. Strip all
   # CONFIG_KSU_SUSFS blocks from exec.c except the susfs_def.h include.
   # Self-deactivates if exec.c no longer has the markers.
@@ -224,6 +242,25 @@ _pin_lvc_after() {
   awk -v a="$ANCHOR" '{ print } $0 == a { print "/* sapphire: pin LINUX_VERSION_CODE to real 5.15.220 (spoofed to 6.12) */"; print "#undef LINUX_VERSION_CODE"; print "#define LINUX_VERSION_CODE KERNEL_VERSION(5, 15, 220)" }' "$F" > "$F.sapphire.tmp" \
     && cat "$F.sapphire.tmp" > "$F" && rm -f "$F.sapphire.tmp"
   echo "[OK] $F: LINUX_VERSION_CODE pinned to 5.15.220"
+}
+
+_pin_suki_lvc() {
+  # version.h has no include guard: any later include re-defines
+  # LINUX_VERSION_CODE (spoofed 6.12) and wipes an earlier pin.
+  # So anchor on the LAST include of each file, not the first.
+  _pin_lvc_after "SukiSU-Ultra/kernel/hook/lsm_hook.h" '#include <linux/version.h>' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/hook/lsm_hook.c" '#include <linux/compiler.h>' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/hook/patch_memory.h" '#include "linux/version.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/infra/file_wrapper.c" '#include "infra/file_wrapper.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/infra/seccomp_cache.c" '#include "infra/seccomp_cache.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/infra/symbol_resolver.c" '#include "infra/symbol_resolver.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/manager/throne_tracker.c" '#include "manager/throne_tracker.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/policy/app_profile.c" '#include "hook/tp_marker.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/selinux/rules.c" '#include "xfrm.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/feature/selinux_hide.c" '#include "hook/lsm_hook.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/manager/apk_sign.c" '#include <crypto/hash.h>' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/manager/pkg_observer.c" '#include "manager/throne_tracker.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/selinux/sepolicy.c" '#include "ss/symtab.h"' || return 1
 }
 
 _pin_ksun_lvc() {
@@ -285,36 +322,31 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   _link_ksu_driver "KernelSU-Next"
   rm -rf susfs4ksu
 
-# BakaSU
-elif [ "$KSU_TYPE" = "rsku" ]; then
-  rm -rf ./KernelSU ./drivers/kernelsu ./BakaSU
-  git clone --depth=1 https://github.com/Baka-SU/BakaSU.git
-  [ -d "BakaSU" ] || { echo "[ERROR] BakaSU not found"; exit 1; }
 
-  cd BakaSU
+elif [ "$KSU_TYPE" = "suki" ]; then
+  rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Ultra
+
+  git clone --depth=1 --branch v4.2.1 \
+    https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
+  [ -d "SukiSU-Ultra" ] || { echo "[ERROR] SukiSU-Ultra not found"; exit 1; }
+
+  cd SukiSU-Ultra
   git fetch --tags 2>/dev/null || true
-  git fetch --deepen=50 2>/dev/null || true
-  _checkout_pin "." "${RSKU_TAG_PIN:-}" "BakaSU"
-  RSKU_SHA=$(git rev-parse HEAD)
-  # 1. Exact match on HEAD (HEAD is directly tagged).
-  # 2. Nearest ancestor tag via describe (HEAD is ahead of last tag — most common case
-  #    with depth=1 clones where main has moved past the release tag).
-  # 3. SHA-exact match via ls-remote as last resort.
-  RSKU_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null | tr -d '[:space:]')
-  RSKU_TAG=${RSKU_TAG:-$(git describe --tags --abbrev=0 HEAD 2>/dev/null | tr -d '[:space:]')}
-  RSKU_TAG=${RSKU_TAG:-$(git ls-remote --tags https://github.com/Baka-SU/BakaSU.git 2>/dev/null | awk -v sha="$RSKU_SHA" '/\^\{\}$/ {next} $0 ~ sha {match($2,/refs\/tags\/(.+)/,a); print a[1]}' | tail -1)}
-  RSKU_TAG=${RSKU_TAG:-unknown}
-  echo "RSKU_TAG=$RSKU_TAG"    >> "${GITHUB_ENV:-/dev/null}"
-  echo "RSKU_SHA=$RSKU_SHA"    >> "${GITHUB_ENV:-/dev/null}"
-  echo "$RSKU_TAG"                  > "$WORK_DIR/rsku_tag.txt"
-  echo "$RSKU_SHA"                  > "$WORK_DIR/rsku_sha.txt"
-  _rsku_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
-  | awk 'NR==1{print $NF}' | tr -d '[:space:]')
-  echo "${_rsku_ver:-}" > "$WORK_DIR/rsku_version.txt"
+  SUKI_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null | tr -d '[:space:]')
+  SUKI_TAG=${SUKI_TAG:-$(git describe --tags --abbrev=0 HEAD 2>/dev/null | tr -d '[:space:]')}
+  SUKI_TAG=${SUKI_TAG:-unknown}
+  SUKI_SHA=$(git rev-parse HEAD)
+  echo "SUKI_TAG=$SUKI_TAG"  >> "${GITHUB_ENV:-/dev/null}"
+  echo "SUKI_SHA=$SUKI_SHA"  >> "${GITHUB_ENV:-/dev/null}"
+  echo "$SUKI_TAG"                > "$WORK_DIR/suki_tag.txt"
+  echo "$SUKI_SHA"                > "$WORK_DIR/suki_sha.txt"
+  _suki_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
+    | awk 'NR==1{print $NF}' | tr -d '[:space:]')
+  echo "${_suki_ver:-}" > "$WORK_DIR/suki_version.txt"
   cd ..
 
-  # SUSFS — simonpunk main branch (BakaSU already ships SUSFS built-in)
-  git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+  git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git \
+    -b gki-android13-5.15
   SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
   echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
   echo "[OK] SUSFS commit: $SUSFS_COMMIT"
@@ -329,15 +361,9 @@ elif [ "$KSU_TYPE" = "rsku" ]; then
   _pin_susfs_lvc
   _fix_susfs_fake_state
 
-  _inject_susfs_init "BakaSU/kernel/ksu.c"
-  # BakaSU keeps its kernel integration under BakaSU/kernel/ (not root),
-  # so link that subdirectory directly instead of using _link_ksu_driver.
-  [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
-    ln -sf "../BakaSU/kernel" drivers/kernelsu
-  grep -q "obj-.*kernelsu" drivers/Makefile || \
-    echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
-  grep -q "kernelsu/Kconfig" drivers/Kconfig || \
-    echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+  _pin_suki_lvc
+  _inject_susfs_init "SukiSU-Ultra/kernel/core/init.c"
+  _link_ksu_driver "SukiSU-Ultra/kernel"
   rm -rf susfs4ksu
 
 fi

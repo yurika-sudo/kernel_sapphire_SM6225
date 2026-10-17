@@ -17,10 +17,10 @@ KSUN_TAG=$(_curl "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/tags"
 [ -z "$KSUN_TAG" ] && KSUN_TAG="unknown"
 echo "KSU-Next     : $KSUN_TAG"
 
-RSKU_TAG=$(_curl "https://api.github.com/repos/Baka-SU/BakaSU/tags" \
+SUKI_TAG=$(_curl "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/tags" \
   | jq -r 'if type=="array" and length>0 then .[0].name else "unknown" end' 2>/dev/null || echo "unknown")
-[ -z "$RSKU_TAG" ] && RSKU_TAG="unknown"
-echo "BakaSU     : $RSKU_TAG"
+[ -z "$SUKI_TAG" ] && SUKI_TAG="unknown"
+echo "SukiSU-Ultra : $SUKI_TAG"
 
 SUSFS_TAG=$(_curl "https://api.github.com/repos/sidex15/susfs4ksu-module/tags" \
   | jq -r 'if type=="array" and length>0 then .[0].name else "unknown" end' 2>/dev/null \
@@ -50,7 +50,7 @@ echo "=== Comparing against source-pins.json ==="
 
 PIN_GKI=$(_pin "gki_sublevel")
 PIN_KSUN=$(_pin "ksun_tag")
-PIN_RSKU=$(_pin "rsku_tag")
+PIN_SUKI=$(_pin "suki_tag")
 PIN_SUSFS=$(_pin "susfs_tag")
 
 UPDATES=()
@@ -71,7 +71,7 @@ fi
 
 
 KSUN_CHANGED="false"
-RSKU_CHANGED="false"
+SUKI_CHANGED="false"
 
 if [ "$KSUN_TAG" = "unknown" ]; then
   FAILED+=("KSU-Next"); KSUN_TAG="$PIN_KSUN"
@@ -80,11 +80,11 @@ elif [ "$KSUN_TAG" != "$PIN_KSUN" ]; then
   KSUN_CHANGED="true"
 fi
 
-if [ "$RSKU_TAG" = "unknown" ]; then
-  FAILED+=("BakaSU"); RSKU_TAG="$PIN_RSKU"
-elif [ "$RSKU_TAG" != "$PIN_RSKU" ]; then
-  UPDATES+=("BakaSU: ${PIN_RSKU} → ${RSKU_TAG}")
-  RSKU_CHANGED="true"
+if [ "$SUKI_TAG" = "unknown" ]; then
+  FAILED+=("SukiSU-Ultra"); SUKI_TAG="$PIN_SUKI"
+elif [ "$SUKI_TAG" != "$PIN_SUKI" ]; then
+  UPDATES+=("SukiSU-Ultra: ${PIN_SUKI} → ${SUKI_TAG}")
+  SUKI_CHANGED="true"
 fi
 
 if [ "$SUSFS_TAG" = "unknown" ]; then
@@ -114,12 +114,12 @@ fi
 # uses; GITHUB_OUTPUT supports it identically.
 {
   echo "ksun_tag=$KSUN_TAG"
-  echo "rsku_tag=$RSKU_TAG"
+  echo "suki_tag=$SUKI_TAG"
   echo "susfs_tag=$SUSFS_TAG"
   echo "gki_sub=$GKI_SUB"
   echo "has_update=$HAS_UPDATE"
   echo "ksun_changed=$KSUN_CHANGED"
-  echo "rsku_changed=$RSKU_CHANGED"
+  echo "suki_changed=$SUKI_CHANGED"
   echo "update_detail<<EOF"
   echo "$UPDATE_DETAIL"
   echo "EOF"
