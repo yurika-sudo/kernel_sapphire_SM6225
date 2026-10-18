@@ -2,6 +2,5 @@
   "gki_sublevel": "v5.15.220",
   "ksun_tag": "v3.4.0",
   "susfs_tag": "v1.5.2+_R28",
-  "suki_tag": "builtin",
-  "suki_sha": "6c284e95"
+  "suki_tag": "v4.2.1"
 }

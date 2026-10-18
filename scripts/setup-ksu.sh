@@ -267,20 +267,111 @@ _pin_lvc_before() {
   echo "[OK] $F: LINUX_VERSION_CODE pinned before '$ANCHOR'"
 }
 
+_apply_suki_susfs_ksu() {
+  # v4.2.1 ships without SUSFS. Apply simonpunk's KernelSU enable-patch, then
+  # hand-adapt the only 4 hunks that reject (init.c x3, ksud_integration.c x1).
+  # Every anchor must match exactly once; any other reject set aborts the build.
+  local D="SukiSU-Ultra"
+  local P="susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
+  [ -f "$P" ] || { echo "[FAIL] _apply_suki_susfs_ksu: $P not found"; return 1; }
+  [ -d "$D/kernel" ] || { echo "[FAIL] _apply_suki_susfs_ksu: $D/kernel not found"; return 1; }
+  (
+    cd "$D" || exit 1
+    patch -p1 --forward --no-backup-if-mismatch < "../$P" > /tmp/suki_susfs_patch.log 2>&1 || true
+    rejs=$(find . -name '*.rej' | sort | tr '\n' ' ')
+    if [ "$rejs" != "./kernel/core/init.c.rej ./kernel/runtime/ksud_integration.c.rej " ]; then
+      echo "[FAIL] unexpected reject set: '$rejs'"
+      grep -E 'FAILED|^checking file|^patching file' /tmp/suki_susfs_patch.log
+      exit 1
+    fi
+
+    python3 - <<'PYEOF' || exit 1
+p = "kernel/core/init.c"
+t = open(p).read()
+def sub(t, old, new):
+    n = t.count(old)
+    assert n == 1, f"anchor matched {n}x: {old[:60]!r}"
+    return t.replace(old, new)
+
+t = sub(t, '#include "runtime/ksud_boot.h"\n',
+        '#include "runtime/ksud_boot.h"\n#include "hook/setuid_hook.h"\n#include "feature/sucompat.h"\n')
+t = sub(t, '#ifdef MODULE\n    ksu_late_loaded = (current->pid != 1);\n#else\n    ksu_late_loaded = false;\n#endif\n\n', '')
+t = sub(t, '    ksu_syscall_hook_init();\n\n    ksu_feature_init();\n',
+        '#ifdef CONFIG_KSU_SUSFS\n    susfs_init();\n#endif\n\n    ksu_feature_init();\n')
+t = sub(t, '    ksu_lsm_hook_init();\n', '')
+t = sub(t, '    ksu_supercalls_init();\n    ksu_app_profile_init();\n', '    ksu_supercalls_init();\n')
+
+sm = '    if (ksu_late_loaded) {\n        pr_info("late load'
+em = '        ksu_file_wrapper_init();\n    }\n'
+assert t.count(sm) == 1 and t.count(em) == 1
+s = t.index(sm); e = t.index(em, s) + len(em)
+new = ('    ksu_sucompat_init();\n    ksu_setuid_hook_init();\n\n'
+       '    ksu_allowlist_init();\n\n    ksu_throne_tracker_init();\n\n'
+       '    ksu_ksud_init();\n\n    ksu_file_wrapper_init();\n')
+t = t[:s] + new + t[e:]
+
+t = sub(t, '    // Phase 1: Stop all hooks first to prevent new callbacks\n    ksu_syscall_hook_manager_exit();\n\n    ksu_supercalls_exit();\n\n    if (!ksu_late_loaded)\n        ksu_ksud_exit();\n',
+        '    ksu_supercalls_exit();\n\n    ksu_ksud_exit();\n')
+open(p, "w").write(t)
+print("[OK] init.c adapted")
+PYEOF
+
+    python3 - <<'PYEOF' || exit 1
+p = "kernel/runtime/ksud_integration.c"
+t = open(p).read()
+old = ('            // Not earlier: a blocked module failing to load in first stage\n'
+       '            // init is fatal, ksuinit uses modules.blocklist for that instead.\n'
+       '            ksu_module_blacklist_apply();\n')
+assert t.count(old) == 1, t.count(old)
+open(p, "w").write(t.replace(old, ""))
+PYEOF
+    patch -p0 --forward --no-backup-if-mismatch < kernel/runtime/ksud_integration.c.rej \
+      || { echo "[FAIL] ksud_integration.c.rej did not apply"; exit 1; }
+    python3 - <<'PYEOF' || exit 1
+p = "kernel/runtime/ksud_integration.c"
+t = open(p).read()
+old = ('                ksu_feature_apply_forced();\n'
+       '                static_branch_disable(&is_init_second_stage_not_executed);\n')
+new = ('                ksu_feature_apply_forced();\n'
+       '                // Not earlier: a blocked module failing to load in first stage\n'
+       '                // init is fatal, ksuinit uses modules.blocklist for that instead.\n'
+       '                ksu_module_blacklist_apply();\n'
+       '                static_branch_disable(&is_init_second_stage_not_executed);\n')
+assert t.count(old) == 1, t.count(old)
+open(p, "w").write(t.replace(old, new))
+print("[OK] ksud_integration.c adapted")
+PYEOF
+    rm -f kernel/core/init.c.rej kernel/runtime/ksud_integration.c.rej
+
+    if grep -nE 'ksu_late_loaded|ksu_syscall_hook|ksu_lsm_hook' kernel/core/init.c kernel/runtime/ksud_integration.c; then
+      echo "[FAIL] legacy symbols remain"; exit 1
+    fi
+    [ "$(grep -c 'susfs_init();' kernel/core/init.c)" = 1 ] || { echo "[FAIL] susfs_init() count != 1"; exit 1; }
+    [ "$(grep -c 'ksu_file_wrapper_init();' kernel/core/init.c)" = 1 ] || { echo "[FAIL] file_wrapper_init count != 1"; exit 1; }
+    echo "[OK] SUSFS enable-patch applied to $D"
+  ) || return 1
+}
+
 _pin_suki_lvc() {
-  # builtin branch is a unity build: all fragments included into ksu.c.
-  # version.h is pulled once in kernel_includes.h (line 72) and nowhere
-  # else in ksu.c, so a single anchor there covers the entire build.
-  # pkg_observer_compat.h pulls version.h independently at line 3.
-  _pin_lvc_after "SukiSU-Ultra/kernel/kernel_includes.h" '#include "arch.h"' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/arch.h" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "include/linux/susfs.h" '#include <linux/version.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/kpm/kpm.c" '#include <linux/kallsyms.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/kpm/super_access.c" '#include <linux/kallsyms.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/kpm/compact.c" '#include <linux/set_memory.h>' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/kpm/super_access.c" '#include <linux/set_memory.h>' || return 1
-  _pin_lvc_before "SukiSU-Ultra/kernel/ksu.c" '// unity build' || return 1
-  _pin_lvc_after "SukiSU-Ultra/kernel/manager/pkg_observer_compat.h" '#include <linux/version.h>' || return 1
+  # version.h has no include guard: any later include re-defines
+  # LINUX_VERSION_CODE (spoofed 6.12) and wipes an earlier pin.
+  # So anchor on the LAST include of each file, not the first.
+  # app_profile.c / selinux_hide.c: the SUSFS enable-patch drops their
+  # tp_marker.h / lsm_hook.h includes, so anchor on the new last include.
+  _pin_lvc_after "SukiSU-Ultra/kernel/hook/lsm_hook.h" '#include <linux/version.h>' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/hook/lsm_hook.c" '#include <linux/compiler.h>' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/hook/patch_memory.h" '#include "linux/version.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/infra/file_wrapper.c" '#include "infra/file_wrapper.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/infra/seccomp_cache.c" '#include "infra/seccomp_cache.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/infra/symbol_resolver.c" '#include "infra/symbol_resolver.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/manager/throne_tracker.c" '#include "manager/throne_tracker.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/policy/app_profile.c" '#include "infra/su_mount_ns.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/selinux/rules.c" '#include "xfrm.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/feature/selinux_hide.c" '#include "policy/feature.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/manager/apk_sign.c" '#include <crypto/hash.h>' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/manager/pkg_observer.c" '#include "manager/throne_tracker.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/selinux/sepolicy.c" '#include "ss/symtab.h"' || return 1
+  _pin_lvc_after "SukiSU-Ultra/kernel/kpm/super_access.c" '#include "compact.h"' || return 1
 }
 
 _pin_ksun_lvc() {
@@ -346,7 +437,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
 elif [ "$KSU_TYPE" = "suki" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Ultra
 
-  git clone --depth=1 --branch builtin \
+  git clone --depth=1 --branch v4.2.1 \
     https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
   [ -d "SukiSU-Ultra" ] || { echo "[ERROR] SukiSU-Ultra not found"; exit 1; }
 
@@ -379,9 +470,8 @@ elif [ "$KSU_TYPE" = "suki" ]; then
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
   _pin_susfs_lvc
-  # builtin defines fake_state itself (selinux_hide.c) — skip _fix_susfs_fake_state
-  # builtin ksu.c already calls susfs_init() at line ~136 — skip _inject_susfs_init
 
+  _apply_suki_susfs_ksu || exit 1
   _pin_suki_lvc
   _link_ksu_driver "SukiSU-Ultra/kernel"
   rm -rf susfs4ksu
