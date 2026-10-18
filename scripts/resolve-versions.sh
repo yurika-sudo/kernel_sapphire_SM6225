@@ -83,41 +83,28 @@ KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_kr" ] && \
   | jq -r '.artifacts[] | select(.name == "manager-spoofed") | .id // empty' | head -1 || true)  
 
 _suki_find_run() {
-  local sha="$1" page run_id
-  for page in 1 2 3; do
-    local runs
-    runs=$(curl -sf --max-time 15 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-      "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build.yml/runs?status=success&branch=main&per_page=20&page=${page}")
-    run_id=$(echo "$runs" | python3 -c "
-import sys,json
-d=json.load(sys.stdin)
-sha=sys.argv[1] if len(sys.argv)>1 else ""
-for r in d.get("workflow_runs",[]):
-    if r["head_sha"]==sha:
-        print(r["id"]); break
-" "$sha" 2>/dev/null | tr -d "[:space:]")
-    [ -n "$run_id" ] && { echo "$run_id"; return 0; }
-    local count
-    count=$(echo "$runs" | python3 -c 'import sys,json; print(len(json.load(sys.stdin).get("workflow_runs",[])))') 2>/dev/null
-    [ "${count:-0}" -lt 20 ] && break
-  done
-  # Fallback: latest run
-  curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-    "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build.yml/runs?status=success&branch=main&per_page=1" \
-    | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["workflow_runs"][0]["id"] if d["workflow_runs"] else "")' 2>/dev/null | tr -d "[:space:]"
+  # Upstream build-manager.yml run at the exact SukiSU commit the kernel was
+  # built from. No "latest on main" fallback: a manager from another commit
+  # can carry a different UAPI version than the kernel.
+  local sha="$1"
+  [ -n "$sha" ] || return 0
+  curl -sf --max-time 15 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+    "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml/runs?head_sha=${sha}&status=success&per_page=1" \
+    | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]' || true
 }
 _sr=$(_suki_find_run "$SUKI_SHA")
+[ -z "$SUKI_SHA" ] || [ -n "$_sr" ] || echo "[WARN] no upstream manager run for SukiSU ${SUKI_SHA}; Suki manager not attached" >&2
 SUKI_MANAGER_URL="${_sr:+https://github.com/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}}"
-SUKI_MANAGER_URL="${SUKI_MANAGER_URL:-https://github.com/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build.yml}"
+SUKI_MANAGER_URL="${SUKI_MANAGER_URL:-https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases/tag/${SUKI_TAG}}"
 SUKI_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name == "manager") | select(.expired == false) | .id // empty' | head -1 || true)
+  | jq -r '.artifacts[] | select(.name == "Manager") | select(.expired == false) | .id // empty' | head -1 || true)
 
 SUKI_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}/artifacts" \
-  | jq -r '.artifacts[] | select(.name == "manager-spoofed") | select(.expired == false) | .id // empty' | head -1 || true)
+  | jq -r '.artifacts[] | select(.name == "Manager-spoofed") | select(.expired == false) | .id // empty' | head -1 || true)
 
 DATE_TAG=$(date +'%Y%m%d')
 
