@@ -20,6 +20,7 @@ case "$SOURCE_TYPE" in
       rm -rf "$KERNEL_SRC" && mkdir -p "$KERNEL_SRC"
       sleep 30
     done
+    [ -d "$KERNEL_SRC/.git" ] || { echo "[ERROR] GKI clone failed after 3 attempts"; exit 1; }
     ;;
 
   clo)
