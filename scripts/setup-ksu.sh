@@ -279,7 +279,7 @@ _apply_suki_susfs_ksu() {
     cd "$D" || exit 1
     patch -p1 --forward --no-backup-if-mismatch < "../$P" > /tmp/suki_susfs_patch.log 2>&1 || true
     rejs=$(find . -name '*.rej' | sort | tr '\n' ' ')
-    if [ "$rejs" != "./kernel/core/init.c.rej ./kernel/runtime/ksud_integration.c.rej " ]; then
+    if [ "$rejs" != "./kernel/core/init.c.rej ./kernel/runtime/ksud_integration.c.rej ./kernel/supercall/dispatch.c.rej " ]; then
       echo "[FAIL] unexpected reject set: '$rejs'"
       grep -E 'FAILED|^checking file|^patching file' /tmp/suki_susfs_patch.log
       exit 1
@@ -341,7 +341,125 @@ assert t.count(old) == 1, t.count(old)
 open(p, "w").write(t.replace(old, new))
 print("[OK] ksud_integration.c adapted")
 PYEOF
-    rm -f kernel/core/init.c.rej kernel/runtime/ksud_integration.c.rej
+    rm -f kernel/core/init.c.rej kernel/runtime/ksud_integration.c.rej kernel/supercall/dispatch.c.rej
+
+    python3 - <<'PYEOF' || exit 1
+p = "kernel/supercall/dispatch.c"
+t = open(p).read()
+def sub(t, old, new):
+    n = t.count(old)
+    assert n == 1, f"anchor matched {n}x: {old[:60]!r}"
+    return t.replace(old, new)
+
+# Add susfs includes after thread_info.h
+t = sub(t, '#include <linux/thread_info.h>\n',
+        '#include <linux/thread_info.h>\n#include <linux/namei.h>\n#include <linux/susfs.h>\n')
+
+# Remove tp_marker.h include
+t = sub(t, '#include "hook/tp_marker.h"\n', "")
+
+# do_get_info: remove ksu_bundled block
+t = sub(t,
+    '    cmd.flags |= KSU_GET_INFO_FLAG_LKM;\n'
+    '    if (ksu_bundled) {\n'
+    '        cmd.flags |= KSU_GET_INFO_FLAG_BUNDLED;\n'
+    '    }\n'
+    '#endif\n'
+    '\n'
+    '    if (is_manager()) {\n'
+    '        cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;\n'
+    '    }\n'
+    '    if (ksu_late_loaded) {\n'
+    '        cmd.flags |= KSU_GET_INFO_FLAG_LATE_LOAD;\n'
+    '    }\n'
+    '#if KSU_IS_PR_BUILD\n'
+    '    cmd.flags |= KSU_GET_INFO_FLAG_PR_BUILD;\n'
+    '#endif\n'
+    '    cmd.features = KSU_FEATURE_MAX;\n'
+    '    cmd.uapi_version = KERNEL_SU_UAPI_VERSION;\n',
+    '    cmd.flags |= KSU_GET_INFO_FLAG_LKM;\n'
+    '#endif\n'
+    '\n'
+    '    if (is_manager()) {\n'
+    '        cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;\n'
+    '    }\n'
+    '#if KSU_IS_PR_BUILD\n'
+    '    cmd.flags |= KSU_GET_INFO_FLAG_PR_BUILD;\n'
+    '#endif\n'
+    '    cmd.features = KSU_FEATURE_MAX;\n'
+    '    cmd.uapi_version = KERNEL_SU_UAPI_VERSION;\n')
+
+# do_get_info_legacy: remove ksu_bundled + ksu_late_loaded blocks
+t = sub(t,
+    '    cmd.flags |= KSU_GET_INFO_FLAG_LKM;\n'
+    '    if (ksu_bundled) {\n'
+    '        cmd.flags |= KSU_GET_INFO_FLAG_BUNDLED;\n'
+    '    }\n'
+    '#endif\n'
+    '\n'
+    '    if (is_manager()) {\n'
+    '        cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;\n'
+    '    }\n'
+    '    if (ksu_late_loaded) {\n'
+    '        cmd.flags |= KSU_GET_INFO_FLAG_LATE_LOAD;\n'
+    '    }\n'
+    '#if KSU_IS_PR_BUILD\n'
+    '    cmd.flags |= KSU_GET_INFO_FLAG_PR_BUILD;\n'
+    '#endif\n'
+    '    cmd.features = KSU_FEATURE_MAX;\n',
+    '    cmd.flags |= KSU_GET_INFO_FLAG_LKM;\n'
+    '#endif\n'
+    '\n'
+    '    if (is_manager()) {\n'
+    '        cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;\n'
+    '    }\n'
+    '#if KSU_IS_PR_BUILD\n'
+    '    cmd.flags |= KSU_GET_INFO_FLAG_PR_BUILD;\n'
+    '#endif\n'
+    '    cmd.features = KSU_FEATURE_MAX;\n')
+
+# do_report_event post-fs-data: collapse ksu_late_loaded branch
+t = sub(t,
+    '            if (ksu_late_loaded) {\n'
+    '                pr_info("post-fs-data skipped (late load)\\n");\n'
+    '            } else {\n'
+    '                pr_info("post-fs-data triggered\\n");\n'
+    '                on_post_fs_data();\n'
+    '            }\n',
+    '            pr_info("post-fs-data triggered\\n");\n'
+    '            on_post_fs_data();\n')
+
+# do_report_event boot_complete: collapse branch + add susfs_start_sdcard_monitor_fn
+t = sub(t,
+    '            if (ksu_late_loaded) {\n'
+    '                pr_info("boot_complete skipped (late load)\\n");\n'
+    '            } else {\n'
+    '                pr_info("boot_complete triggered\\n");\n'
+    '                on_boot_completed();\n'
+    '            }\n',
+    '            pr_info("boot_complete triggered\\n");\n'
+    '            on_boot_completed();\n'
+    '            susfs_start_sdcard_monitor_fn();\n')
+
+# do_set_app_profile: remove first ksu_mark_running_process() call
+t = sub(t,
+    '        ksu_persistent_allow_list();\n'
+    '        ksu_mark_running_process();\n'
+    '    }\n'
+    '    return ret;\n'
+    '}\n'
+    '\n'
+    'static int do_get_feature',
+    '        ksu_persistent_allow_list();\n'
+    '    }\n'
+    '    return ret;\n'
+    '}\n'
+    '\n'
+    'static int do_get_feature')
+
+open(p, "w").write(t)
+print("[OK] dispatch.c adapted")
+PYEOF
 
     if grep -nE 'ksu_late_loaded|ksu_syscall_hook|ksu_lsm_hook' kernel/core/init.c kernel/runtime/ksud_integration.c; then
       echo "[FAIL] legacy symbols remain"; exit 1
