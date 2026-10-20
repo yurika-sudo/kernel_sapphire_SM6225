@@ -1,4 +1,4 @@
-name: "Compat Check"
+name: "Build Staging"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
 
-  check:
+  staging:
     name: "${{ matrix.variant.name }}"
     strategy:
       fail-fast: false
@@ -21,17 +21,17 @@ jobs:
           - name:     "GKI-KSU-Next"
             source:   "gki"
             ksu:      "ksun"
-            artifact: "compat-check-ksun"
-          - name:     "GKI-SukiSU"
+            artifact: "staging-ksun"
+          - name:     "GKI-SukiSU-Ultra"
             source:   "gki"
-            ksu:      "suki"
-            artifact: "compat-check-suki"
+            ksu:      "sksu"
+            artifact: "staging-sksu"
     uses: ./.github/workflows/build-kernel.yml
     with:
       variant_name:  ${{ matrix.variant.name }}
       source_type:   ${{ matrix.variant.source }}
       ksu_type:      ${{ matrix.variant.ksu }}
-      zip_prefix:    "CompatCheck"
+      zip_prefix:    "Staging"
       artifact_name: ${{ matrix.variant.artifact }}
       defconfig:     "gki_defconfig"
       build_type:    "testing"
@@ -40,7 +40,7 @@ jobs:
   notify:
     name: "Notify"
     runs-on: ubuntu-latest
-    needs: [check]
+    needs: [staging]
     if: always()
     steps:
       - uses: actions/checkout@v4.2.2
@@ -53,5 +53,5 @@ jobs:
           TELEGRAM_TOPIC_ID:  ${{ secrets.TELEGRAM_TOPIC_ID }}
           RUN_URL:    "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           RUN_NUMBER: "${{ github.run_number }}"
-          CHECK_RESULT: ${{ needs.check.result }}
-        run: bash scripts/notify.sh compat-check
+          CHECK_RESULT: ${{ needs.staging.result }}
+        run: bash scripts/notify.sh staging

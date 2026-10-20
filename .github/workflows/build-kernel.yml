@@ -11,7 +11,7 @@ on:
       defconfig:     { type: string, required: true }
       build_type:    { type: string, required: true }   # stable | testing
       ksun_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
-      suki_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
+      sksu_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
 
 env:
   OUT_DIR: "out"
@@ -113,7 +113,7 @@ jobs:
           kernel_dir:   ${{ env.KERNEL_SRC }}
           work_dir:     ${{ env.WORK_DIR }}
           ksun_tag_pin: ${{ inputs.ksun_tag_pin }}
-          suki_tag_pin: ${{ inputs.suki_tag_pin }}
+          sksu_tag_pin: ${{ inputs.sksu_tag_pin }}
 
       - name: "Droidspaces"
         if: inputs.source_type != 'kernel-org'
@@ -135,7 +135,8 @@ jobs:
         run: |
           SHORT_SHA="${{ github.sha }}"
           SHORT_SHA="${SHORT_SHA:0:8}"
-          sed -i "\$s|echo \"\\\$res\"|echo \"\\\$res-ab${SHORT_SHA}\"|" ./scripts/setlocalversion
+          RUN_NUM="${{ github.run_number }}"
+          scripts/config --set-str LOCALVERSION "-android16-6-r${RUN_NUM}-${SHORT_SHA}"
           sed -i 's/-dirty//' ./scripts/setlocalversion
           KERNEL_TIMESTAMP=$(git log -1 --format=%ct)
           echo "KBUILD_BUILD_TIMESTAMP=$(date -u -d @${KERNEL_TIMESTAMP} +'%a %b %d %T UTC %Y')" >> $GITHUB_ENV
@@ -218,9 +219,9 @@ jobs:
             ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
             ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
             ${{ env.WORK_DIR }}/ksun_tag.txt
-            ${{ env.WORK_DIR }}/suki_tag.txt
+            ${{ env.WORK_DIR }}/sksu_tag.txt
             ${{ env.WORK_DIR }}/ksun_sha.txt
-            ${{ env.WORK_DIR }}/suki_sha.txt
+            ${{ env.WORK_DIR }}/sksu_sha.txt
             ${{ env.WORK_DIR }}/ksun_version.txt
-            ${{ env.WORK_DIR }}/suki_version.txt
+            ${{ env.WORK_DIR }}/sksu_version.txt
           retention-days: 1

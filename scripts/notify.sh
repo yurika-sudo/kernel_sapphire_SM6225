@@ -119,28 +119,28 @@ elif [ "$MODE" = "failure" ]; then
   _tg_msg "$MSG"
 
 # ---------------------------------------------------------------------------
-# compat-check — called from build-compat-check.yml notify job
+# staging — called from build-staging.yml notify job
 # ---------------------------------------------------------------------------
-elif [ "$MODE" = "compat-check" ]; then
+elif [ "$MODE" = "staging" ]; then
   : "${RUN_URL:?}" "${RUN_NUMBER:?}" "${CHECK_RESULT:?}"
 
   DATE_STR=$(date -u +'%Y-%m-%d')
 
   if [ "$CHECK_RESULT" = "success" ]; then
-    MSG="<b>[compat-check] Seiran Kernel</b>%0A%0A"
+    MSG="<b>[staging] Seiran Kernel</b>%0A%0A"
     MSG="${MSG}Run: #${RUN_NUMBER}%0A"
     MSG="${MSG}Branch: ${GITHUB_REF_NAME:-unknown}%0A"
     MSG="${MSG}Actor: ${GITHUB_ACTOR:-yurika-sudo}%0A"
     MSG="${MSG}Date: ${DATE_STR}%0A"
     MSG="${MSG}%0A"
     MSG="${MSG}GKI-KSU-Next: passed%0A"
-    MSG="${MSG}GKI-SukiSU: passed%0A"
+    MSG="${MSG}GKI-SukiSU-Ultra: passed%0A"
     MSG="${MSG}%0A"
     MSG="${MSG}Safe to dispatch AIO build.%0A"
     MSG="${MSG}%0A"
     MSG="${MSG}<a href=\'${RUN_URL}\'>Logs</a>"
   else
-    MSG="<b>[compat-check] Build failed</b>%0A%0A"
+    MSG="<b>[staging] Build failed</b>%0A%0A"
     MSG="${MSG}Run: #${RUN_NUMBER}%0A"
     MSG="${MSG}Branch: ${GITHUB_REF_NAME:-unknown}%0A"
     MSG="${MSG}Actor: ${GITHUB_ACTOR:-yurika-sudo}%0A"

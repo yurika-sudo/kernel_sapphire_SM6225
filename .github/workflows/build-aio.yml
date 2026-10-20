@@ -85,9 +85,9 @@ jobs:
 
           - name:      "GKI-SukiSU-Ultra"
             source:    "gki"
-            ksu:       "suki"
+            ksu:       "sksu"
             prefix:    "GKI_SukiSU-Ultra"
-            artifact:  "gki-suki"
+            artifact:  "gki-sksu"
             defconfig: "gki_defconfig"
 
           - name:      "GKI-NoKSU"

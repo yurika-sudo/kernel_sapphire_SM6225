@@ -30,7 +30,7 @@ if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
     DIR_NAME=$(basename "$ARTIFACT_DIR")
     case "$DIR_NAME" in
       gki-ksun)  IMG_NAME="Image.gki.ksu"   ;;
-      gki-suki)  IMG_NAME="Image.gki.suki"  ;;
+      gki-sksu)  IMG_NAME="Image.gki.sksu"  ;;
       gki-nksu) IMG_NAME="Image.gki.noksu" ;;
       *)         IMG_NAME="Image.$(echo "$DIR_NAME" | tr -d '-')" ;;
     esac
