@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   release:
@@ -107,6 +108,24 @@ jobs:
           prerelease: ${{ env.IS_PRERELEASE }}
           body:       ${{ env.RELEASE_BODY }}
 
+
+      - name: "Fetch build logs"
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID:   ${{ github.run_id }}
+          RUN_NUM:  ${{ github.run_number }}
+          REPO:     ${{ github.repository }}
+        run: |
+          LOG_ZIP="build-audit-logs-$(date +%Y-%m).zip"
+          echo "[LOG] Fetching raw logs for run #${RUN_NUM} (${RUN_ID})"
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${REPO}/actions/runs/${RUN_ID}/logs" \
+            > "${LOG_ZIP}" || { echo "[WARN] Log fetch failed"; exit 0; }
+          SIZE=$(du -h "$LOG_ZIP" | cut -f1)
+          echo "[OK] ${LOG_ZIP} (${SIZE})"
+          cp "$LOG_ZIP" ./release_zips/
       - name: "Telegram — success"
         if: success()
         env:

@@ -26,7 +26,7 @@ esac
 
 case "${KSU_TYPE}" in
   ksun) KSU_LABEL="KSU-Next" ;;
-  suki) KSU_LABEL="SukiSU-Ultra" ;;
+  sksu) KSU_LABEL="SukiSU-Ultra" ;;
   none) KSU_LABEL="NoKSU"   ;;
   *)    KSU_LABEL="${KSU_TYPE}" ;;
 esac
@@ -37,7 +37,7 @@ ZIP_NAME="AK3-${SRC_LABEL}-${KSU_LABEL}-${KERNEL_VERSION}-$(date +'%Y-%m')${SUFF
 # Named image used by AIO pack-release.sh when extracting
 case "$KSU_TYPE" in
   ksun) IMAGE_NAME="Image.gki.ksu"  ;;
-  suki) IMAGE_NAME="Image.gki.suki" ;;
+  sksu) IMAGE_NAME="Image.gki.sksu" ;;
   none) IMAGE_NAME="Image.gki.noksu";;
   *)    IMAGE_NAME="Image"          ;;
 esac

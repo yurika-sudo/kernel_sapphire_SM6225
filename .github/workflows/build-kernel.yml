@@ -209,19 +209,29 @@ jobs:
           echo "Kernel uname: $UNAME"
 
 
+      - name: "Stage artifact"
+        run: |
+          STAGE="${{ env.WORK_DIR }}/artifact-stage"
+          mkdir -p "$STAGE"
+          [ -f "${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}" ] && \
+            cp "${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}" "$STAGE/"
+          [ -f "${{ env.WORK_DIR }}/out/seiran-core.zip" ] && \
+            cp "${{ env.WORK_DIR }}/out/seiran-core.zip" "$STAGE/"
+          [ -f "${{ env.WORK_DIR }}/out/dist/kernel_version.txt" ] && \
+            cp "${{ env.WORK_DIR }}/out/dist/kernel_version.txt" "$STAGE/"
+          [ -f "${{ env.WORK_DIR }}/out/dist/kernel_uname.txt" ] && \
+            cp "${{ env.WORK_DIR }}/out/dist/kernel_uname.txt" "$STAGE/"
+          for f in ksun_tag.txt ksun_sha.txt ksun_version.txt \
+                   sksu_tag.txt sksu_sha.txt sksu_version.txt; do
+            [ -f "${{ env.WORK_DIR }}/$f" ] && \
+              cp "${{ env.WORK_DIR }}/$f" "$STAGE/" || true
+          done
+          echo "--- artifact-stage contents ---"
+          ls -lh "$STAGE"
+
       - name: "Upload artifact"
         uses: actions/upload-artifact@v4.6.2
         with:
           name: ${{ inputs.artifact_name }}
-          path: |
-            ${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}
-            ${{ env.WORK_DIR }}/out/seiran-core.zip
-            ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
-            ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
-            ${{ env.WORK_DIR }}/ksun_tag.txt
-            ${{ env.WORK_DIR }}/sksu_tag.txt
-            ${{ env.WORK_DIR }}/ksun_sha.txt
-            ${{ env.WORK_DIR }}/sksu_sha.txt
-            ${{ env.WORK_DIR }}/ksun_version.txt
-            ${{ env.WORK_DIR }}/sksu_version.txt
+          path: ${{ env.WORK_DIR }}/artifact-stage/
           retention-days: 1
