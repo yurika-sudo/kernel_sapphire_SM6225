@@ -59,6 +59,8 @@ echo "[${SOURCE_TYPE^^}] Switching to ThinLTO..."
   -e LTO_CLANG_THIN \
   -d LTO_CLANG_FULL \
   -e THINLTO
+./scripts/config --file "${OUT_DIR}/dist/.config" \
+  --set-str LOCALVERSION "-android16-6-r${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:8}"
 echo "[${SOURCE_TYPE^^}] Forcing mq-deadline and stripping BFQ..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -e MQ_IOSCHED_DEADLINE \

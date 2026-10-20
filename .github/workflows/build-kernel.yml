@@ -136,8 +136,6 @@ jobs:
         run: |
           SHORT_SHA="${{ github.sha }}"
           SHORT_SHA="${SHORT_SHA:0:8}"
-          RUN_NUM="${{ github.run_number }}"
-          scripts/config --set-str LOCALVERSION "-android16-6-r${RUN_NUM}-${SHORT_SHA}"
           sed -i 's/-dirty//' ./scripts/setlocalversion
           KERNEL_TIMESTAMP=$(git log -1 --format=%ct)
           echo "KBUILD_BUILD_TIMESTAMP=$(date -u -d @${KERNEL_TIMESTAMP} +'%a %b %d %T UTC %Y')" >> $GITHUB_ENV
