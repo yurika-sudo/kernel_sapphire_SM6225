@@ -18,11 +18,11 @@ jobs:
     outputs:
       has_update:    ${{ steps.versions.outputs.has_update }}
       ksun_tag:      ${{ steps.versions.outputs.ksun_tag }}
-      suki_tag:      ${{ steps.versions.outputs.suki_tag }}
+      sksu_tag:      ${{ steps.versions.outputs.sksu_tag }}
       susfs_tag:     ${{ steps.versions.outputs.susfs_tag }}
       gki_sub:       ${{ steps.versions.outputs.gki_sub }}
       ksun_changed:  ${{ steps.versions.outputs.ksun_changed }}
-      suki_changed:  ${{ steps.versions.outputs.suki_changed }}
+      sksu_changed:  ${{ steps.versions.outputs.sksu_changed }}
       update_detail: ${{ steps.versions.outputs.update_detail }}
       check_failed:  ${{ steps.versions.outputs.check_failed }}
 
@@ -55,25 +55,25 @@ jobs:
       ksun_tag_pin:  ${{ needs.check.outputs.ksun_tag }}
     secrets: inherit
 
-  verify-suki:
+  verify-sksu:
     name: "Verify SukiSU-Ultra candidate"
     needs: check
-    if: needs.check.outputs.suki_changed == 'true'
+    if: needs.check.outputs.sksu_changed == 'true'
     uses: ./.github/workflows/build-kernel.yml
     with:
       variant_name:  "Verify-SukiSU-Ultra"
       source_type:   gki
-      ksu_type:      suki
+      ksu_type:      sksu
       zip_prefix:    VERIFY_SukiSU-Ultra
-      artifact_name: verify-suki
+      artifact_name: verify-sksu
       defconfig:     gki_defconfig
       build_type:    stable
-      suki_tag_pin:  ${{ needs.check.outputs.suki_tag }}
+      sksu_tag_pin:  ${{ needs.check.outputs.sksu_tag }}
     secrets: inherit
 
   apply-pins:
     name: "Apply verified pins"
-    needs: [check, verify-ksun, verify-suki]
+    needs: [check, verify-ksun, verify-sksu]
     if: always() && needs.check.outputs.has_update == 'true'
     runs-on: ubuntu-latest
     outputs:
@@ -87,14 +87,14 @@ jobs:
         id: apply
         env:
           NEW_KSUN:  ${{ needs.check.outputs.ksun_tag }}
-          NEW_SUKI:  ${{ needs.check.outputs.suki_tag }}
+          NEW_SKSU:  ${{ needs.check.outputs.sksu_tag }}
           NEW_SUSFS: ${{ needs.check.outputs.susfs_tag }}
           NEW_GKI:   ${{ needs.check.outputs.gki_sub }}
           KSUN_GATE: ${{ needs.verify-ksun.result }}
-          SUKI_GATE: ${{ needs.verify-suki.result }}
+          SKSU_GATE: ${{ needs.verify-sksu.result }}
         run: |
           OLD_KSUN=$(jq -r .ksun_tag sources/source-pins.json)
-          OLD_SUKI=$(jq -r .suki_tag sources/source-pins.json)
+          OLD_SKSU=$(jq -r .sksu_tag sources/source-pins.json)
 
           HELD_BACK=()
 
@@ -109,23 +109,23 @@ jobs:
             HELD_BACK+=("KSU-Next: verify build failed, kept ${OLD_KSUN}")
           fi
 
-          if [ "$SUKI_GATE" = "success" ] || [ "$SUKI_GATE" = "skipped" ]; then
-            FINAL_SUKI="$NEW_SUKI"
+          if [ "$SKSU_GATE" = "success" ] || [ "$SKSU_GATE" = "skipped" ]; then
+            FINAL_SKSU="$NEW_SKSU"
           else
-            FINAL_SUKI="$OLD_SUKI"
-            HELD_BACK+=("SukiSU-Ultra: verify build failed, kept ${OLD_SUKI}")
+            FINAL_SKSU="$OLD_SKSU"
+            HELD_BACK+=("SukiSU-Ultra: verify build failed, kept ${OLD_SKSU}")
           fi
 
           # susfs_tag / gki_sublevel stay ungated — always take the freshly-detected value.
           jq -n \
             --arg gki   "$NEW_GKI" \
             --arg ksun  "$FINAL_KSUN" \
-            --arg suki  "$FINAL_SUKI" \
+            --arg sksu  "$FINAL_SKSU" \
             --arg susfs "$NEW_SUSFS" \
             '{
               gki_sublevel: $gki,
               ksun_tag:     $ksun,
-              suki_tag:     $suki,
+              sksu_tag:     $sksu,
               susfs_tag:    $susfs
             }' > sources/source-pins.json
 
@@ -165,7 +165,7 @@ jobs:
           RUN_URL:         "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           HAS_UPDATE:      ${{ needs.check.outputs.has_update }}
           CHECK_KSUN_TAG:  ${{ needs.check.outputs.ksun_tag }}
-          CHECK_SUKI_TAG:  ${{ needs.check.outputs.suki_tag }}
+          CHECK_SKSU_TAG:  ${{ needs.check.outputs.sksu_tag }}
           CHECK_SUSFS_TAG: ${{ needs.check.outputs.susfs_tag }}
           CHECK_GKI_SUB:   ${{ needs.check.outputs.gki_sub }}
           UPDATE_DETAIL:   ${{ needs.check.outputs.update_detail }}

@@ -26,7 +26,7 @@ if [ "$ZIP_MODE" = "aio" ] || [ "$ZIP_MODE" = "both" ]; then
     [ -f "$ARTIFACT_ZIP" ] || continue
 
     # Derive named image from artifact dir name
-    # artifact dirs: gki-ksun, gki-suki, gki-nksu
+    # artifact dirs: gki-ksun, gki-sksu, gki-nksu
     DIR_NAME=$(basename "$ARTIFACT_DIR")
     case "$DIR_NAME" in
       gki-ksun)  IMG_NAME="Image.gki.ksu"   ;;

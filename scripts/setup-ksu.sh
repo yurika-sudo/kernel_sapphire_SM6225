@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # setup-ksu.sh — integrate KSU variant + SUSFS into kernel source
-# env: KSU_TYPE (ksun|suki|none), KERNEL_DIR, WORK_DIR
-# optional env: KSUN_TAG_PIN, SUKI_TAG_PIN — if set, checkout that exact tag
+# env: KSU_TYPE (ksun|sksu|none), KERNEL_DIR, WORK_DIR
+# optional env: KSUN_TAG_PIN, SKSU_TAG_PIN — if set, checkout that exact tag
 #   instead of floating branch HEAD. Used only by check-updates.yml's verify
 #   gate to test a specific candidate tag before it's committed to
 #   source-pins.json. Normal builds never set these, so day-to-day behavior
@@ -188,7 +188,7 @@ print("[OK] kernel_umount.c: restored missing kernel_umount_feature_set")
 EOF
 }
 
-_fix_susfs_exec_suki() {
+_fix_susfs_exec_sksu() {
   # ShirkNeko SUSFS patch injects ksu_handle_execveat / ksu_install_su_fd
   # (syscall_event_bridge.c) and never ships these symbols. Strip all
   # CONFIG_KSU_SUSFS blocks from exec.c except the susfs_def.h include.
@@ -267,21 +267,21 @@ _pin_lvc_before() {
   echo "[OK] $F: LINUX_VERSION_CODE pinned before '$ANCHOR'"
 }
 
-_apply_suki_susfs_ksu() {
+_apply_sksu_susfs_ksu() {
   # v4.2.1 ships without SUSFS. Apply simonpunk's KernelSU enable-patch, then
   # hand-adapt the only 4 hunks that reject (init.c x3, ksud_integration.c x1).
   # Every anchor must match exactly once; any other reject set aborts the build.
   local D="SukiSU-Ultra"
   local P="susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
-  [ -f "$P" ] || { echo "[FAIL] _apply_suki_susfs_ksu: $P not found"; return 1; }
-  [ -d "$D/kernel" ] || { echo "[FAIL] _apply_suki_susfs_ksu: $D/kernel not found"; return 1; }
+  [ -f "$P" ] || { echo "[FAIL] _apply_sksu_susfs_ksu: $P not found"; return 1; }
+  [ -d "$D/kernel" ] || { echo "[FAIL] _apply_sksu_susfs_ksu: $D/kernel not found"; return 1; }
   (
     cd "$D" || exit 1
-    patch -p1 --forward --no-backup-if-mismatch < "../$P" > /tmp/suki_susfs_patch.log 2>&1 || true
+    patch -p1 --forward --no-backup-if-mismatch < "../$P" > /tmp/sksu_susfs_patch.log 2>&1 || true
     rejs=$(find . -name '*.rej' | sort | tr '\n' ' ')
     if [ "$rejs" != "./kernel/core/init.c.rej ./kernel/runtime/ksud_integration.c.rej " ]; then
       echo "[FAIL] unexpected reject set: '$rejs'"
-      grep -E 'FAILED|^checking file|^patching file' /tmp/suki_susfs_patch.log
+      grep -E 'FAILED|^checking file|^patching file' /tmp/sksu_susfs_patch.log
       exit 1
     fi
 
@@ -352,7 +352,7 @@ PYEOF
   ) || return 1
 }
 
-_pin_suki_lvc() {
+_pin_sksu_lvc() {
   # version.h has no include guard: any later include re-defines
   # LINUX_VERSION_CODE (spoofed 6.12) and wipes an earlier pin.
   # So anchor on the LAST include of each file, not the first.
@@ -443,17 +443,17 @@ elif [ "$KSU_TYPE" = "sksu" ]; then
 
   cd SukiSU-Ultra
   git fetch --tags 2>/dev/null || true
-  SUKI_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null | tr -d '[:space:]')
-  SUKI_TAG=${SUKI_TAG:-$(git describe --tags --abbrev=0 HEAD 2>/dev/null | tr -d '[:space:]')}
-  SUKI_TAG=${SUKI_TAG:-unknown}
-  SUKI_SHA=$(git rev-parse HEAD)
-  echo "SUKI_TAG=$SUKI_TAG"  >> "${GITHUB_ENV:-/dev/null}"
-  echo "SUKI_SHA=$SUKI_SHA"  >> "${GITHUB_ENV:-/dev/null}"
-  echo "$SUKI_TAG"                > "$WORK_DIR/sksu_tag.txt"
-  echo "$SUKI_SHA"                > "$WORK_DIR/sksu_sha.txt"
-  _suki_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
+  SKSU_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null | tr -d '[:space:]')
+  SKSU_TAG=${SKSU_TAG:-$(git describe --tags --abbrev=0 HEAD 2>/dev/null | tr -d '[:space:]')}
+  SKSU_TAG=${SKSU_TAG:-unknown}
+  SKSU_SHA=$(git rev-parse HEAD)
+  echo "SKSU_TAG=$SKSU_TAG"  >> "${GITHUB_ENV:-/dev/null}"
+  echo "SKSU_SHA=$SKSU_SHA"  >> "${GITHUB_ENV:-/dev/null}"
+  echo "$SKSU_TAG"                > "$WORK_DIR/sksu_tag.txt"
+  echo "$SKSU_SHA"                > "$WORK_DIR/sksu_sha.txt"
+  _sksu_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
     | awk 'NR==1{print $NF}' | tr -d '[:space:]')
-  echo "${_suki_ver:-}" > "$WORK_DIR/sksu_version.txt"
+  echo "${_sksu_ver:-}" > "$WORK_DIR/sksu_version.txt"
   cd ..
 
   # HEAD patches expect KSU preinit, SukiSU v4.2.1 has none: pinned
@@ -472,8 +472,8 @@ elif [ "$KSU_TYPE" = "sksu" ]; then
   _patch_susfs_def_h
   _pin_susfs_lvc
 
-  _apply_suki_susfs_ksu || exit 1
-  _pin_suki_lvc
+  _apply_sksu_susfs_ksu || exit 1
+  _pin_sksu_lvc
   _link_ksu_driver "SukiSU-Ultra/kernel"
   rm -rf susfs4ksu
 

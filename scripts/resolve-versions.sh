@@ -28,19 +28,19 @@ SUSFS_VERSION="${_susfs_raw:-v1.5.2+_R27}"
 _wf=$(find ./artifacts -name "ksun_tag.txt" | head -1)
 KSUN_TAG=$([ -f "$_wf" ] && cat "$_wf" | tr -d '[:space:]' || echo "unknown")
 _sf=$(find ./artifacts -name "sksu_tag.txt" | head -1)
-SUKI_TAG=$([ -f "$_sf" ] && cat "$_sf" | tr -d '[:space:]' || echo "unknown")
+SKSU_TAG=$([ -f "$_sf" ] && cat "$_sf" | tr -d '[:space:]' || echo "unknown")
 # Version codes (for manager matching)
 _kv=$(find ./artifacts -name "ksun_version.txt" | head -1)
 KSUN_VERSION=$([ -f "$_kv" ] && cat "$_kv" | tr -d '[:space:]' || echo "")
 
 _sv=$(find ./artifacts -name "sksu_version.txt" | head -1)
-SUKI_VERSION=$([ -f "$_sv" ] && cat "$_sv" | tr -d '[:space:]' || echo "")
+SKSU_VERSION=$([ -f "$_sv" ] && cat "$_sv" | tr -d '[:space:]' || echo "")
 
 # Commit SHAs recorded at build time — used to match exact manager CI run
 _ks=$(find ./artifacts -name "ksun_sha.txt" | head -1)
 KSUN_SHA=$([ -f "$_ks" ] && cat "$_ks" | tr -d '[:space:]' || echo "")
 _rs=$(find ./artifacts -name "sksu_sha.txt" | head -1)
-SUKI_SHA=$([ -f "$_rs" ] && cat "$_rs" | tr -d '[:space:]' || echo "")
+SKSU_SHA=$([ -f "$_rs" ] && cat "$_rs" | tr -d '[:space:]' || echo "")
 
 # Find manager CI run whose head_sha matches the kernel driver SHA recorded at build time.
 # Falls back to latest successful run if no SHA match found (e.g. testing build or old artifact).
@@ -82,7 +82,7 @@ KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_kr" ] && \
   "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/actions/runs/${_kr}/artifacts" \
   | jq -r '.artifacts[] | select(.name == "manager-spoofed") | .id // empty' | head -1 || true)  
 
-_suki_find_run() {
+_sksu_find_run() {
   # Upstream build-manager.yml run at the exact SukiSU commit the kernel was
   # built from. No "latest on main" fallback: a manager from another commit
   # can carry a different UAPI version than the kernel.
@@ -92,16 +92,16 @@ _suki_find_run() {
     "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml/runs?head_sha=${sha}&status=success&per_page=1" \
     | jq -r '.workflow_runs[0].id // empty' 2>/dev/null | tr -d '[:space:]' || true
 }
-_sr=$(_suki_find_run "$SUKI_SHA")
-[ -z "$SUKI_SHA" ] || [ -n "$_sr" ] || echo "[WARN] no upstream manager run for SukiSU ${SUKI_SHA}; Suki manager not attached" >&2
-SUKI_MANAGER_URL="${_sr:+https://github.com/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}}"
-SUKI_MANAGER_URL="${SUKI_MANAGER_URL:-https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases/tag/${SUKI_TAG}}"
-SUKI_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \
+_sr=$(_sksu_find_run "$SKSU_SHA")
+[ -z "$SKSU_SHA" ] || [ -n "$_sr" ] || echo "[WARN] no upstream manager run for SukiSU ${SKSU_SHA}; Suki manager not attached" >&2
+SKSU_MANAGER_URL="${_sr:+https://github.com/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}}"
+SKSU_MANAGER_URL="${SKSU_MANAGER_URL:-https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases/tag/${SKSU_TAG}}"
+SKSU_MANAGER_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}/artifacts" \
   | jq -r '.artifacts[] | select(.name == "Manager") | select(.expired == false) | .id // empty' | head -1 || true)
 
-SUKI_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_sr" ] && \
+SKSU_MANAGER_SPOOFED_ARTIFACT_ID=$([ -n "$_sr" ] && \
   curl -sf --max-time 10 -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/${_sr}/artifacts" \
   | jq -r '.artifacts[] | select(.name == "Manager-spoofed") | select(.expired == false) | .id // empty' | head -1 || true)
@@ -131,20 +131,20 @@ RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${ENCODED_TAG}
 
 {
   echo "KSUN_VERSION=$KSUN_VERSION"
-  echo "SUKI_VERSION=$SUKI_VERSION"
+  echo "SKSU_VERSION=$SKSU_VERSION"
   echo "KSUN_MANAGER_URL=$KSUN_MANAGER_URL"
-  echo "SUKI_MANAGER_URL=$SUKI_MANAGER_URL"
+  echo "SKSU_MANAGER_URL=$SKSU_MANAGER_URL"
   echo "KSUN_MANAGER_ARTIFACT_ID=$KSUN_MANAGER_ARTIFACT_ID"
   echo "KSUN_MANAGER_SPOOFED_ARTIFACT_ID=$KSUN_MANAGER_SPOOFED_ARTIFACT_ID"
-  echo "SUKI_MANAGER_ARTIFACT_ID=$SUKI_MANAGER_ARTIFACT_ID"
-  echo "SUKI_MANAGER_SPOOFED_ARTIFACT_ID=$SUKI_MANAGER_SPOOFED_ARTIFACT_ID"
+  echo "SKSU_MANAGER_ARTIFACT_ID=$SKSU_MANAGER_ARTIFACT_ID"
+  echo "SKSU_MANAGER_SPOOFED_ARTIFACT_ID=$SKSU_MANAGER_SPOOFED_ARTIFACT_ID"
   echo "KERNEL_VERSION=$KERNEL_VERSION"
   echo "KERNEL_UNAME=$KERNEL_UNAME"
   echo "KERNEL_VERSION_GKI=$KERNEL_VERSION_GKI"
   echo "KERNEL_UNAME_GKI=$KERNEL_UNAME_GKI"
   echo "SUSFS_VERSION=$SUSFS_VERSION"
   echo "KSUN_TAG=$KSUN_TAG"
-  echo "SUKI_TAG=$SUKI_TAG"
+  echo "SKSU_TAG=$SKSU_TAG"
   echo "DATE_TAG=$DATE_TAG"
   echo "RELEASE_TAG=$RELEASE_TAG"
   echo "RELEASE_NAME=$RELEASE_NAME"
@@ -161,5 +161,5 @@ else
 fi
 echo "  SUSFS   : $SUSFS_VERSION"
 echo "  KSU-Next: $KSUN_TAG"
-echo "  SukiSU-Ultra: $SUKI_TAG"
+echo "  SukiSU-Ultra: $SKSU_TAG"
 echo "  Tag     : $RELEASE_TAG"

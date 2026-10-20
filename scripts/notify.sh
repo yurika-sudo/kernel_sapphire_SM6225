@@ -76,7 +76,7 @@ if [ "$MODE" = "success" ]; then
   MSG="${MSG}Tag: <code>${DISPLAY_TAG}</code>%0A"
   MSG="${MSG}%0A"
   MSG="${MSG}KSU-Next: <code>${KSUN_TAG:-unknown}</code>%0A"
-  MSG="${MSG}SukiSU-Ultra: <code>${SUKI_TAG:-unknown}</code>%0A"
+  MSG="${MSG}SukiSU-Ultra: <code>${SKSU_TAG:-unknown}</code>%0A"
   MSG="${MSG}SUSFS: <code>${DISPLAY_SUSFS}</code>%0A"
   MSG="${MSG}%0A"
   MSG="${MSG}<a href='${RELEASE_LINK}'>Release</a>%0A"
@@ -171,7 +171,7 @@ elif [ "$MODE" = "check" ]; then
   if [ "${HAS_UPDATE:-false}" != "true" ]; then
     MSG="<b>[check-updates] No upstream changes</b>%0A%0A"
     MSG="${MSG}KSU-Next: <code>${CHECK_KSUN_TAG:-?}</code>%0A"
-    MSG="${MSG}SukiSU-Ultra: <code>${CHECK_SUKI_TAG:-?}</code>%0A"
+    MSG="${MSG}SukiSU-Ultra: <code>${CHECK_SKSU_TAG:-?}</code>%0A"
     MSG="${MSG}SUSFS: <code>${CHECK_SUSFS_TAG:-?}</code>%0A"
     MSG="${MSG}GKI: <code>${CHECK_GKI_SUB:-?}</code>%0A"
     MSG="${MSG}<a href='${RUN_URL}'>Logs</a>"
@@ -183,7 +183,7 @@ elif [ "$MODE" = "check" ]; then
   MSG="<b>[check-updates] Upstream update detected</b>%0A%0A"
   [ -n "${UPDATE_DETAIL:-}" ] && MSG="${MSG}${UPDATE_DETAIL}%0A%0A"
   MSG="${MSG}KSU-Next: <code>${CHECK_KSUN_TAG:-?}</code>%0A"
-  MSG="${MSG}SukiSU-Ultra: <code>${CHECK_SUKI_TAG:-?}</code>%0A"
+  MSG="${MSG}SukiSU-Ultra: <code>${CHECK_SKSU_TAG:-?}</code>%0A"
   MSG="${MSG}SUSFS: <code>${CHECK_SUSFS_TAG:-?}</code>%0A"
   MSG="${MSG}GKI: <code>${CHECK_GKI_SUB:-?}</code>%0A"
 
