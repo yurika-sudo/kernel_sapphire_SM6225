@@ -8,6 +8,8 @@ set -euo pipefail
 
 MODE="${1:?usage: notify.sh <success|variant-failure|failure|check>}"
 
+[ "${NOTIFY_ENABLED:-true}" = "true" ] || exit 0
+
 : "${TELEGRAM_BOT_TOKEN:?}"
 : "${TELEGRAM_CHAT_ID:?}"
 

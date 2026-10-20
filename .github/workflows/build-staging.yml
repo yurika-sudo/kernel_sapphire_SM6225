@@ -5,6 +5,11 @@ env:
 
 on:
   workflow_dispatch:
+    inputs:
+      notify:
+        description: "Send Telegram notifications"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,13 +40,14 @@ jobs:
       artifact_name: ${{ matrix.variant.artifact }}
       defconfig:     "gki_defconfig"
       build_type:    "testing"
+      notify:        ${{ inputs.notify == true }}
     secrets: inherit
 
   notify:
     name: "Notify"
     runs-on: ubuntu-latest
     needs: [staging]
-    if: always()
+    if: always() && inputs.notify == true
     steps:
       - uses: actions/checkout@v4.2.2
         with:

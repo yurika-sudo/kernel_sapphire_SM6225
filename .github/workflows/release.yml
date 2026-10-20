@@ -12,6 +12,7 @@ on:
       start_time: { type: string, required: true }
       workflow_type: { type: string, default: aio }
       nuke_release: { type: boolean, default: true }
+      notify: { type: boolean, default: true }
 
 permissions:
   contents: write
@@ -143,4 +144,5 @@ jobs:
           GITHUB_REPOSITORY:   ${{ github.repository }}
           GITHUB_REF_NAME:     ${{ github.ref_name }}
           GITHUB_ACTOR:        ${{ github.actor }}
+          NOTIFY_ENABLED:      ${{ inputs.notify }}
         run: bash scripts/notify.sh success

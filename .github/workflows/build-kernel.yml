@@ -10,6 +10,7 @@ on:
       artifact_name: { type: string, required: true }
       defconfig:     { type: string, required: true }
       build_type:    { type: string, required: true }   # stable | testing
+      notify:        { type: boolean, default: true }
       ksun_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
       sksu_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
 
@@ -181,6 +182,7 @@ jobs:
           BUILD_TYPE:  ${{ inputs.build_type }}
           RUN_URL:     "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           RUN_NUMBER:  ${{ github.run_number }}
+          NOTIFY_ENABLED: ${{ inputs.notify }}
         run: bash scripts/notify.sh variant-failure
 
       - name: "Pack ZIP"
