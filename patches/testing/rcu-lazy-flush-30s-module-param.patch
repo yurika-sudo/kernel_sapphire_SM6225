@@ -1,0 +1,15 @@
+diff --git a/kernel/rcu/tree_nocb.h b/kernel/rcu/tree_nocb.h
+index cdeb55552..fc8c8a9c6 100644
+--- a/kernel/rcu/tree_nocb.h
++++ b/kernel/rcu/tree_nocb.h
+@@ -250,8 +250,9 @@ static bool wake_nocb_gp(struct rcu_data *rdp, bool force)
+  * however, LAZY_FLUSH_JIFFIES will ensure no lazy callbacks are
+  * left unsubmitted to RCU after those many jiffies.
+  */
+-#define LAZY_FLUSH_JIFFIES (10 * HZ)
++#define LAZY_FLUSH_JIFFIES (30 * HZ)
+ static unsigned long jiffies_till_flush = LAZY_FLUSH_JIFFIES;
++module_param(jiffies_till_flush, ulong, 0444);
+ 
+ #ifdef CONFIG_RCU_LAZY
+ // To be called only from test code.
