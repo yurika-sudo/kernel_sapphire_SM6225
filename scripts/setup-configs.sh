@@ -138,7 +138,7 @@ CONFIG_BBG=y
 EOF
 
 # SukiSU-Ultra
-elif [ "$KSU_TYPE" = "suki" ]; then
+elif [ "$KSU_TYPE" = "sksu" ]; then
 cat >> "$CF" << 'EOF'
 CONFIG_KSU=y
 CONFIG_KPM=y

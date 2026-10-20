@@ -27,19 +27,19 @@ SUSFS_VERSION="${_susfs_raw:-v1.5.2+_R27}"
 
 _wf=$(find ./artifacts -name "ksun_tag.txt" | head -1)
 KSUN_TAG=$([ -f "$_wf" ] && cat "$_wf" | tr -d '[:space:]' || echo "unknown")
-_sf=$(find ./artifacts -name "suki_tag.txt" | head -1)
+_sf=$(find ./artifacts -name "sksu_tag.txt" | head -1)
 SUKI_TAG=$([ -f "$_sf" ] && cat "$_sf" | tr -d '[:space:]' || echo "unknown")
 # Version codes (for manager matching)
 _kv=$(find ./artifacts -name "ksun_version.txt" | head -1)
 KSUN_VERSION=$([ -f "$_kv" ] && cat "$_kv" | tr -d '[:space:]' || echo "")
 
-_sv=$(find ./artifacts -name "suki_version.txt" | head -1)
+_sv=$(find ./artifacts -name "sksu_version.txt" | head -1)
 SUKI_VERSION=$([ -f "$_sv" ] && cat "$_sv" | tr -d '[:space:]' || echo "")
 
 # Commit SHAs recorded at build time — used to match exact manager CI run
 _ks=$(find ./artifacts -name "ksun_sha.txt" | head -1)
 KSUN_SHA=$([ -f "$_ks" ] && cat "$_ks" | tr -d '[:space:]' || echo "")
-_rs=$(find ./artifacts -name "suki_sha.txt" | head -1)
+_rs=$(find ./artifacts -name "sksu_sha.txt" | head -1)
 SUKI_SHA=$([ -f "$_rs" ] && cat "$_rs" | tr -d '[:space:]' || echo "")
 
 # Find manager CI run whose head_sha matches the kernel driver SHA recorded at build time.

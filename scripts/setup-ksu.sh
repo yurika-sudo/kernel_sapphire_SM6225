@@ -434,7 +434,7 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   rm -rf susfs4ksu
 
 
-elif [ "$KSU_TYPE" = "suki" ]; then
+elif [ "$KSU_TYPE" = "sksu" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Ultra
 
   git clone --depth=1 --branch v4.2.1 \
@@ -449,11 +449,11 @@ elif [ "$KSU_TYPE" = "suki" ]; then
   SUKI_SHA=$(git rev-parse HEAD)
   echo "SUKI_TAG=$SUKI_TAG"  >> "${GITHUB_ENV:-/dev/null}"
   echo "SUKI_SHA=$SUKI_SHA"  >> "${GITHUB_ENV:-/dev/null}"
-  echo "$SUKI_TAG"                > "$WORK_DIR/suki_tag.txt"
-  echo "$SUKI_SHA"                > "$WORK_DIR/suki_sha.txt"
+  echo "$SUKI_TAG"                > "$WORK_DIR/sksu_tag.txt"
+  echo "$SUKI_SHA"                > "$WORK_DIR/sksu_sha.txt"
   _suki_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
     | awk 'NR==1{print $NF}' | tr -d '[:space:]')
-  echo "${_suki_ver:-}" > "$WORK_DIR/suki_version.txt"
+  echo "${_suki_ver:-}" > "$WORK_DIR/sksu_version.txt"
   cd ..
 
   # HEAD patches expect KSU preinit, SukiSU v4.2.1 has none: pinned
