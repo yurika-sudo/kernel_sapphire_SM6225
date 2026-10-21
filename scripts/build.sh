@@ -42,6 +42,7 @@ MAKE_FLAGS=(
   LLVM_PARALLEL_LINK_JOBS=2
 )
 [[ "$SOURCE_TYPE" == gki* ]] && MAKE_FLAGS+=(BRANCH=android13-5.15-lts KMI_GENERATION=8)
+MAKE_FLAGS+=(LOCALVERSION="")
 
 set -o pipefail
 mkdir -p "${OUT_DIR}/dist"
