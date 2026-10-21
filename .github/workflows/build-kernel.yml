@@ -204,10 +204,10 @@ jobs:
       - name: "Capture uname"
         run: |
           UNAME=$(grep UTS_RELEASE \
-            ${{ env.WORK_DIR }}/out/include/generated/utsrelease.h 2>/dev/null \
+            ${{ env.KERNEL_SRC }}/out/include/generated/utsrelease.h 2>/dev/null \
             | cut -d'"' -f2 || echo "unknown")
-          echo "$UNAME" > ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
-          echo "$UNAME" > ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
+          echo "$UNAME" > ${{ env.KERNEL_SRC }}/out/dist/kernel_uname.txt
+          echo "$UNAME" > ${{ env.KERNEL_SRC }}/out/dist/kernel_version.txt
           echo "Kernel uname: $UNAME"
 
 
@@ -219,10 +219,10 @@ jobs:
             cp "${{ env.WORK_DIR }}/${{ env.ZIP_NAME }}" "$STAGE/"
           [ -f "${{ env.WORK_DIR }}/out/seiran-core.zip" ] && \
             cp "${{ env.WORK_DIR }}/out/seiran-core.zip" "$STAGE/"
-          [ -f "${{ env.WORK_DIR }}/out/dist/kernel_version.txt" ] && \
-            cp "${{ env.WORK_DIR }}/out/dist/kernel_version.txt" "$STAGE/"
-          [ -f "${{ env.WORK_DIR }}/out/dist/kernel_uname.txt" ] && \
-            cp "${{ env.WORK_DIR }}/out/dist/kernel_uname.txt" "$STAGE/"
+          [ -f "${{ env.KERNEL_SRC }}/out/dist/kernel_version.txt" ] && \
+            cp "${{ env.KERNEL_SRC }}/out/dist/kernel_version.txt" "$STAGE/"
+          [ -f "${{ env.KERNEL_SRC }}/out/dist/kernel_uname.txt" ] && \
+            cp "${{ env.KERNEL_SRC }}/out/dist/kernel_uname.txt" "$STAGE/"
           for f in ksun_tag.txt ksun_sha.txt ksun_version.txt \
                    sksu_tag.txt sksu_sha.txt sksu_version.txt; do
             [ -f "${{ env.WORK_DIR }}/$f" ] && \
