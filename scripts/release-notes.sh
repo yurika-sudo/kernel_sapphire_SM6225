@@ -27,7 +27,7 @@ fi
 BODY="${BODY}**KSU-Next Manager:** [Dev Build ↗](${KSUN_MANAGER_URL})"$'\n'
 BODY="${BODY}**SukiSU-Ultra Manager:** [${SKSU_TAG:-CI} ↗](${SKSU_MANAGER_URL})"$'\n'
 BODY="${BODY}**SUSFS module:** [${SUSFS_VERSION}](${SUSFS_MODULE_URL})"$'\n'
-BODY="${BODY}**Kernel base:** \`${KERNEL_VERSION_GKI:-${KERNEL_VERSION}}\`"$'\n\n'
+BODY="${BODY}**Kernel base:** \`6.12.25-android16\`"$'\n\n'
 BODY="${BODY}**ZRAM Multi-Comp module:** \`seiran-core.zip\` — attached below & sent via [Telegram](https://t.me/tmplogchat)"$'\n\n'
 
 if [ "$WORKFLOW_TYPE" = "compat" ]; then
