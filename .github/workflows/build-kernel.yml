@@ -206,6 +206,7 @@ jobs:
             ${{ env.WORK_DIR }}/out/include/generated/utsrelease.h 2>/dev/null \
             | cut -d'"' -f2 || echo "unknown")
           echo "$UNAME" > ${{ env.WORK_DIR }}/out/dist/kernel_uname.txt
+          echo "$UNAME" > ${{ env.WORK_DIR }}/out/dist/kernel_version.txt
           echo "Kernel uname: $UNAME"
 
 
