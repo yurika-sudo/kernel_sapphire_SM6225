@@ -1,0 +1,213 @@
+diff --git a/arch/arm64/kernel/cpuinfo.c b/arch/arm64/kernel/cpuinfo.c
+index 330b92ea863a..4ef859ab8f17 100644
+--- a/arch/arm64/kernel/cpuinfo.c
++++ b/arch/arm64/kernel/cpuinfo.c
+@@ -345,7 +345,7 @@ static void cpuinfo_detect_icache_policy(struct cpuinfo_arm64 *info)
+ 		break;
+ 	}
+ 
+-	pr_info("Detected %s I-cache on CPU%d\n", icache_policy_str[l1ip], cpu);
++	pr_debug("Detected %s I-cache on CPU%d\n", icache_policy_str[l1ip], cpu);
+ }
+ 
+ static void __cpuinfo_store_cpu_32bit(struct cpuinfo_32bit *info)
+diff --git a/arch/arm64/kernel/psci.c b/arch/arm64/kernel/psci.c
+index ab7f4c476104..74b8da57a094 100644
+--- a/arch/arm64/kernel/psci.c
++++ b/arch/arm64/kernel/psci.c
+@@ -95,7 +95,7 @@ static int cpu_psci_cpu_kill(unsigned int cpu)
+ 	do {
+ 		err = psci_ops.affinity_info(cpu_logical_map(cpu), 0);
+ 		if (err == PSCI_0_2_AFFINITY_LEVEL_OFF) {
+-			pr_info("CPU%d killed (polled %d ms)\n", cpu,
++			pr_debug("CPU%d killed (polled %d ms)\n", cpu,
+ 				jiffies_to_msecs(jiffies - start));
+ 			return 0;
+ 		}
+diff --git a/drivers/android/binder.c b/drivers/android/binder.c
+index 57b9ac23aedc..6788cdbcedeb 100644
+--- a/drivers/android/binder.c
++++ b/drivers/android/binder.c
+@@ -6094,7 +6094,7 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+ 		thread->looper_need_return = false;
+ 	wait_event_interruptible(binder_user_error_wait, binder_stop_on_user_error < 2);
+ 	if (ret && ret != -EINTR)
+-		pr_info("%d:%d ioctl %x %lx returned %d\n", proc->pid, current->pid, cmd, arg, ret);
++		pr_debug("%d:%d ioctl %x %lx returned %d\n", proc->pid, current->pid, cmd, arg, ret);
+ err_unlocked:
+ 	trace_binder_ioctl_done(ret);
+ 	return ret;
+diff --git a/drivers/clocksource/arm_arch_timer.c b/drivers/clocksource/arm_arch_timer.c
+index 3e2d3015f3a1..0c2296f5fbec 100644
+--- a/drivers/clocksource/arm_arch_timer.c
++++ b/drivers/clocksource/arm_arch_timer.c
+@@ -879,7 +879,7 @@ static void arch_counter_set_user_access(void)
+ 	 * disabled though.
+ 	 */
+ 	if (arch_timer_this_cpu_has_cntvct_wa())
+-		pr_info("CPU%d: Trapping CNTVCT access\n", smp_processor_id());
++		pr_debug("CPU%d: Trapping CNTVCT access\n", smp_processor_id());
+ 	else
+ 		cntkctl |= ARCH_TIMER_USR_VCT_ACCESS_EN;
+ 
+diff --git a/drivers/media/common/videobuf2/videobuf2-core.c b/drivers/media/common/videobuf2/videobuf2-core.c
+index b66e80e6924e..53c7c2bbbbaa 100644
+--- a/drivers/media/common/videobuf2/videobuf2-core.c
++++ b/drivers/media/common/videobuf2/videobuf2-core.c
+@@ -31,7 +31,7 @@
+ 
+ #include <trace/events/vb2.h>
+ 
+-static int debug;
++static int debug=0;
+ module_param(debug, int, 0644);
+ 
+ #define dprintk(q, level, fmt, arg...)					\
+diff --git a/drivers/pwm/core.c b/drivers/pwm/core.c
+index 4527f09a5c50..2b71f474c174 100644
+--- a/drivers/pwm/core.c
++++ b/drivers/pwm/core.c
+@@ -1047,7 +1047,7 @@ void pwm_put(struct pwm_device *pwm)
+ 	mutex_lock(&pwm_lock);
+ 
+ 	if (!test_and_clear_bit(PWMF_REQUESTED, &pwm->flags)) {
+-		pr_warn("PWM device already freed\n");
++		pr_debug("PWM device already freed\n");
+ 		goto out;
+ 	}
+ 
+diff --git a/include/linux/kernel.h b/include/linux/kernel.h
+index d747a3a74767..8fbeaf434565 100644
+--- a/include/linux/kernel.h
++++ b/include/linux/kernel.h
+@@ -358,6 +358,9 @@ do {									\
+  * let gcc optimize the rest.
+  */
+ 
++#ifdef CONFIG_DISABLE_TRACE_PRINTK
++#define trace_printk pr_debug
++#else
+ #define trace_printk(fmt, ...)				\
+ do {							\
+ 	char _______STR[] = __stringify((__VA_ARGS__));	\
+@@ -380,6 +383,7 @@ do {									\
+ 	else								\
+ 		__trace_printk(_THIS_IP_, fmt, ##args);			\
+ } while (0)
++#endif
+ 
+ extern __printf(2, 3)
+ int __trace_bprintk(unsigned long ip, const char *fmt, ...);
+diff --git a/include/linux/trace_events.h b/include/linux/trace_events.h
+index 2b6ca5b92f07..0c119af25c5c 100644
+--- a/include/linux/trace_events.h
++++ b/include/linux/trace_events.h
+@@ -805,6 +805,8 @@ int trace_array_set_clr_event(struct trace_array *tr, const char *system,
+  * if we try to allocate the static variable to fmt if it is not a
+  * constant. Even with the outer if statement optimizing out.
+  */
++
++#ifdef TRACING
+ #define event_trace_printk(ip, fmt, args...)				\
+ do {									\
+ 	__trace_printk_check_format(fmt, ##args);			\
+@@ -819,6 +821,10 @@ do {									\
+ 		__trace_printk(ip, fmt, ##args);			\
+ } while (0)
+ 
++#else
++#define event_trace_printk(ip, fmt, args...) ((void)0)
++#endif
++
+ #ifdef CONFIG_PERF_EVENTS
+ struct perf_event;
+ 
+diff --git a/init/Kconfig b/init/Kconfig
+index 2810598ec86e..6d9925561ad3 100644
+--- a/init/Kconfig
++++ b/init/Kconfig
+@@ -1467,8 +1467,6 @@ config BPF
+ 
+ menuconfig EXPERT
+ 	bool "Configure standard kernel features (expert users)"
+-	# Unhide debug options, to make the on-by-default options visible
+-	select DEBUG_KERNEL
+ 	help
+ 	  This option allows certain base kernel options and settings
+ 	  to be disabled or tweaked. This is for specialized
+diff --git a/kernel/cpu.c b/kernel/cpu.c
+index b8083b7df702..ba7b0ee83106 100644
+--- a/kernel/cpu.c
++++ b/kernel/cpu.c
+@@ -1584,7 +1584,7 @@ int freeze_secondary_cpus(int primary)
+ 		if (!error)
+ 			cpumask_set_cpu(cpu, frozen_cpus);
+ 		else {
+-			pr_err("Error taking CPU%d down: %d\n", cpu, error);
++			pr_debug("Error taking CPU%d down: %d\n", cpu, error);
+ 			break;
+ 		}
+ 	}
+diff --git a/kernel/trace/Kconfig b/kernel/trace/Kconfig
+index 193ca0cf5d12..9d18d665f4ae 100644
+--- a/kernel/trace/Kconfig
++++ b/kernel/trace/Kconfig
+@@ -125,6 +125,20 @@ config GENERIC_TRACER
+ 	bool
+ 	select TRACING
+ 
++if TRACING
++
++config DISABLE_TRACE_PRINTK
++	bool "Force disable trace_printk() usage"
++	default y
++	help
++	  When trace_printk() is used in any of the kernel source, it enables
++	  debugging functions which are not desired for production kernel.
++	  Enabling this option will replace trace_printk() with pr_debug().
++
++	  If in doubt, say Y.
++
++endif
++
+ #
+ # Minimum requirements an architecture has to meet for us to
+ # be able to offer generic tracing facilities:
+diff --git a/lib/Kconfig.debug b/lib/Kconfig.debug
+index d6cc15236725..ab3e6f1d1179 100644
+--- a/lib/Kconfig.debug
++++ b/lib/Kconfig.debug
+@@ -49,7 +49,7 @@ config STACKTRACE_BUILD_ID
+ config CONSOLE_LOGLEVEL_DEFAULT
+ 	int "Default console loglevel (1-15)"
+ 	range 1 15
+-	default "7"
++	default "1"
+ 	help
+ 	  Default loglevel to determine what will be printed on the console.
+ 
+@@ -75,7 +75,7 @@ config CONSOLE_LOGLEVEL_QUIET
+ config MESSAGE_LOGLEVEL_DEFAULT
+ 	int "Default message log level (1-7)"
+ 	range 1 7
+-	default "4"
++	default "1"
+ 	help
+ 	  Default log level for printk statements with no specified priority.
+ 
+@@ -218,6 +218,7 @@ menu "Compile-time checks and compiler options"
+ config DEBUG_INFO
+ 	bool "Compile the kernel with debug info"
+ 	depends on DEBUG_KERNEL && !COMPILE_TEST
++	default n
+ 	help
+ 	  If you say Y here the resulting kernel image will include
+ 	  debugging info resulting in a larger kernel image.
+@@ -606,6 +607,7 @@ endmenu
+ 
+ config DEBUG_KERNEL
+ 	bool "Kernel debugging"
++	default n
+ 	help
+ 	  Say Y here if you are developing drivers or trying to debug and
+ 	  identify kernel problems.
