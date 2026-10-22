@@ -98,30 +98,6 @@ index d747a3a74767..8fbeaf434565 100644
  
  extern __printf(2, 3)
  int __trace_bprintk(unsigned long ip, const char *fmt, ...);
-diff --git a/include/linux/trace_events.h b/include/linux/trace_events.h
-index 2b6ca5b92f07..0c119af25c5c 100644
---- a/include/linux/trace_events.h
-+++ b/include/linux/trace_events.h
-@@ -805,6 +805,8 @@ int trace_array_set_clr_event(struct trace_array *tr, const char *system,
-  * if we try to allocate the static variable to fmt if it is not a
-  * constant. Even with the outer if statement optimizing out.
-  */
-+
-+#ifdef TRACING
- #define event_trace_printk(ip, fmt, args...)				\
- do {									\
- 	__trace_printk_check_format(fmt, ##args);			\
-@@ -819,6 +821,10 @@ do {									\
- 		__trace_printk(ip, fmt, ##args);			\
- } while (0)
- 
-+#else
-+#define event_trace_printk(ip, fmt, args...) ((void)0)
-+#endif
-+
- #ifdef CONFIG_PERF_EVENTS
- struct perf_event;
- 
 diff --git a/kernel/cpu.c b/kernel/cpu.c
 index b8083b7df702..ba7b0ee83106 100644
 --- a/kernel/cpu.c
