@@ -1,3 +1,50 @@
+From 232b611a9d812d3dddeff4d8d1627083f62c0938 Mon Sep 17 00:00:00 2001
+From: Yuan Si <do4suki@gmail.com>
+Date: Thu, 22 Oct 2026 13:06:46 +0000
+Subject: [PATCH] BACKPORT: mm/vmscan: Bump swappiness and lock sysctl to
+ read-only
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- mm/vmscan.c: vm_swappiness default 60 -> 160 (aggressively prefer
+  swap to avoid OOM on low-RAM sapphire)
+- kernel/sysctl.c: swappiness sysctl mode 0644 -> 0444; prevents
+  init.rc from the ROM overwriting our default at boot via
+  'write /proc/sys/vm/swappiness', root sysctl writes are checked
+  against mode bits without CAP_DAC_OVERRIDE bypass
+- extra2 kept as SYSCTL_TWO_HUNDRED (200 ceiling); vayu used
+  &one_hundred but our tree already has the 200 upper bound, no
+  reason to regress it
+- Dropped vayu's vmscan.c comment change ('From 0 .. 100' -> kept
+  '0 .. 200') — cosmetic, misleading to change given our ceiling is 200
+
+(cherry picked from commit 6c98873a0f16284dbab0199c86b22c229bf64c15)
+Link: https://github.com/AnymoreProject/android_kernel_vayu
+
+Signed-off-by: Yuan Si <do4suki@gmail.com>
+Assisted-by: Claude:claude-sonnet-4-6
+Signed-off-by: yurika-sudo <yurika0uu@gmail.com>
+---
+ kernel/sysctl.c | 2 +-
+ mm/vmscan.c     | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/kernel/sysctl.c b/kernel/sysctl.c
+index ab19acc0731d..e20878716253 100644
+--- a/kernel/sysctl.c
++++ b/kernel/sysctl.c
+@@ -2778,7 +2778,7 @@ static struct ctl_table vm_table[] = {
+ 		.procname	= "swappiness",
+ 		.data		= &vm_swappiness,
+ 		.maxlen		= sizeof(vm_swappiness),
+-		.mode		= 0644,
++		.mode		= 0444,
+ 		.proc_handler	= proc_dointvec_minmax,
+ 		.extra1		= SYSCTL_ZERO,
+ 		.extra2		= SYSCTL_TWO_HUNDRED,
+diff --git a/mm/vmscan.c b/mm/vmscan.c
+index ace21016e7c1..935ac6a848fb 100644
 --- a/mm/vmscan.c
 +++ b/mm/vmscan.c
 @@ -191,7 +191,7 @@ struct scan_control {
@@ -5,4 +52,10 @@
   * From 0 .. 200.  Higher means more swappy.
   */
 -int vm_swappiness = 60;
-+int vm_swappiness = 100;
++int vm_swappiness = 160;
+ 
+ static void set_task_reclaim_state(struct task_struct *task,
+ 				   struct reclaim_state *rs)
+-- 
+2.34.1
+
