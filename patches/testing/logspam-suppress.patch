@@ -122,19 +122,6 @@ index 2b6ca5b92f07..0c119af25c5c 100644
  #ifdef CONFIG_PERF_EVENTS
  struct perf_event;
  
-diff --git a/init/Kconfig b/init/Kconfig
-index 2810598ec86e..6d9925561ad3 100644
---- a/init/Kconfig
-+++ b/init/Kconfig
-@@ -1467,8 +1467,6 @@ config BPF
- 
- menuconfig EXPERT
- 	bool "Configure standard kernel features (expert users)"
--	# Unhide debug options, to make the on-by-default options visible
--	select DEBUG_KERNEL
- 	help
- 	  This option allows certain base kernel options and settings
- 	  to be disabled or tweaked. This is for specialized
 diff --git a/kernel/cpu.c b/kernel/cpu.c
 index b8083b7df702..ba7b0ee83106 100644
 --- a/kernel/cpu.c
