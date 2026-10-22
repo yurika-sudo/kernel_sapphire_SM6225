@@ -1,75 +1,5 @@
-From bb1375f137d861a1cf60025e7594f2375199d314 Mon Sep 17 00:00:00 2001
-From: Steambot12 <wilfridus.it@gmail.com>
-Date: Sat, 15 Aug 2026 03:56:07 +0000
-Subject: [PATCH] [BACKPORT] sched/fair: backport EEVDF scheduler from Linux
- 6.6
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
-
-Backport the Earliest Eligible Virtual Deadline First (EEVDF) scheduling
-algorithm from upstream Linux 6.6 to GKI 5.10.  EEVDF replaces the CFS
-buddy-based task picker with a deadline-driven, eligibility-aware picker
-that provides better latency guarantees and provably fair CPU distribution.
-
-Core changes:
-  - sched_entity gains deadline, min_deadline, vlag, slice fields
-    (appended at end of struct to preserve GKI KMI/ABI compatibility)
-  - cfs_rq gains avg_vruntime / avg_load for O(1) weighted-average V
-  - Augmented rbtree (min_deadline) enables O(log n) pick_eevdf()
-  - update_deadline() assigns fresh deadline when slice is exhausted
-  - place_entity() rewritten for lag-based placement with inflation
-  - update_entity_lag() captures lag at dequeue for sleep preservation
-  - check_preempt_tick/wakeup use eligibility instead of vruntime diff
-  - reweight_entity() maintains avg_vruntime across weight changes,
-    properly guarded against curr (not in tree) to avoid corruption
-  - deadline is normalized/denormalized alongside vruntime at every
-    migration, fork, enqueue/dequeue point to stay in sync
-
-New sched features: PLACE_LAG, PLACE_DEADLINE_INITIAL, RUN_TO_PARITY.
-Removed dead CFS functions: wakeup_preempt_entity, sched_vslice,
-__pick_next_entity.  Legacy CFS features GENTLE_FAIR_SLEEPERS and
-START_DEBIT set to false — superseded by PLACE_LAG and
-PLACE_DEADLINE_INITIAL respectively; no code reads them under EEVDF.
-
-Cross-SoC stability tuning:
-  - RUN_TO_PARITY enabled: lets curr keep running at tick time if its
-    slice is not yet exhausted — short-circuits __pick_eevdf()'s O(log n)
-    tree walk to O(1) for the common case, saving ~50 cycles per tick
-    per core.  Does NOT block wakeup preemption (check_preempt_wakeup
-    fires before pick and grants preemption via deadline comparison +
-    vruntime sleeper assist), so UI latency is unaffected.  Primary
-    benefit is power: fewer context switches on lightly loaded Little
-    cores = fewer cache/TLB refills = less active drain
-  - Wakeup preemption relaxed: a waking entity with an earlier deadline
-    preempts immediately without requiring the current entity to be
-    ineligible first; prevents one-slice UI lag on SoCs with wide
-    capacity spreads (MediaTek Dimensity, Exynos) where slice length
-    on Little cores can exceed a full frame budget
-  - Vruntime sleeper assist: when the deadline comparison does not grant
-    preemption (curr just refreshed its deadline), a waking task that is
-    eligible and has a vruntime deficit exceeding wakeup_granularity
-    preempts anyway — restores CFS-like sleeper-preempts-runner behaviour
-    for ROMs without vendor check_preempt_wakeup hooks (AOSP, LineageOS,
-    PixelExperience) where the scheduler runs unassisted by OEM frame-
-    pipeline logic
-  - Removed /proc/sched_eevdf (dead weight, status-only)
-  - Boot message downgraded from pr_err to pr_info
-
-All Android vendor hooks (trace_android_rvh_*) retained and fire at the
-same points as stock CFS — OEM scheduler modules remain functional.
-
-Signed-off-by: yurika-sudo <yurika0uu@gmail.com>
----
- include/linux/sched.h   |   6 +
- kernel/sched/core.c     |   4 +
- kernel/sched/fair.c     | 751 ++++++++++++++++++++++++++++++----------
- kernel/sched/features.h |  42 ++-
- kernel/sched/sched.h    |   4 +
- 5 files changed, 611 insertions(+), 196 deletions(-)
-
 diff --git a/include/linux/sched.h b/include/linux/sched.h
-index 1b6265497..8048adce9 100644
+index 1b6265497906..8048adce9d8f 100644
 --- a/include/linux/sched.h
 +++ b/include/linux/sched.h
 @@ -582,6 +582,12 @@ struct sched_entity {
@@ -86,7 +16,7 @@ index 1b6265497..8048adce9 100644
  
  struct sched_rt_entity {
 diff --git a/kernel/sched/core.c b/kernel/sched/core.c
-index 90d974cd0..1e5b5d389 100644
+index 90d974cd02ae..1e5b5d389d4a 100644
 --- a/kernel/sched/core.c
 +++ b/kernel/sched/core.c
 @@ -4506,6 +4506,10 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
@@ -101,7 +31,7 @@ index 90d974cd0..1e5b5d389 100644
  
  #ifdef CONFIG_FAIR_GROUP_SCHED
 diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
-index ddb8605b6..645b1e3d2 100644
+index ddb8605b66a7..645b1e3d2972 100644
 --- a/kernel/sched/fair.c
 +++ b/kernel/sched/fair.c
 @@ -25,6 +25,7 @@
@@ -1130,7 +1060,7 @@ index ddb8605b6..645b1e3d2 100644
  /*
   * Helper functions to facilitate extracting info from tracepoints.
 diff --git a/kernel/sched/features.h b/kernel/sched/features.h
-index 1dce8f1de..7babd9d9f 100644
+index 1dce8f1de6d7..7babd9d9f01d 100644
 --- a/kernel/sched/features.h
 +++ b/kernel/sched/features.h
 @@ -1,16 +1,44 @@
@@ -1186,7 +1116,7 @@ index 1dce8f1de..7babd9d9f 100644
  /*
   * Prefer to schedule the task we woke last (assuming it failed
 diff --git a/kernel/sched/sched.h b/kernel/sched/sched.h
-index 509643bd0..57868ab9e 100644
+index 509643bd01c9..57868ab9e892 100644
 --- a/kernel/sched/sched.h
 +++ b/kernel/sched/sched.h
 @@ -631,6 +631,10 @@ struct cfs_rq {
