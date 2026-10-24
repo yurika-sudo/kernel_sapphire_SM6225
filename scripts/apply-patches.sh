@@ -26,7 +26,6 @@ apply_patch "$BASE/adjust_cpu_scan_order.patch"                    "adjust_cpu_s
 apply_patch "$BASE/avoid_extra_s2idle_wake_attempts.patch"         "avoid_extra_s2idle_wake_attempts"
 apply_patch "$BASE/clear_page_16bytes_align.patch"                 "clear_page_16bytes_align"
 apply_patch "$BASE/disable_cache_hot_buddy.patch"                  "disable_cache_hot_buddy"
-apply_patch "$BASE/f2fs_enlarge_min_fsync_blocks.patch"            "f2fs_enlarge_min_fsync_blocks"
 apply_patch "$BASE/f2fs_reduce_congestion.patch"                   "f2fs_reduce_congestion"
 apply_patch "$BASE/file_struct_8bytes_align.patch"                 "file_struct_8bytes_align"
 apply_patch "$BASE/increase_ext4_default_commit_age.patch"         "increase_ext4_default_commit_age"
