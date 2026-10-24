@@ -6965,7 +6965,7 @@ index 000000000000..a8862c44a1d8
 +#endif
 diff --git a/lib/lz4/lz4armv8/lz4armv8.S b/lib/lz4/lz4armv8/lz4armv8.S
 new file mode 100644
-index 000000000000..a549cd9145e2
+index 000000000000..1104e98447b8
 --- /dev/null
 +++ b/lib/lz4/lz4armv8/lz4armv8.S
 @@ -0,0 +1,312 @@
@@ -7216,9 +7216,9 @@ index 000000000000..a549cd9145e2
 +.text
 +.p2align 4
 +
-+ENTRY(_lz4_decompress_asm)
++SYM_FUNC_START(_lz4_decompress_asm)
 +	lz4_decompress_asm_generic
-+ENDPROC(_lz4_decompress_asm)
++SYM_FUNC_END(_lz4_decompress_asm)
 +
 +Failed:
 +	mov	tmp, #-1
@@ -7278,9 +7278,9 @@ index 000000000000..a549cd9145e2
 +
 +.text
 +.p2align 4
-+ENTRY(_lz4_decompress_asm_noprfm)
++SYM_FUNC_START(_lz4_decompress_asm_noprfm)
 +	lz4_decompress_asm_generic	0
-+ENDPROC(_lz4_decompress_asm_noprfm)
++SYM_FUNC_END(_lz4_decompress_asm_noprfm)
 diff --git a/lib/lz4/lz4defs.h b/lib/lz4/lz4defs.h
 deleted file mode 100644
 index 673bd206aa98..000000000000
