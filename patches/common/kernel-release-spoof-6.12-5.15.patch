@@ -1,12 +1,12 @@
 diff --git a/Makefile b/Makefile
-index dff38ec7c..6c5c7d1d7 100644
+index 932bd1a65fdde..6c5c7d1d7c368 100644
 --- a/Makefile
 +++ b/Makefile
 @@ -1,7 +1,7 @@
  # SPDX-License-Identifier: GPL-2.0
 -VERSION = 5
 -PATCHLEVEL = 15
--SUBLEVEL = 220
+-SUBLEVEL = 223
 +VERSION = 6
 +PATCHLEVEL = 12
 +SUBLEVEL = 25
@@ -14,7 +14,7 @@ index dff38ec7c..6c5c7d1d7 100644
  NAME = Trick or Treat
  
 diff --git a/kernel/sys.c b/kernel/sys.c
-index 3c670ee13..2770458f1 100644
+index 3c670ee136a93..2770458f1fd73 100644
 --- a/kernel/sys.c
 +++ b/kernel/sys.c
 @@ -1291,6 +1291,24 @@ static int override_release(char __user *release, size_t len)
@@ -103,7 +103,7 @@ index 3c670ee13..2770458f1 100644
  		return -EFAULT;
  
 diff --git a/kernel/utsname_sysctl.c b/kernel/utsname_sysctl.c
-index 4ca61d498..688ac26f1 100644
+index 4ca61d49885b6..688ac26f1c1b6 100644
 --- a/kernel/utsname_sysctl.c
 +++ b/kernel/utsname_sysctl.c
 @@ -48,6 +48,31 @@ static int proc_do_uts_string(struct ctl_table *table, int write,
