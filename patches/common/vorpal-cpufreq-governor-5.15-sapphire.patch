@@ -108,13 +108,13 @@ index 000000000..4d58e2e0f
 +#define RFX_PRIME_CAP_THRESHOLD		1025	/* SM6225 gold cap=1024; must be > 1024 to avoid false prime detection on 2-tier SoC */
 +
 +/* Daily evaluation rate limits (us) */
-+#define RFX_LITTLE_RATE_US		3000
++#define RFX_LITTLE_RATE_US		4000
 +#define RFX_LITTLE_UP_US		200
 +#define RFX_LITTLE_DOWN_US		3000
 +
 +#define RFX_BIG_RATE_US			3000
 +#define RFX_BIG_UP_US			0
-+#define RFX_BIG_DOWN_US			2500
++#define RFX_BIG_DOWN_US			3500
 +
 +/* Gaming evaluation rate and down-rate gate */
 +#define RFX_FAST_RATE_US		250
@@ -144,19 +144,19 @@ index 000000000..4d58e2e0f
 +#define RFX_G_ENERGY_AWARE_DEFAULT	1	/* Round down on descent */
 +
 +/* Daily shaping (percent of effective ceiling fceil) */
-+#define RFX_D_LITTLE_CAP_PCT		60
-+#define RFX_D_LITTLE_FLOOR_PCT		32
++#define RFX_D_LITTLE_CAP_PCT		48
++#define RFX_D_LITTLE_FLOOR_PCT		22
 +#define RFX_D_LITTLE_FLOOR_ARM_PCT	15
 +#define RFX_D_LITTLE_FLOOR_REARM_PCT	6
 +#define RFX_D_LITTLE_FLOOR_NS		(80 * NSEC_PER_MSEC)
 +#define RFX_D_LITTLE_SUSTAINED_CAP_PCT	62
 +#define RFX_D_LITTLE_LIFT_PCT		62
-+#define RFX_D_LITTLE_DROP_PCT		48
++#define RFX_D_LITTLE_DROP_PCT		40
 +
-+#define RFX_D_BIG_CAP_PCT		56
++#define RFX_D_BIG_CAP_PCT		48
 +#define RFX_D_PRIME_CAP_PCT		56
-+#define RFX_D_BIG_LIFT_PCT		62
-+#define RFX_D_BIG_DROP_PCT		46
++#define RFX_D_BIG_LIFT_PCT		60
++#define RFX_D_BIG_DROP_PCT		38
 +#define RFX_D_BIG_SUSTAINED_CAP_PCT	62
 +#define RFX_D_PRIME_SUSTAINED_CAP_PCT	62
 +#define RFX_D_BURST_TRIGGER_PCT		88	/* App launch burst threshold (~70% real load) */
@@ -165,18 +165,18 @@ index 000000000..4d58e2e0f
 +#define RFX_D_BIG_TOUCH_FLOOR_PCT	24	/* Big core touch floor when load > threshold */
 +
 +/* Daily power and idle features */
-+#define RFX_D_IDLE_EVAL_US		35000	/* Idle evaluation cadence while parked */
-+#define RFX_D_LIGHT_EVAL_OPP_PCT	25	/* Light load threshold for stretched cadence */
-+#define RFX_D_LIGHT_EVAL_US		15000	/* Stretched cadence under light load */
-+#define RFX_D_LITTLE_MIN_SAMPLE_US	4000
-+#define RFX_D_BIG_MIN_SAMPLE_US		2000
++#define RFX_D_IDLE_EVAL_US		80000	/* Idle evaluation cadence while parked */
++#define RFX_D_LIGHT_EVAL_OPP_PCT	30	/* Light load threshold for stretched cadence */
++#define RFX_D_LIGHT_EVAL_US		45000	/* Stretched cadence under light load */
++#define RFX_D_LITTLE_MIN_SAMPLE_US	6000
++#define RFX_D_BIG_MIN_SAMPLE_US		3000
 +#define RFX_D_ENERGY_AWARE		1
 +#define RFX_D_ENERGY_AWARE_MIN_PCT	25
 +#define RFX_D_THERM_CAP_MC		40000
 +#define RFX_D_THERM_CAP_FULL_MC		46000
 +#define RFX_D_THERM_CAP_MIN_PCT		55
 +#define RFX_D_PARK_EXIT_PCT		16
-+#define RFX_D_PARK_EXIT_EVALS		1
++#define RFX_D_PARK_EXIT_EVALS		2
 +#define RFX_D_TOUCH_WINDOW_MS		100	/* Adaptive touch window for smooth scrolling */
 +
 +/* ---- Util EMA: rise instant, decay time-normalised, so the time constant is
@@ -1389,7 +1389,7 @@ index 000000000..4d58e2e0f
 +		 * (== IOWAIT_BOOST_MIN) so daily storage wakes give a flat modest
 +		 * nudge and never escalate the clock during light-medium use -- the
 +		 * CPU side of a completion only needs the V/f knee. */
-+		cap = SCHED_CAPACITY_SCALE / 8;
++		cap = SCHED_CAPACITY_SCALE / 4;
 +		rfx_c->iowait_boost = min_t(unsigned int,
 +					    rfx_c->iowait_boost << 1, cap);
 +		return;
