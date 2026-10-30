@@ -1,0 +1,80 @@
+diff --git a/include/net/nexthop.h b/include/net/nexthop.h
+index 28085b995ddcf..43ae4b806d14a 100644
+--- a/include/net/nexthop.h
++++ b/include/net/nexthop.h
+@@ -237,7 +237,7 @@ static inline bool nexthop_get(struct nexthop *nh)
+ static inline void nexthop_put(struct nexthop *nh)
+ {
+ 	if (refcount_dec_and_test(&nh->refcnt))
+-		call_rcu(&nh->rcu, nexthop_free_rcu);
++		call_rcu_hurry(&nh->rcu, nexthop_free_rcu);
+ }
+ 
+ static inline bool nexthop_cmp(const struct nexthop *nh1,
+diff --git a/kernel/workqueue.c b/kernel/workqueue.c
+index 627bdb9576a52..d7610077af136 100644
+--- a/kernel/workqueue.c
++++ b/kernel/workqueue.c
+@@ -1792,7 +1792,7 @@ bool queue_rcu_work(struct workqueue_struct *wq, struct rcu_work *rwork)
+ 
+ 	if (!test_and_set_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(work))) {
+ 		rwork->wq = wq;
+-		call_rcu(&rwork->rcu, rcu_work_rcufn);
++		call_rcu_hurry(&rwork->rcu, rcu_work_rcufn);
+ 		return true;
+ 	}
+ 
+diff --git a/net/ipv4/devinet.c b/net/ipv4/devinet.c
+index f27490ac68552..d493648f055cd 100644
+--- a/net/ipv4/devinet.c
++++ b/net/ipv4/devinet.c
+@@ -221,6 +221,7 @@ static struct in_ifaddr *inet_alloc_ifa(void)
+ static void inet_rcu_free_ifa(struct rcu_head *head)
+ {
+ 	struct in_ifaddr *ifa = container_of(head, struct in_ifaddr, rcu_head);
++
+ 	if (ifa->ifa_dev)
+ 		in_dev_put(ifa->ifa_dev);
+ 	kfree(ifa);
+@@ -228,7 +229,11 @@ static void inet_rcu_free_ifa(struct rcu_head *head)
+ 
+ static void inet_free_ifa(struct in_ifaddr *ifa)
+ {
+-	call_rcu(&ifa->rcu_head, inet_rcu_free_ifa);
++	/* Our reference to ifa->ifa_dev must be freed ASAP
++	 * to release the reference to the netdev the same way.
++	 * in_dev_put() -> in_dev_finish_destroy() -> netdev_put()
++	 */
++	call_rcu_hurry(&ifa->rcu_head, inet_rcu_free_ifa);
+ }
+ 
+ static void in_dev_free_rcu(struct rcu_head *head)
+diff --git a/net/ipv4/fib_semantics.c b/net/ipv4/fib_semantics.c
+index 0751eae9101a6..80ba71bafe28d 100644
+--- a/net/ipv4/fib_semantics.c
++++ b/net/ipv4/fib_semantics.c
+@@ -252,7 +252,7 @@ void free_fib_info(struct fib_info *fi)
+ 		return;
+ 	}
+ 
+-	call_rcu(&fi->rcu, free_fib_info_rcu);
++	call_rcu_hurry(&fi->rcu, free_fib_info_rcu);
+ }
+ EXPORT_SYMBOL_GPL(free_fib_info);
+ 
+diff --git a/net/ipv6/anycast.c b/net/ipv6/anycast.c
+index dacdea7fcb628..b0f56f8e529c3 100644
+--- a/net/ipv6/anycast.c
++++ b/net/ipv6/anycast.c
+@@ -252,9 +252,8 @@ static void aca_free_rcu(struct rcu_head *h)
+ 
+ static void aca_put(struct ifacaddr6 *ac)
+ {
+-	if (refcount_dec_and_test(&ac->aca_refcnt)) {
+-		call_rcu(&ac->rcu, aca_free_rcu);
+-	}
++	if (refcount_dec_and_test(&ac->aca_refcnt))
++		call_rcu_hurry(&ac->rcu, aca_free_rcu);
+ }
+ 
+ static struct ifacaddr6 *aca_alloc(struct fib6_info *f6i,
