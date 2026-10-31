@@ -250,6 +250,12 @@ if [[ $HOST_ARCH != x86_64 && $PLATFORM == linux/amd64 ]]; then
     warn "no x86 binfmt handler found. install: docker run --privileged --rm tonistiigi/binfmt --install amd64"
 fi
 TAG="seiran-local:24.04-${PLATFORM#linux/}"
+SECOPT=()
+if command -v getenforce >/dev/null 2>&1 && [[ "$(getenforce 2>/dev/null)" == Enforcing ]]; then
+  # SELinux would deny the container access to the bind mounts (Errno 13); relabeling host dirs (:z/:Z) is more invasive
+  SECOPT=(--security-opt label=disable)
+  say "[docker] SELinux enforcing: container runs with label=disable"
+fi
 image_ok() { [[ "$(docker image inspect "$TAG" --format '{{.Os}}/{{.Architecture}}' 2>/dev/null)" == "$PLATFORM" ]]; }
 if ! image_ok; then
   # no buildx/BuildKit needed: bootstrap a container of the right platform, then commit it
@@ -268,7 +274,7 @@ if [[ -n $CLANG && $DRY == 0 ]]; then
   probe_clang() { # host-side timeout: an emulated process can hang so hard that its own timeout never fires
     local rc=0
     docker rm -f seiran-probe >/dev/null 2>&1 || true
-    timeout -k 5 "${PROBE_TIMEOUT:-120}" docker run --rm --name seiran-probe --platform "$PLATFORM" -v "$CLANG:$CLANG:ro" "$TAG" \
+    timeout -k 5 "${PROBE_TIMEOUT:-120}" docker run --rm --name seiran-probe "${SECOPT[@]}" --platform "$PLATFORM" -v "$CLANG:$CLANG:ro" "$TAG" \
       timeout -k 5 90 "$CLANG/bin/clang" --version >/dev/null 2>&1 || rc=$?
     docker rm -f seiran-probe >/dev/null 2>&1 || true
     return $rc
@@ -299,5 +305,5 @@ MOUNTS=(-v "$REPO:$REPO:ro" -v "$ROOT:$ROOT")
 TTY=(); [[ -t 0 && -t 1 ]] && TTY=(-it)
 say "[docker] run $TAG ($PLATFORM)"
 exec docker run --rm --init "${TTY[@]}" --net=host --platform "$PLATFORM" \
-  -e OMP_NUM_THREADS="$JOBS" -e OMP_THREAD_LIMIT="$JOBS" \
+  "${SECOPT[@]}" -e OMP_NUM_THREADS="$JOBS" -e OMP_THREAD_LIMIT="$JOBS" \
   "${MOUNTS[@]}" -w "$REPO" "$TAG" python3 "$REPO/scripts/local-runner.py" "${RARGS[@]}"
