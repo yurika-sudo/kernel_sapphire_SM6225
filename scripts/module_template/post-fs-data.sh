@@ -36,6 +36,8 @@ insmod ${MODDIR}/module/zsmalloc.ko 2>/dev/null
 insmod ${MODDIR}/module/zram.ko 2>/dev/null
 # encore_fas — Frame Aware Scheduling module (optional, skip if not present)
 [ -f "${MODDIR}/module/encore_fas.ko" ] && insmod ${MODDIR}/module/encore_fas.ko 2>/dev/null
+# br_netfilter — bridge netfilter for Docker iptables support (optional)
+[ -f "${MODDIR}/module/br_netfilter.ko" ] && insmod ${MODDIR}/module/br_netfilter.ko 2>/dev/null
 
 # Fail-safe, not fail-dangerous: if our modules didn't load, don't attempt a
 # risky live fallback to reload the stock .ko by guessing its path — worst

@@ -36,6 +36,7 @@ sed -i "s/@VARIANT@/${SOURCE_TYPE}/g; s/@COMMIT@/${SHORT_SHA}/g; s/@BUILD_NUM@/$
 cp "${KO_DIR}/zram.ko" "$STAGE_DIR/module/zram.ko"
 cp "${KO_DIR}/zsmalloc.ko" "$STAGE_DIR/module/zsmalloc.ko"
 [ -f "${KO_DIR}/encore_fas.ko" ] && cp "${KO_DIR}/encore_fas.ko" "$STAGE_DIR/module/encore_fas.ko"
+[ -f "${KO_DIR}/br_netfilter.ko" ] && cp "${KO_DIR}/br_netfilter.ko" "$STAGE_DIR/module/br_netfilter.ko"
 [ -f "${KO_DIR}/ath.ko" ]          && cp "${KO_DIR}/ath.ko"          "$STAGE_DIR/module/ath.ko"
 [ -f "${KO_DIR}/ath9k_hw.ko" ]    && cp "${KO_DIR}/ath9k_hw.ko"    "$STAGE_DIR/module/ath9k_hw.ko"
 [ -f "${KO_DIR}/ath9k_common.ko" ] && cp "${KO_DIR}/ath9k_common.ko" "$STAGE_DIR/module/ath9k_common.ko"
