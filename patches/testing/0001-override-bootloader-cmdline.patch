@@ -1,8 +1,8 @@
 diff --git a/init/main.c b/init/main.c
-index 7aecf6cace271..d01ba46a37346 100644
+index 7aecf6cace271..dd81b2fd4a0af 100644
 --- a/init/main.c
 +++ b/init/main.c
-@@ -936,6 +936,24 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
+@@ -936,6 +936,35 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
  	pr_notice("%s", linux_banner);
  	early_security_init();
  	setup_arch(&command_line);
@@ -11,15 +11,26 @@ index 7aecf6cace271..d01ba46a37346 100644
 +		const char *blacklist[] = {
 +			"kasan=off",
 +			"cpufreq.default_governor=performance",
-+			"rcu_nocbs=all",
++			"rcu_nocbs=",
++			"loglevel=",
++			"log_buf_len=",
++			"console=",
++			"earlycon=",
++			"msm_rtb.filter=",
++			"ftrace_dump_on_oops",
++			"disable_dma32=on",
 +			"sched_util_clamp_min_rt_default=640"
 +		};
 +		int i;
 +
-+		for (i = 0; i < 4; i++) {
++		for (i = 0; i < (int)ARRAY_SIZE(blacklist); i++) {
 +			char *p = boot_command_line;
 +			while ((p = strstr(p, blacklist[i])) != NULL) {
-+				memset(p, ' ', strlen(blacklist[i]));
++				char *end = strchr(p, ' ');
++				size_t len = end ? (size_t)(end - p) : strlen(p);
++
++				memset(p, ' ', len);
++				p += len;
 +			}
 +		}
 +	}
