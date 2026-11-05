@@ -2,7 +2,7 @@ diff --git a/init/main.c b/init/main.c
 index 7aecf6cace271..dd81b2fd4a0af 100644
 --- a/init/main.c
 +++ b/init/main.c
-@@ -936,6 +936,35 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
+@@ -936,6 +936,37 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
  	pr_notice("%s", linux_banner);
  	early_security_init();
  	setup_arch(&command_line);
@@ -19,6 +19,8 @@ index 7aecf6cace271..dd81b2fd4a0af 100644
 +			"msm_rtb.filter=",
 +			"ftrace_dump_on_oops",
 +			"disable_dma32=on",
++			"movable_node",
++			"silent_boot.mode=",
 +			"sched_util_clamp_min_rt_default=640"
 +		};
 +		int i;

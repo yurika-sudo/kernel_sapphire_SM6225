@@ -12,9 +12,7 @@ CF="$DEFCONFIG"
 
 # Base cleanup
 sed -i 's/ cgroup_disable=pressure//'                    "$CF"
-sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off noirqdebug mitigations=off /' "$CF"
-sed -i 's/kasan\.stacktrace=off/kasan=off/'               "$CF"
-sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 transparent_hugepage=madvise audit=0 rcu_nocbs=4-7 crashkernel=no"/' "$CF"
+sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="slub_debug=- page_owner=off noirqdebug mitigations=off kasan=off disable_dma32=on movable_node transparent_hugepage=madvise audit=0 rcu_nocbs=0-7 crashkernel=no loglevel=3 silent_boot.mode=silent"/' "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
 for SYM in WLAN_VENDOR_ATH \
