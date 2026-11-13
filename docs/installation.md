@@ -1,6 +1,7 @@
 # Installation
 
-> ⚠️ **Back up first — always.**
+> [!WARNING]
+> **Back up first — always.**
 > Back up anything you don't want to lose, and keep a copy of your current ROM's `boot.img` on hand before you start. Custom-ROM behavior on this device isn't always predictable, so treat these as precautions, not optional steps — especially if you're new to this.
 >
 > Not strictly mandatory, but if you're unsure: from recovery, delete the `/adb` folder (path: `/data/adb`) before flashing, particularly if you're coming from a different kernel or root setup.
@@ -24,7 +25,7 @@ Pick whichever fits your setup:
 
 **B. Any flasher app** — Any kernel flasher, it's simple, just follow the menu according to the app you are using.
 
-**C. KSU-Next / BakaSU manager's built-in flash feature** — open the manager app → flash kernel → select the AnyKernel3 ZIP. No recovery needed.
+**C. KSU-Next / SukiSU-Ultra manager's built-in flash feature** — open the manager app → flash kernel → select the AnyKernel3 ZIP. No recovery needed.
 
 > Using **Magisk**? Re-patch your boot image after flashing.
 
@@ -42,7 +43,8 @@ This is a bit off-topic, but if you're on stock recovery: grab OrangeFox for thi
    ```
    fastboot flash recovery path-to-recovery.img
    ```
-   > ⚠️ **Do not run `fastboot boot path-to-recovery.img` on this device.** The official recovery documentation for sapphire/sapphiren specifically calls for `fastboot flash`, not `fastboot boot` — this has been called out deliberately, not an oversight.
+   > [!CAUTION]
+   > **Do not run `fastboot boot path-to-recovery.img` on this device.** The official recovery documentation for sapphire/sapphiren specifically calls for `fastboot flash`, not `fastboot boot` — this has been called out deliberately, not an oversight.
 
 If a kernel build you're using (e.g. a testing build) ever splash-screen-loops or bootloops, recover with:
 ```
@@ -53,7 +55,7 @@ fastboot flash boot path-to-boot.img
 
 ## Known Issues
 
-**KSU / BakaSU manager shows "Failed to update App Profile"**
+**KSU / SukiSU-Ultra manager shows "Failed to update App Profile"**
 Affects older stable manager builds. Update to the latest CI manager build — [get it here](https://t.me/tmplogchat/310).
 
 ## Manager
@@ -66,7 +68,7 @@ Your manager APK must match that code — a mismatch means apps can't be granted
 - If it shows `Failed to update App Profile` → wrong manager version.
 - Correct manager build is always linked directly in the release body.
 
-> This applies to both KSU-Next and BakaSU variants, on Android 13, 14, and 15+.
+> This applies to both KSU-Next and SukiSU-Ultra variants, on Android 13, 14, and 15+.
 
 ### Finding the Manager in CI Artifacts
 

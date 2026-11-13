@@ -30,8 +30,8 @@ if [ "$BUILD_TYPE" = "testing" ]; then
   BODY="${BODY}> Testing build — debug stripped, perf/sched configs non-default. Expect rough edges."$'\n\n'
 fi
 
-BODY="${BODY}**KSU-Next Manager:** [Dev Build ↗](${KSUN_MANAGER_URL})"$'\n'
-BODY="${BODY}**SukiSU-Ultra Manager:** [${SKSU_TAG:-CI} ↗](${SKSU_MANAGER_URL})"$'\n'
+BODY="${BODY}**KSU-Next Manager:** [${KSUN_TAG:-Dev Build}](${KSUN_MANAGER_URL})"$'\n'
+BODY="${BODY}**SukiSU-Ultra Manager:** [${SKSU_TAG:-CI}](${SKSU_MANAGER_URL})"$'\n'
 BODY="${BODY}**SUSFS module:** [${SUSFS_VERSION}](${SUSFS_MODULE_URL})"$'\n'
 BODY="${BODY}**Kernel base:** \`6.12.25-android16\`"$'\n'
 
