@@ -21,7 +21,7 @@ Actions tab → pick a workflow → **Run workflow**
 | Workflow | Target |
 |----------|--------|
 | `Build Kernels — AIO` | Android 15+ (GKI, all variants) |
-| `Build GKI-Compat` | Android 13 / 14 (GKI-Compat variants) |
+| `Build GKI-Legacy` | Android 13 / 14 (GKI-Legacy variants) |
 
 **ZIP packaging mode** (AIO only):
 - `per-variant` — individual ZIP per variant

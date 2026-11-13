@@ -58,6 +58,18 @@ case "$SOURCE_TYPE" in
     done
     ;;
 
+  gki-legacy)
+    GKI_REPO="https://android.googlesource.com/kernel/common"
+    GKI_BRANCH="deprecated/android13-5.15-2023-10"
+    echo "[GKI-LEGACY] Cloning $GKI_BRANCH (5.15.123) ..."
+    for attempt in 1 2 3; do
+      git clone --recursive --branch "$GKI_BRANCH" "$GKI_REPO" "$KERNEL_SRC" --depth=1 && break
+      echo "⚠️ Attempt $attempt failed, retrying in 30s..."
+      rm -rf "$KERNEL_SRC" && mkdir -p "$KERNEL_SRC"
+      sleep 30
+    done
+    ;;
+
   gki-compat)
     GKI_REPO="https://android.googlesource.com/kernel/common"
     GKI_BRANCH="deprecated/android13-5.15-2023-10"

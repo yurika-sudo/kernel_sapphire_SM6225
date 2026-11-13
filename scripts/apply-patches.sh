@@ -12,6 +12,9 @@ set -e
 source /tmp/apply_patch.sh
 cd "$KERNEL_SRC"
 
+# gki-legacy: WildKernels + KSU/BBG/NoMount only — skip common/testing
+[ "$SOURCE_TYPE" = "gki-legacy" ] && echo "[GKI-LEGACY] Skipping common/testing patches — WildKernels block follows"
+
 # WildKernels patches
 echo "=== Applying upstream optimization patches ==="
 BASE="https://raw.githubusercontent.com/WildKernels/kernel_patches/refs/heads/main/common"
@@ -46,7 +49,9 @@ apply_patch "$BASE/use_unlikely_wrap_cpufreq.patch"                "use_unlikely
 # Local common patches
 echo "=== Applying local common patches ==="
 PATCHES_DIR="$WORK_DIR/patches"
-if [ -d "$PATCHES_DIR/common" ]; then
+if [ "$SOURCE_TYPE" = "gki-legacy" ]; then
+  echo "[GKI-LEGACY] Skipping patches/common"
+elif [ -d "$PATCHES_DIR/common" ]; then
   for PATCH in "$PATCHES_DIR/common"/*.patch; do
     [ -f "$PATCH" ] || continue
     NAME="$(basename "$PATCH" .patch)"
@@ -80,7 +85,7 @@ if [ -d "$PATCHES_DIR/${SOURCE_TYPE}-only" ]; then
 fi
 
 # Testing patches
-if [ "$BUILD_TYPE" = "testing" ]; then
+if [ "$BUILD_TYPE" = "testing" ] && [ "$SOURCE_TYPE" != "gki-legacy" ]; then
   echo "=== Applying testing patches ==="
   if [ -d "$PATCHES_DIR/testing" ]; then
     for PATCH in "$PATCHES_DIR/testing"/*.patch; do

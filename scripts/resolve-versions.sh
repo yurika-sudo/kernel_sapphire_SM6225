@@ -11,8 +11,8 @@ KERNEL_VERSION=$([ -f "$VERSION_FILE" ] && cat "$VERSION_FILE" || echo "5.15.x")
 UNAME_FILE=$(find ./artifacts -name "kernel_uname.txt" | head -1)
 KERNEL_UNAME=$([ -f "$UNAME_FILE" ] && cat "$UNAME_FILE" || echo "$KERNEL_VERSION")
 
-# GKI-Compat artifacts are "gkicompat-<ksu>", which doesn't match "gki-*", so on a
-# compat build these come back empty and callers fall back to KERNEL_VERSION/KERNEL_UNAME above.
+# GKI-Legacy artifacts are "gkilegacy-<ksu>", which doesn't match "gki-*", so on a
+# legacy build these come back empty and callers fall back to KERNEL_VERSION/KERNEL_UNAME above.
 GKI_VERSION_FILE=$(find ./artifacts -path "*gki-*" -name "kernel_version.txt" | head -1)
 GKI_UNAME_FILE=$(find ./artifacts -path "*gki-*" -name "kernel_uname.txt" | head -1)
 
@@ -121,6 +121,9 @@ DATE_TAG=$(date +'%Y%m%d')
 if [ "$WORKFLOW_TYPE" = "compat" ]; then
   _tag_prefix="compat-"
   RELEASE_NAME="Seiran-GKI-Compat"
+elif [ "$WORKFLOW_TYPE" = "legacy" ]; then
+  _tag_prefix="legacy-"
+  RELEASE_NAME="Seiran-GKI-Legacy"
 else
   _tag_prefix=""
   RELEASE_NAME="Seiran-GKI"

@@ -7,17 +7,17 @@
 | GKI-Ksun | AOSP LTS | KernelSU-Next + SUSFS | BBG |
 | GKI-BakaSU | AOSP LTS | BakaSU + SUSFS | — |
 | GKI-NoKSU | AOSP LTS | Vanilla | — |
-| GKI-Compat-Ksun | AOSP 2023-10 (deprecated) | KernelSU-Next + SUSFS | BBG |
-| GKI-Compat-BakaSU | AOSP 2023-10 (deprecated) | BakaSU + SUSFS | — |
-| GKI-Compat-NoKSU | AOSP 2023-10 (deprecated) | Vanilla | — |
+| GKI-Legacy-Ksun | AOSP 2023-10 (legacy) | KernelSU-Next + SUSFS | BBG |
+| GKI-Legacy-BakaSU | AOSP 2023-10 (legacy) | BakaSU + SUSFS | — |
+| GKI-Legacy-NoKSU | AOSP 2023-10 (legacy) | Vanilla | — |
 
-**Supported Android versions:** GKI-Compat targets an older GKI ABI and works across Android 13–17 — use it if your ROM is on Android 13 or 14. Main **GKI** targets the newer interfaces and is for Android 15+ ROMs.
+**Supported Android versions:** GKI-Legacy targets Android 13/14 baseline only — WildKernels patches + KSU/SuSFS, no performance scheduler patches. Main **GKI** targets Android 15+ ROMs.
 
 ---
 
 ## Build Details
 
-| | GKI | GKI-Compat |
+| | GKI | GKI-Legacy |
 |--|-----|------------|
 | Source | `android.googlesource.com/kernel/common` | `android.googlesource.com/kernel/common` |
 | Branch | `android13-5.15-lts` | `deprecated/android13-5.15-2023-10` |

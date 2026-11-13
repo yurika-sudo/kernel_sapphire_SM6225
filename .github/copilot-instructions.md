@@ -10,4 +10,4 @@ Scope examples: build, scripts, config, workflow
 ## Examples
 - `refactor(scripts): simplify section comment headers`
 - `fix(ccache): replace run_id key with hashFiles`
-- `ci(workflow): add notify-failure job to gki-compat`
+- `ci(workflow): add notify-failure job to gki-legacy`

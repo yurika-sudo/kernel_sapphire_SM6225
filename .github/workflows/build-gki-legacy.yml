@@ -1,4 +1,4 @@
-name: "Build GKI-Compat (5.15.123)"
+name: "Build GKI-Legacy (5.15.123 — Legacy)"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -45,25 +45,25 @@ jobs:
       fail-fast: false
       matrix:
         variant:
-          - name:      "GKI-Compat-KSU-Next"
-            source:    "gki-compat"
+          - name:      "GKI-Legacy-KSU-Next"
+            source:    "gki-legacy"
             ksu:       "ksun"
-            prefix:    "GKIC_KSU-Next"
-            artifact:  "gkicompat-ksun"
+            prefix:    "GKIL_KSU-Next"
+            artifact:  "gkilegacy-ksun"
             defconfig: "gki_defconfig"
 
-          - name:      "GKI-Compat-ReSukiSU"
-            source:    "gki-compat"
+          - name:      "GKI-Legacy-ReSukiSU"
+            source:    "gki-legacy"
             ksu:       "rsku"
-            prefix:    "GKIC_ReSukiSU"
-            artifact:  "gkicompat-rsku"
+            prefix:    "GKIL_ReSukiSU"
+            artifact:  "gkilegacy-rsku"
             defconfig: "gki_defconfig"
 
-          - name:      "GKI-Compat-NoKSU"
-            source:    "gki-compat"
+          - name:      "GKI-Legacy-NoKSU"
+            source:    "gki-legacy"
             ksu:       "none"
-            prefix:    "GKIC_NoKSU"
-            artifact:  "gkicompat-nksu"
+            prefix:    "GKIL_NoKSU"
+            artifact:  "gkilegacy-nksu"
             defconfig: "gki_defconfig"
 
     uses: ./.github/workflows/build-kernel.yml
@@ -88,7 +88,7 @@ jobs:
       zip_mode:   per-variant
       build_type: ${{ inputs.build_type || 'stable' }}
       start_time: ${{ needs.setup.outputs.start_time }}
-      workflow_type: compat
+      workflow_type: legacy
       nuke_release: ${{ inputs.nuke_release }}
       notify: ${{ inputs.notify == true }}
       use_ccache: ${{ inputs.use_ccache == true }}

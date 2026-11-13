@@ -12,6 +12,12 @@ SHORT_SHA="${SHA:0:9}"
 COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
 BODY=""
 
+# Legacy restriction banner
+if [ "$WORKFLOW_TYPE" = "legacy" ]; then
+  BODY="${BODY}> [!NOTE]"$'\n'
+  BODY="${BODY}> GKI-Legacy targets the 5.15.123 ABI (AOSP 2023-10) for Android 13/14 ROMs. On Android 15+, use main [Seiran-GKI](https://github.com/${REPO}/releases/latest) instead."$'\n\n'
+fi
+
 # Compat restriction banner
 if [ "$WORKFLOW_TYPE" = "compat" ]; then
   BODY="${BODY}> [!NOTE]"$'\n'
@@ -40,6 +46,9 @@ BODY="${BODY}**ZRAM Multi-Comp module:** \`seiran-core.zip\` — attached below 
 if [ "$WORKFLOW_TYPE" = "compat" ]; then
   BODY="${BODY}**Variants:** GKI-Compat (KSU-Next · SukiSU-Ultra · NoKSU)"$'\n'
   BODY="${BODY}**Supported:** Android 13+ (recommended if your ROM is A13/A14)"$'\n'
+elif [ "$WORKFLOW_TYPE" = "legacy" ]; then
+  BODY="${BODY}**Variants:** GKI-Legacy (KSU-Next · BakaSU · NoKSU)"$'\n'
+  BODY="${BODY}**Supported:** Android 13 / 14 only (5.15.123 ABI)"$'\n'
 else
   BODY="${BODY}**Variants:** GKI (KSU-Next · SukiSU-Ultra · NoKSU)"$'\n'
   BODY="${BODY}**Supported:** Android 15+"$'\n'

@@ -82,11 +82,11 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 
 ### Stable (`patches/common/`)
 
-Stable patches applied to all variants (GKI, GKI-Compat). See [`patches/common/`](../patches/common/) for the full list.
+Stable patches applied to all variants (GKI, GKI-Legacy). See [`patches/common/`](../patches/common/) for the full list.
 
-### GKI-Compat only (`patches/gki-compat-only/`)
+### GKI-Legacy only (`patches/gki-legacy-only/`)
 
-Compatibility shims on top of `patches/common/` to keep the GKI-Compat tree (pinned to 5.15.123) building clean. See [`patches/gki-compat-only/`](../patches/gki-compat-only/).
+Compatibility shims for the GKI-Legacy tree (pinned to 5.15.123). Directory is intentionally sparse — legacy targets minimal patch surface.
 
 ### Testing (`patches/testing/`)
 

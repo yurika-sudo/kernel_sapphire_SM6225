@@ -48,7 +48,8 @@ MAKE_FLAGS=(
   KCFLAGS="-pipe -fno-strict-aliasing -fno-common -Wno-error -Wno-unknown-warning-option -Wno-array-bounds -Wno-stringop-overflow -Wno-mismatched-function-types -Wno-unused-variable -Wno-misleading-indentation -Wno-incompatible-function-pointer-types -mllvm -polly -mllvm -polly-ast-use-context -mllvm -polly-invariant-load-hoisting -mllvm -polly-run-inliner -mllvm -polly-vectorizer=stripmine -mllvm -polly-loopfusion-greedy=1 -mllvm -polly-reschedule=1 -mllvm -polly-postopts=1 -mllvm -polly-run-dce"
   LLVM_PARALLEL_LINK_JOBS=2
 )
-[[ "$SOURCE_TYPE" == gki* ]] && MAKE_FLAGS+=(BRANCH=android13-5.15-lts KMI_GENERATION=8)
+[[ "$SOURCE_TYPE" == "gki" ]] && MAKE_FLAGS+=(BRANCH=android13-5.15-lts KMI_GENERATION=8)
+[[ "$SOURCE_TYPE" == "gki-legacy" ]] && MAKE_FLAGS+=(BRANCH=android13-5.15 KMI_GENERATION=8)
 MAKE_FLAGS+=(LOCALVERSION="")
 
 set -o pipefail

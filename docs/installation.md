@@ -7,10 +7,10 @@
 
 ## Which variant do I flash?
 
-- **On an Android 13 / 14 ROM →** use a **GKI-Compat** variant.
+- **On an Android 13 / 14 ROM →** use a **GKI-Legacy** variant.
 - **On an Android 15+ ROM →** use the main **Seiran-GKI** variant.
 
-See [variants.md](./variants.md) for the full list and why GKI-Compat is the one to pick on older ROMs.
+See [variants.md](./variants.md) for the full list and why GKI-Legacy is the one to pick on older ROMs.
 
 ## Flashing
 
