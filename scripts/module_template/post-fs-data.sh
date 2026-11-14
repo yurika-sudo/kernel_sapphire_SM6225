@@ -48,7 +48,7 @@ if [ ! -e ${ZRAM_SYS}/disksize ]; then
 	exit 0
 fi
 
-echo "algo=zstd priority=1" > ${ZRAM_SYS}/recomp_algorithm 2>/dev/null
+echo "algo=zstdn_o priority=1" > ${ZRAM_SYS}/recomp_algorithm 2>/dev/null
 
 if [ "$IS_SWAP_ACTIVE" = "1" ]; then
 	# Case (a): restore the swap we tore down above, on the new module.
@@ -75,9 +75,9 @@ for dev in /sys/block/sd*/queue/scheduler; do
 	echo adios > "$dev" 2>/dev/null
 done
 
-# Reflex cpufreq governor — SM6225 has 2 fixed clusters (little: policy0, big: policy4)
-echo reflex > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
-echo reflex > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null
+# Vorpal cpufreq governor — SM6225 has 2 fixed clusters (little: policy0, big: policy4)
+echo vorpal > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
+echo vorpal > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null
 
 # Deep sleep fix — s2idle is correct suspend method for SM6225 (stock ROM default)
 echo s2idle > /sys/power/mem_sleep 2>/dev/null
