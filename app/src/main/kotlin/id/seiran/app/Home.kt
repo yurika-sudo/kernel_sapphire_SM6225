@@ -103,7 +103,7 @@ fun HomeScreen(stats: Stats?, rootOk: Boolean, onGrantRoot: () -> Unit) {
                 Modifier.weight(1f).fillMaxHeight(),
             )
             Tile(
-                "Battery",
+                "Battery health",
                 s?.health ?: dash,
                 s?.battery,
                 Modifier.weight(1f).fillMaxHeight(),
@@ -111,9 +111,9 @@ fun HomeScreen(stats: Stats?, rootOk: Boolean, onGrantRoot: () -> Unit) {
         }
         Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Tile(
-                "UFS health",
-                if (s?.ufsA != null && s.ufsB != null) "A ${s.ufsA} / B ${s.ufsB}" else dash,
-                null,
+                "Storage health",
+                ufsLife(s?.ufsA)?.let { a -> ufsLife(s?.ufsB)?.let { b -> "A $a / B $b" } } ?: dash,
+                "UFS life remaining",
                 Modifier.weight(1f).fillMaxHeight(),
             )
             Tile(
