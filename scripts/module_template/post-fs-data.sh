@@ -57,6 +57,8 @@ if [ ! -e ${ZRAM_SYS}/disksize ]; then
 	exit 0
 fi
 
+_PC=$(_pick zram_comp "" ${ZRAM_SYS}/comp_algorithm)
+[ -n "$_PC" ] && echo "$_PC" > ${ZRAM_SYS}/comp_algorithm 2>/dev/null
 _RC=$(_pick zram_recomp zstdn_o ${ZRAM_SYS}/recomp_algorithm)
 echo "algo=$_RC priority=1" > ${ZRAM_SYS}/recomp_algorithm 2>/dev/null
 
