@@ -7,7 +7,7 @@ MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
-- mm/page_alloc.c: watermark_scale_factor default 10 -> 125; wider
+- mm/page_alloc.c: watermark_scale_factor default 10 -> 30; wider
   watermark gap reduces kswapd wakeup frequency on sapphire's low-RAM
   profile, trading slightly higher baseline RSS headroom for fewer
   reclaim storms
@@ -50,7 +50,7 @@ index de344d7c785b1..2193f377e7c36 100644
 -int watermark_boost_factor __read_mostly = 15000;
 -int watermark_scale_factor = 10;
 +int watermark_boost_factor __read_mostly = 0;
-+int watermark_scale_factor = 125;
++int watermark_scale_factor = 30;
  
  static unsigned long nr_kernel_pages __initdata;
  static unsigned long nr_all_pages __initdata;

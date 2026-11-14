@@ -9,8 +9,8 @@ index ddd32c96a6911..85c835fac56c6 100644
 -	disksize = memparse(buf, NULL);
 -	if (!disksize)
 -		return -EINVAL;
-+	/* Hardcode zRAM size to 12 GB, ignore userspace input */
-+	disksize = PAGE_ALIGN((u64)1024 * 1024 * 1024 * 12);
++	/* Hardcode zRAM size to 2 GB, ignore userspace input */
++	disksize = PAGE_ALIGN((u64)1024 * 1024 * 1024 * 2);
 +	pr_info("zram: forcing disksize to %llu bytes (%llu GiB)\n",
 +		disksize, disksize >> 30);
  
