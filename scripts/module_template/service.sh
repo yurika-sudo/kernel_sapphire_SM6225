@@ -7,6 +7,15 @@ done
 sleep 3
 # Atheros AR9271 — load driver chain (firmware at /vendor/firmware/htc_9271.fw)
 MODDIR=${0%/*}
+_SP=/data/adb/seiran
+# Seiran Tune: saved pick if valid, else default
+_pick() {
+  _v=$(cat "$_SP/$1" 2>/dev/null)
+  [ -n "$_v" ] && case " $(cat "$3" 2>/dev/null | tr -d '[]' | tr '\n' ' ') " in
+    *" $_v "*) echo "$_v"; return;;
+  esac
+  echo "$2"
+}
 if [ -f "${MODDIR}/module/ath9k_htc.ko" ]; then
   insmod ${MODDIR}/module/mac80211.ko 2>/dev/null
   insmod ${MODDIR}/module/ath.ko 2>/dev/null
@@ -15,8 +24,9 @@ if [ -f "${MODDIR}/module/ath9k_htc.ko" ]; then
   insmod ${MODDIR}/module/ath9k_htc.ko 2>/dev/null
 fi
 # Vorpal cpufreq governor — SM6225 has 2 fixed clusters (little: policy0, big: policy4)
-echo vorpal > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
-echo vorpal > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null
+_GV=$(_pick cpufreq vorpal /sys/devices/system/cpu/cpufreq/policy0/scaling_available_governors)
+echo "$_GV" > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
+echo "$_GV" > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null
 # PowerSuspend + Big core hotplug — brightness-triggered via inotifywait
 # close_write fires once per write cycle (after each dimming step)
 # State guard prevents redundant writes on multi-step brightness transitions

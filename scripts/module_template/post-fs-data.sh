@@ -1,4 +1,13 @@
 MODDIR=${0%/*}
+_SP=/data/adb/seiran
+# Seiran Tune: saved pick if valid, else default
+_pick() {
+  _v=$(cat "$_SP/$1" 2>/dev/null)
+  [ -n "$_v" ] && case " $(cat "$3" 2>/dev/null | tr -d '[]' | tr '\n' ' ') " in
+    *" $_v "*) echo "$_v"; return;;
+  esac
+  echo "$2"
+}
 ZRAM_DEV=/dev/block/zram0
 ZRAM_SYS=/sys/block/zram0
 
@@ -48,7 +57,8 @@ if [ ! -e ${ZRAM_SYS}/disksize ]; then
 	exit 0
 fi
 
-echo "algo=zstdn_o priority=1" > ${ZRAM_SYS}/recomp_algorithm 2>/dev/null
+_RC=$(_pick zram_recomp zstdn_o ${ZRAM_SYS}/recomp_algorithm)
+echo "algo=$_RC priority=1" > ${ZRAM_SYS}/recomp_algorithm 2>/dev/null
 
 if [ "$IS_SWAP_ACTIVE" = "1" ]; then
 	# Case (a): restore the swap we tore down above, on the new module.
@@ -68,16 +78,18 @@ fi
 # TEO cpuidle governor — switch after qcom_lpm loads at boot
 # qcom_lpm wins at boot (rating 50 > NAP 18) but does not re-register
 # post-suspend, so a one-shot write here is permanent until next reboot.
-echo teo > /sys/devices/system/cpu/cpuidle/current_governor 2>/dev/null
+echo "$(_pick cpuidle teo /sys/devices/system/cpu/cpuidle/available_governors)" > /sys/devices/system/cpu/cpuidle/current_governor 2>/dev/null
 
 # ADIOS I/O scheduler — storage devices only (dm/loop/ram don't support schedulers)
+_IO=$(_pick io adios /sys/block/sda/queue/scheduler)
 for dev in /sys/block/sd*/queue/scheduler; do
-	echo adios > "$dev" 2>/dev/null
+	echo "$_IO" > "$dev" 2>/dev/null
 done
 
 # Vorpal cpufreq governor — SM6225 has 2 fixed clusters (little: policy0, big: policy4)
-echo vorpal > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
-echo vorpal > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null
+_GV=$(_pick cpufreq vorpal /sys/devices/system/cpu/cpufreq/policy0/scaling_available_governors)
+echo "$_GV" > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
+echo "$_GV" > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor 2>/dev/null
 
 # Deep sleep fix — s2idle is correct suspend method for SM6225 (stock ROM default)
 echo s2idle > /sys/power/mem_sleep 2>/dev/null

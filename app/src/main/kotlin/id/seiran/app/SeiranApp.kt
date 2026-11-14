@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -132,7 +133,7 @@ fun SeiranApp() {
                         if (tab == 0) {
                             HomeScreen(stats, true, runCheck)
                         } else {
-                            SettingsScreen(theme)
+                            if (tab == 1) TuneScreen() else SettingsScreen(theme)
                         }
                     }
                     NavPill(tab, { tab = it }, hazeState, Modifier.align(Alignment.BottomCenter))
@@ -159,7 +160,8 @@ private fun NavPill(tab: Int, onSelect: (Int) -> Unit, hazeState: HazeState, mod
     ) {
         Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             NavItem(Icons.Filled.Home, "Home", tab == 0) { onSelect(0) }
-            NavItem(Icons.Filled.Settings, "Settings", tab == 1) { onSelect(1) }
+            NavItem(Icons.Filled.Build, "Tune", tab == 1) { onSelect(1) }
+            NavItem(Icons.Filled.Settings, "Settings", tab == 2) { onSelect(2) }
         }
     }
 }
