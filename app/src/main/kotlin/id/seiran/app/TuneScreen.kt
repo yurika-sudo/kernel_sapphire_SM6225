@@ -32,13 +32,21 @@ import kotlin.concurrent.thread
 fun TuneScreen() {
     var st by remember { mutableStateOf<TuneState?>(null) }
     var msg by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { thread { st = Tune.load() } }
+    var busy by remember { mutableStateOf(false) }
+    var zp by remember { mutableStateOf<ZramPrimary?>(null) }
+    LaunchedEffect(Unit) { thread { st = Tune.load(); zp = TuneZram.load() } }
 
     fun act(block: () -> Boolean) {
+        if (busy) return
+        busy = true
+        msg = null
+        TuneZram.err = null
         thread {
             val ok = block()
-            msg = if (ok) null else "Could not apply that setting"
+            msg = if (ok) null else (TuneZram.err ?: "Could not apply that setting")
             st = Tune.load()
+            zp = TuneZram.load()
+            busy = false
         }
     }
 
@@ -56,6 +64,7 @@ fun TuneScreen() {
             style = MaterialTheme.typography.displaySmall,
             modifier = Modifier.padding(top = 16.dp, start = 4.dp),
         )
+        if (busy) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
         msg?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         val s = st
         if (s == null) {
@@ -72,10 +81,21 @@ fun TuneScreen() {
             }
             Group(
                 "zram recompress algo",
-                "Applies after reboot (active: ${s.recompNow ?: "-"})",
+                if (s.recompSaved != null && s.recompSaved != s.recompNow)
+                    "Pending reboot: ${s.recompSaved} (active: ${s.recompNow ?: "-"})"
+                else
+                    "Applies after reboot (active: ${s.recompNow ?: "-"})",
                 s.recomp,
                 s.recompSaved ?: s.recompNow,
             ) { a -> act { Tune.setRecomp(a, s.recomp) } }
+            zp?.let { z ->
+                Group(
+                    "zram primary algo",
+                    "Applies now: swap is rebuilt, takes a few seconds",
+                    z.list,
+                    z.now,
+                ) { a -> act { TuneZram.setPrimary(a, z.list) } }
+            }
         }
     }
 }
