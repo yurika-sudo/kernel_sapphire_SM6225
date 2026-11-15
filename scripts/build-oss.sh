@@ -108,6 +108,11 @@ VMK="$MK -C $K O=out $MIX"
 sym() { for d in "$@"; do printf "%s " "$V/$d/Module.symvers"; done; }
 b() { local n=$1 d=$2; shift 2; echo "  -> Building $n..."; $VMK M="$V/$d" modules "$@" >/dev/null; }
 
+# Fix missing mmrm-driver/test directory in FirstPlace tree
+if [ ! -d "$V/mmrm-driver/test" ] && [ -f "$V/mmrm-driver/Kbuild" ]; then
+	sed -i '/obj-m += test\//d' "$V/mmrm-driver/Kbuild"
+fi
+
 b mmrm      mmrm-driver MMRM_ROOT="$V/mmrm-driver" BOARD_PLATFORM=bengal
 b video     video-driver VIDEO_ROOT="$V/video-driver" MODNAME=msm_video BOARD_PLATFORM=bengal KBUILD_EXTRA_SYMBOLS="$(sym mmrm-driver)"
 b securemsm securemsm-kernel SSG_MODULE_ROOT="$V/securemsm-kernel" BOARD_PLATFORM=bengal CONFIG_DSQB=y
