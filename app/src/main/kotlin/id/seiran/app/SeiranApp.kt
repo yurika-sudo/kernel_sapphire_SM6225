@@ -154,7 +154,7 @@ private fun NavPill(tab: Int, onSelect: (Int) -> Unit, hazeState: HazeState, mod
             .clip(pillShape)
             .hazeBlur(input = HazeInput.Sources(hazeState), style = blur),
         shape = pillShape,
-        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.6f),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
