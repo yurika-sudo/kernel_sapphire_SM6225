@@ -5,7 +5,6 @@ until [ "$(getprop sys.boot_completed)" = "1" ]; do
   sleep 2
 done
 sleep 3
-# Atheros AR9271 — load driver chain (firmware at /vendor/firmware/htc_9271.fw)
 MODDIR=${0%/*}
 _SP=/data/adb/seiran
 # Seiran Tune: saved pick if valid, else default
@@ -16,13 +15,35 @@ _pick() {
   esac
   echo "$2"
 }
-if [ -f "${MODDIR}/module/ath9k_htc.ko" ]; then
-  insmod ${MODDIR}/module/mac80211.ko 2>/dev/null
-  insmod ${MODDIR}/module/ath.ko 2>/dev/null
-  insmod ${MODDIR}/module/ath9k_hw.ko 2>/dev/null
-  insmod ${MODDIR}/module/ath9k_common.ko 2>/dev/null
-  insmod ${MODDIR}/module/ath9k_htc.ko 2>/dev/null
-fi
+# USB Wi-Fi dongles — loaded once at boot so plugging one in is plug-and-play.
+# Every step is logged to /data/adb/seiran-wifi.log; stderr used to be discarded,
+# which hid missing modules and unresolved symbols.
+_WLOG=/data/adb/seiran-wifi.log
+_insmod() {
+  [ -f "${MODDIR}/module/${1}.ko" ] || return 0
+  grep -q "^${1} " /proc/modules && return 0
+  if insmod "${MODDIR}/module/${1}.ko" 2>>"$_WLOG"; then
+    echo "ok   ${1}" >>"$_WLOG"
+  else
+    echo "FAIL ${1}" >>"$_WLOG"
+  fi
+}
+: > "$_WLOG"
+# AR9271 (TL-WN722N v1) — mac80211 based
+_insmod cfg80211
+_insmod mac80211
+_insmod ath
+_insmod ath9k_hw
+_insmod ath9k_common
+_insmod ath9k_htc
+# State snapshot so a failing chain can be diagnosed without a reboot
+{
+  echo "--- state after load ---"
+  grep -E '^(cfg80211|mac80211|ath|ath9k)' /proc/modules
+  ls -l /vendor/firmware/htc_9271.fw
+  ${MODDIR}/tools/iw dev
+  ip -br link
+} >> "$_WLOG" 2>&1
 # Vorpal cpufreq governor — SM6225 has 2 fixed clusters (little: policy0, big: policy4)
 _GV=$(_pick cpufreq vorpal /sys/devices/system/cpu/cpufreq/policy0/scaling_available_governors)
 echo "$_GV" > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null

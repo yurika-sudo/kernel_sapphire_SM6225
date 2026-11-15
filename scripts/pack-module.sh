@@ -55,6 +55,7 @@ if [ -f "${KO_DIR}/cfg80211.ko" ]; then
 fi
 
 chmod +x "$STAGE_DIR/customize.sh" "$STAGE_DIR/post-fs-data.sh" "$STAGE_DIR/action.sh"
+chmod +x "$STAGE_DIR/tools/wifi-restore.sh"
 [ -f "$STAGE_DIR/service.sh" ] && chmod +x "$STAGE_DIR/service.sh"
 
 # Seiran app: goes in before signing so it is covered by the hash list
