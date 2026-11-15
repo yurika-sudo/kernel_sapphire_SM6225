@@ -86,6 +86,7 @@ jobs:
           bash scripts/apply-patches.sh
 
       - name: "Setup NoMount"
+        if: inputs.source_type != 'oss'
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           curl -LSs "https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh" \
@@ -93,7 +94,7 @@ jobs:
           echo 'aW1wb3J0IHJlCnBhdGggPSAnTm9Nb3VudC9rZXJuZWwvc3JjL25vbW91bnQuaCcKd2l0aCBvcGVuKHBhdGgpIGFzIGY6CiAgICBjb250ZW50ID0gZi5yZWFkKCkKcGluID0gJyNpZmRlZiBMSU5VWF9WRVJTSU9OX0NPREVcbiN1bmRlZiBMSU5VWF9WRVJTSU9OX0NPREVcbiNkZWZpbmUgTElOVVhfVkVSU0lPTl9DT0RFIEtFUk5FTF9WRVJTSU9OKDUsIDE1LCAyMjApXG4jZW5kaWZcbicKY29udGVudCA9IGNvbnRlbnQucmVwbGFjZSgnI2luY2x1ZGUgPGxpbnV4L3ZlcnNpb24uaD4nLCAnI2luY2x1ZGUgPGxpbnV4L3ZlcnNpb24uaD5cbicgKyBwaW4sIDEpCndpdGggb3BlbihwYXRoLCAndycpIGFzIGY6CiAgICBmLndyaXRlKGNvbnRlbnQpCnByaW50KCdQaW5uZWQgTElOVVhfVkVSU0lPTl9DT0RFIHRvIDUuMTUuMjIwJykK' | base64 -d | python3
 
       - name: "Setup BBG"
-        if: inputs.ksu_type == 'ksun'
+        if: inputs.ksu_type == 'ksun' && inputs.source_type != 'oss'
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           git clone -q --depth=1 https://github.com/vc-teahouse/Baseband-guard.git
@@ -108,7 +109,7 @@ jobs:
             security/Kconfig
 
       - name: "Setup KSU + SUSFS"
-        if: inputs.ksu_type != 'none'
+        if: inputs.ksu_type != 'none' && inputs.source_type != 'oss'
         uses: ./.github/actions/setup-ksu
         with:
           ksu_type:     ${{ inputs.ksu_type }}
@@ -118,13 +119,14 @@ jobs:
           sksu_tag_pin: ${{ inputs.sksu_tag_pin }}
 
       - name: "Droidspaces"
-        if: inputs.source_type != 'kernel-org'
+        if: inputs.source_type != 'kernel-org' && inputs.source_type != 'oss'
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           bash ${{ github.workspace }}/scripts/droidspaces.sh \
             "arch/arm64/configs/${{ inputs.defconfig }}"
 
       - name: "Kernel configs"
+        if: inputs.source_type != 'oss'
         uses: ./.github/actions/setup-configs
         with:
           ksu_type:     ${{ inputs.ksu_type }}
@@ -133,6 +135,7 @@ jobs:
           kernel_dir:   ${{ env.KERNEL_SRC }}
 
       - name: "Localversion"
+        if: inputs.source_type != 'oss'
         working-directory: ${{ env.KERNEL_SRC }}
         run: |
           SHORT_SHA="${{ github.sha }}"

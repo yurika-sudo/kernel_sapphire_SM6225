@@ -9,6 +9,12 @@ set -e
 : "${BUILD_TYPE:-stable}"
 : "${WORK_DIR:=$GITHUB_WORKSPACE}"
 
+if [ "$SOURCE_TYPE" = "oss" ]; then
+  echo "[OSS] Tree already carries CodeLinaro base and reconstructed Xiaomi vendor patches."
+  echo "[OSS] Skipping GKI patchset in apply-patches.sh to avoid Qualcomm tree conflicts."
+  exit 0
+fi
+
 source /tmp/apply_patch.sh
 cd "$KERNEL_SRC"
 

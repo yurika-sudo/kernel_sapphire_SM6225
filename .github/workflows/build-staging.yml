@@ -35,6 +35,10 @@ jobs:
             source:   "gki"
             ksu:      "sksu"
             artifact: "staging-sksu"
+          - name:     "OSS-KSU-Next"
+            source:   "oss"
+            ksu:      "ksun"
+            artifact: "staging-oss-ksun"
     uses: ./.github/workflows/build-kernel.yml
     with:
       variant_name:  ${{ matrix.variant.name }}
