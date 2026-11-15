@@ -112,8 +112,8 @@ fun HomeScreen(stats: Stats?, rootOk: Boolean, onGrantRoot: () -> Unit) {
         Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Tile(
                 "Storage health",
-                ufsLife(s?.ufsA)?.let { a -> ufsLife(s?.ufsB)?.let { b -> "A $a / B $b" } } ?: dash,
-                "UFS life remaining",
+                ufsLife(s?.ufsA)?.let { a -> ufsLife(s?.ufsB)?.let { b -> "$a / $b" } } ?: dash,
+                "UFS A / B life remaining",
                 Modifier.weight(1f).fillMaxHeight(),
             )
             Tile(
