@@ -61,6 +61,15 @@ else
   echo "[WARN] zram.ko/zsmalloc.ko not found in ${KO_DIR} — skipping module bundle"
 fi
 
+# Bundle reconstructed OSS vendor modules if available (OSS / DLKM builds)
+VENDOR_KO_DIR="${WORK_DIR}/out/dist/vendor_dlkm"
+if [ -d "$VENDOR_KO_DIR" ] && [ -n "$(ls -A "$VENDOR_KO_DIR" 2>/dev/null)" ]; then
+  mkdir -p "ak3_tmp/modules/vendor_dlkm/lib/modules"
+  cp "$VENDOR_KO_DIR"/*.ko "ak3_tmp/modules/vendor_dlkm/lib/modules/" 2>/dev/null || true
+  MODULE_COUNT=$(ls -1 "$VENDOR_KO_DIR"/*.ko 2>/dev/null | wc -l)
+  echo "[INFO] Bundled ${MODULE_COUNT} OSS vendor_dlkm modules into AnyKernel3 zip"
+fi
+
 cd ak3_tmp
 bash "${GITHUB_WORKSPACE}/scripts/signing/ci-sign.sh" "$PWD"
 zip -r9 "../${ZIP_NAME}" * -x .git/*
