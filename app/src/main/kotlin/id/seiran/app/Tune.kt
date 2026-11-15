@@ -78,4 +78,24 @@ object Tune {
         if (!valid(a, list)) return false
         return save("zram_recomp", a)
     }
+
+    // Back to the module defaults: drop every saved pick and re-apply the live
+    // ones (defaults match service.sh / post-fs-data.sh). zram changes on reboot.
+    fun reset(s: TuneState): Boolean {
+        val ok = Shell.cmd(
+            "rm -f $DIR/cpufreq $DIR/cpuidle $DIR/io $DIR/zram_comp $DIR/zram_recomp",
+        ).exec().isSuccess
+        if (!ok) return false
+        if ("vorpal" in s.cpufreq) {
+            Shell.cmd(
+                "echo vorpal > $CPUFREQ/policy0/scaling_governor",
+                "echo vorpal > $CPUFREQ/policy4/scaling_governor",
+            ).exec()
+        }
+        if ("teo" in s.cpuidle) Shell.cmd("echo teo > $CPUIDLE/current_governor").exec()
+        if ("adios" in s.io) {
+            Shell.cmd("for d in /sys/block/sd*/queue/scheduler; do echo adios > \$d; done").exec()
+        }
+        return true
+    }
 }

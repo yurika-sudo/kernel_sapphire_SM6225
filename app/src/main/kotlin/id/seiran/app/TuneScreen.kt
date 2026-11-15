@@ -97,6 +97,10 @@ fun TuneScreen() {
                     z.now,
                 ) { a -> act { TuneZram.setPrimary(a, z.list) } }
             }
+            androidx.compose.material3.OutlinedButton(
+                onClick = { act { Tune.reset(s) } },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Reset to module defaults") }
         }
     }
 }
