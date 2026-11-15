@@ -52,6 +52,11 @@ MAKE_FLAGS=(
 [[ "$SOURCE_TYPE" == "gki-legacy" ]] && MAKE_FLAGS+=(BRANCH=android13-5.15 KMI_GENERATION=8)
 MAKE_FLAGS+=(LOCALVERSION="")
 
+if [ "$SOURCE_TYPE" = "oss" ]; then
+  echo "[OSS] Delegating to scripts/build-oss.sh for Qualcomm tree layout..."
+  exec bash "${WORK_DIR}/scripts/build-oss.sh"
+fi
+
 set -o pipefail
 mkdir -p "${OUT_DIR}/dist"
 cd "$KERNEL_SRC"

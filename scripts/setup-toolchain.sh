@@ -7,12 +7,20 @@ set -e
 : "${KERNEL_SRC:?}"
 : "${SOURCE_TYPE:?}"
 
-if [[ "$SOURCE_TYPE" == gki* ]]; then
+if [[ "$SOURCE_TYPE" == gki* || "$SOURCE_TYPE" == "oss" ]]; then
   CLANG_VER="06092026"
   CLANG_URL="https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/${CLANG_VER}/neutron-clang-${CLANG_VER}.tar.zst"
 else
   echo "[ERROR] Unsupported SOURCE_TYPE: $SOURCE_TYPE" >&2
   exit 1
+fi
+
+# Ensure dwarves (pahole >= 1.25) is available for BTF when building OSS
+if [ "$SOURCE_TYPE" = "oss" ]; then
+  if ! which pahole &>/dev/null; then
+    echo "[OSS] Installing dwarves for pahole (BTF requirement)..."
+    (sudo apt-get update -qq && sudo apt-get install -y -qq dwarves) || true
+  fi
 fi
 
 CLANG_DIR="${WORK_DIR}/prebuilts/clang/host/linux-x86/clang-${CLANG_VER}"
