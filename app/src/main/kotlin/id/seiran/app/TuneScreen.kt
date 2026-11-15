@@ -84,12 +84,10 @@ fun TuneScreen() {
             }
             Group(
                 "zram recompress algo",
-                if (s.recompSaved != null && s.recompSaved != s.recompNow)
-                    "Pending reboot: ${s.recompSaved} (active: ${s.recompNow ?: "-"})"
-                else
-                    "Applies after reboot (active: ${s.recompNow ?: "-"})",
+                "Applies after reboot (active: ${s.recompNow ?: "-"})",
                 s.recomp,
                 s.recompSaved ?: s.recompNow,
+                badge = if (s.recompSaved != null && s.recompSaved != s.recompNow) "Pending reboot" else null,
             ) { a -> act { Tune.setRecomp(a, s.recomp) } }
             zp?.let { z ->
                 Group(
@@ -109,6 +107,7 @@ private fun Group(
     note: String,
     options: List<String>,
     current: String?,
+    badge: String? = null,
     onPick: (String) -> Unit,
 ) {
     Card(
@@ -119,7 +118,25 @@ private fun Group(
         ),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                if (badge != null) {
+                    androidx.compose.material3.Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                    ) {
+                        Text(
+                            badge,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+            }
             Text(
                 note,
                 style = MaterialTheme.typography.bodySmall,
