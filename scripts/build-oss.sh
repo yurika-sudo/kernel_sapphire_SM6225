@@ -25,6 +25,7 @@ mkdir -p "$DIST_DIR" "$VENDOR_DLKM_DIR" "$K/out"
 
 # Modern Clang (LLVM 16+) warning & error suppressions
 export KCFLAGS="-D__ANDROID_COMMON_KERNEL__ -Wno-error -Wno-uninitialized-const-pointer -Wno-unknown-warning-option -Wno-array-bounds -Wno-implicit-int -Wno-int-conversion"
+export KBUILD_MODPOST_WARN=1
 
 # Clean dirty flag and strip -dirty from setlocalversion
 if [ -f "$K/scripts/setlocalversion" ]; then
@@ -127,7 +128,7 @@ fi
 # 3. Vendor Out-of-Tree Modules Phase
 echo ">> [3/4] Building Vendor DLKM Modules via KBUILD_MIXED_TREE..."
 MIX="KBUILD_MIXED_TREE=$G"
-VMK="$MK -C $K O=out $MIX"
+VMK="$MK -C $K O=out $MIX KBUILD_MODPOST_WARN=1"
 sym() { for d in "$@"; do printf "%s " "$V/$d/Module.symvers"; done; }
 b() { local n=$1 d=$2; shift 2; echo "  -> Building $n..."; $VMK M="$V/$d" modules "$@" >/dev/null; }
 
