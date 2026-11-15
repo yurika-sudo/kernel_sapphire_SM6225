@@ -23,13 +23,25 @@ VENDOR_DLKM_DIR="${DIST_DIR}/vendor_dlkm"
 
 mkdir -p "$DIST_DIR" "$VENDOR_DLKM_DIR" "$K/out"
 
-# Modern Clang (LLVM 18+) warning & error suppressions
-export KCFLAGS="-D__ANDROID_COMMON_KERNEL__ -Wno-error -Wno-uninitialized-const-pointer -Wno-unknown-warning-option -Wno-array-bounds"
+# Modern Clang (LLVM 16+) warning & error suppressions
+export KCFLAGS="-D__ANDROID_COMMON_KERNEL__ -Wno-error -Wno-uninitialized-const-pointer -Wno-unknown-warning-option -Wno-array-bounds -Wno-implicit-int -Wno-int-conversion"
+
+# Clean dirty flag and strip -dirty from setlocalversion
+if [ -f "$K/scripts/setlocalversion" ]; then
+	sed -i 's/-dirty//' "$K/scripts/setlocalversion"
+fi
+echo "+" > "$K/.scmversion" 2>/dev/null || true
 
 # Fix sys_regs.c uninitialized const pointer on modern Clang (LLVM 18+)
 SYS_REGS="$K/arch/arm64/kvm/sys_regs.c"
 if [ -f "$SYS_REGS" ]; then
 	sed -i 's/struct sys_reg_desc clidr;/struct sys_reg_desc clidr = { 0 };/' "$SYS_REGS"
+fi
+
+# Fix missing bool return type in msm_vidc_driver.h on modern Clang (LLVM 16+)
+VIDC_HDR="$V/video-driver/driver/vidc/inc/msm_vidc_driver.h"
+if [ -f "$VIDC_HDR" ]; then
+	sed -i 's/static inline is_/static inline bool is_/g' "$VIDC_HDR"
 fi
 
 JOBS=${JOBS:-$(nproc)}
@@ -101,6 +113,17 @@ fi
 # Copy generated vmlinux as BTF base for vendor modules
 cp "$K/out/vmlinux" "$G/vmlinux"
 
+# Synchronize symbol tables so modpost finds symbols and does not warn about missing Module.symvers
+if [ -f "$K/out/vmlinux.symvers" ]; then
+	cp "$K/out/vmlinux.symvers" "$K/out/Module.symvers"
+	cp "$K/out/vmlinux.symvers" "$K/Module.symvers"
+	cp "$K/out/vmlinux.symvers" "$G/vmlinux.symvers"
+	cp "$K/out/vmlinux.symvers" "$G/Module.symvers"
+fi
+if [ -f "$K/out/System.map" ]; then
+	cp "$K/out/System.map" "$G/System.map"
+fi
+
 # 3. Vendor Out-of-Tree Modules Phase
 echo ">> [3/4] Building Vendor DLKM Modules via KBUILD_MIXED_TREE..."
 MIX="KBUILD_MIXED_TREE=$G"
@@ -118,19 +141,20 @@ b video     video-driver VIDEO_ROOT="$V/video-driver" MODNAME=msm_video BOARD_PL
 b securemsm securemsm-kernel SSG_MODULE_ROOT="$V/securemsm-kernel" BOARD_PLATFORM=bengal CONFIG_DSQB=y
 b ipa       dataipa/drivers/platform/msm 'CONFIG_LOCALVERSION="-perf"' DATAIPA_ROOT="$V/dataipa" BOARD_PLATFORM=bengal
 b rmnet     datarmnet/core RMNET_CORE_ROOT="$V/datarmnet/core" BOARD_PLATFORM=bengal KBUILD_EXTRA_SYMBOLS="$V/dataipa/drivers/platform/msm/Module.symvers"
-b rmnetwlan datarmnet-ext/wlan KCFLAGS="-Wno-error=misleading-indentation -I$V/datarmnet/core" BOARD_PLATFORM=bengal KBUILD_EXTRA_SYMBOLS="$V/datarmnet/core/Module.symvers"
+b rmnetwlan datarmnet-ext/wlan KCFLAGS="$KCFLAGS -Wno-error=misleading-indentation -I$V/datarmnet/core" BOARD_PLATFORM=bengal KBUILD_EXTRA_SYMBOLS="$V/datarmnet/core/Module.symvers"
 b audio     audio-kernel AUDIO_ROOT="$V/audio-kernel" MODNAME=audio_dlkm BOARD_PLATFORM=bengal KBUILD_EXTRA_SYMBOLS="$ROOT/build/stock-closed.symvers"
 b wlanplat  wlan/platform WLAN_PLATFORM_ROOT="$V/wlan/platform" CONFIG_CNSS_OUT_OF_TREE=y CONFIG_ICNSS2=m CONFIG_ICNSS2_QMI=y CONFIG_CNSS_GENL=m CONFIG_WCNSS_MEM_PRE_ALLOC=m CONFIG_CNSS_UTILS=m CONFIG_CNSS_QMI_SVC=m KBUILD_EXTRA_SYMBOLS="$(sym securemsm-kernel)"
 b bt        bt-kernel BT_ROOT="$V/bt-kernel" BT_KERNEL_ROOT="$V/bt-kernel" CONFIG_MSM_BT_POWER=m CONFIG_BTFM_SLIM=m CONFIG_I2C_RTC6226_QCA=m KBUILD_EXTRA_SYMBOLS="$(sym wlan/platform)"
 
 # 4. Collection Phase
 echo ">> [4/4] Collecting & Stripping Tested Modules..."
+STRIP_BIN=$(command -v llvm-strip || command -v aarch64-linux-gnu-strip || command -v strip)
 local_count=0
 while read -r m path; do
 	case "$m" in ''|\#*) continue ;; esac
 	SRC_KO="$V/$path"
 	if [ -f "$SRC_KO" ]; then
-		llvm-strip --strip-debug -o "$VENDOR_DLKM_DIR/$m.ko" "$SRC_KO"
+		"$STRIP_BIN" --strip-debug -o "$VENDOR_DLKM_DIR/$m.ko" "$SRC_KO"
 		local_count=$((local_count + 1))
 	else
 		echo "  [WARN] Module not found: $path"
