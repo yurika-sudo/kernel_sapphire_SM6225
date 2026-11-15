@@ -49,6 +49,12 @@ if [ -f "$VIDC_DBG" ]; then
 	sed -i 's/msm_vidc_debugfs_init_drv()/msm_vidc_debugfs_init_drv(void)/g' "$VIDC_DBG"
 fi
 
+# Fix GNU Make 4.4 "prerequisites cannot be defined in recipes" in multi_depend
+MAKEFILE_LIB="$K/scripts/Makefile.lib"
+if [ -f "$MAKEFILE_LIB" ]; then
+	sed -i '/define multi_depend/,/endef/ s/^\t/  /' "$MAKEFILE_LIB"
+fi
+
 JOBS=${JOBS:-$(nproc)}
 MK="make -j$JOBS ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu-"
 
@@ -104,8 +110,8 @@ KSU_TYPE="$KSU_TYPE" SOURCE_TYPE="oss" DEFCONFIG="$K/out/.config" KERNEL_DIR="$K
 $MK -C "$K" O=out olddefconfig >/dev/null
 
 # 2. Kernel Compilation Phase
-echo ">> [2/4] Building Image, vmlinux, and modules_prepare..."
-$MK -C "$K" O=out Image vmlinux modules_prepare
+echo ">> [2/4] Building Image, vmlinux, and modules..."
+$MK -C "$K" O=out Image vmlinux modules
 
 if [ -f "$K/out/arch/arm64/boot/Image" ]; then
 	cp "$K/out/arch/arm64/boot/Image" "$DIST_DIR/Image"
@@ -157,13 +163,16 @@ STRIP_BIN=$(command -v llvm-strip || command -v aarch64-linux-gnu-strip || comma
 local_count=0
 while read -r m path; do
 	case "$m" in ''|\#*) continue ;; esac
-	SRC_KO="$V/$path"
-	if [ -f "$SRC_KO" ]; then
-		"$STRIP_BIN" --strip-debug -o "$VENDOR_DLKM_DIR/$m.ko" "$SRC_KO"
-		local_count=$((local_count + 1))
+	if [ -f "$ROOT/$path" ]; then
+		SRC_KO="$ROOT/$path"
+	elif [ -f "$V/$path" ]; then
+		SRC_KO="$V/$path"
 	else
 		echo "  [WARN] Module not found: $path"
+		continue
 	fi
+	"$STRIP_BIN" --strip-debug -o "$VENDOR_DLKM_DIR/$m.ko" "$SRC_KO"
+	local_count=$((local_count + 1))
 done < "$ROOT/build/TESTED_MODULES.txt"
 
 echo "✅ Collected $local_count tested vendor modules into $VENDOR_DLKM_DIR"
