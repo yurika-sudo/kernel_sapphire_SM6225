@@ -49,6 +49,12 @@ if [ -f "$VIDC_DBG" ]; then
 	sed -i 's/msm_vidc_debugfs_init_drv()/msm_vidc_debugfs_init_drv(void)/g' "$VIDC_DBG"
 fi
 
+# Fix Qualcomm stub print_caller macro argument count in qcom_logbuf_boot_log.c
+LOGBUF_SRC="$K/drivers/soc/qcom/qcom_logbuf_boot_log.c"
+if [ -f "$LOGBUF_SRC" ]; then
+	sed -i 's/#define print_caller(id, buf) 0/#define print_caller(id, buf, ...) 0/' "$LOGBUF_SRC"
+fi
+
 # Fix GNU Make 4.4 "prerequisites cannot be defined in recipes" in multi_depend
 MAKEFILE_LIB="$K/scripts/Makefile.lib"
 if [ -f "$MAKEFILE_LIB" ]; then
