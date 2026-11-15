@@ -56,8 +56,8 @@ fun TuneScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
             .statusBarsPadding()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
             .padding(bottom = 104.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
