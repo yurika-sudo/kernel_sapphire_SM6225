@@ -36,8 +36,26 @@ case "$SOURCE_TYPE" in
     [ -d "$KERNEL_SRC/.git" ] || { echo "[ERROR] GKI-Legacy clone failed after 3 attempts"; exit 1; }
     ;;
 
+  oss)
+    OSS_REPO="${OSS_REPO:-https://github.com/Angelpro09xd/kernel_xiaomi_sapphire-Decompiled.git}"
+    OSS_BRANCH="${OSS_BRANCH:-FirstPlace}"
+    echo "[OSS] Cloning $OSS_BRANCH from $OSS_REPO ..."
+    if [ -d "/root/kernel_xiaomi_sapphire-Decompiled/.git" ]; then
+      echo "[OSS] Found local decompiled repo at /root/kernel_xiaomi_sapphire-Decompiled, cloning locally..."
+      git clone --branch "$OSS_BRANCH" "/root/kernel_xiaomi_sapphire-Decompiled" "$KERNEL_SRC"
+    else
+      for attempt in 1 2 3; do
+        git clone --recursive --branch "$OSS_BRANCH" "$OSS_REPO" "$KERNEL_SRC" --depth=1 && break
+        echo "[WARN] Attempt $attempt failed, retrying in 30s..."
+        rm -rf "$KERNEL_SRC" && mkdir -p "$KERNEL_SRC"
+        sleep 30
+      done
+    fi
+    [ -d "$KERNEL_SRC/.git" ] || { echo "[ERROR] OSS clone failed after 3 attempts"; exit 1; }
+    ;;
+
   *)
-    echo "[ERROR] Unknown SOURCE_TYPE: $SOURCE_TYPE (valid: gki, gki-legacy)"
+    echo "[ERROR] Unknown SOURCE_TYPE: $SOURCE_TYPE (valid: gki, gki-legacy, oss)"
     exit 1
     ;;
 esac
