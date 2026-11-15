@@ -23,8 +23,17 @@ VENDOR_DLKM_DIR="${DIST_DIR}/vendor_dlkm"
 
 mkdir -p "$DIST_DIR" "$VENDOR_DLKM_DIR" "$K/out"
 
+# Modern Clang (LLVM 18+) warning & error suppressions
+export KCFLAGS="-D__ANDROID_COMMON_KERNEL__ -Wno-error -Wno-uninitialized-const-pointer -Wno-unknown-warning-option -Wno-array-bounds"
+
+# Fix sys_regs.c uninitialized const pointer on modern Clang (LLVM 18+)
+SYS_REGS="$K/arch/arm64/kvm/sys_regs.c"
+if [ -f "$SYS_REGS" ]; then
+	sed -i 's/struct sys_reg_desc clidr;/struct sys_reg_desc clidr = { 0 };/' "$SYS_REGS"
+fi
+
 JOBS=${JOBS:-$(nproc)}
-MK="make -j$JOBS ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- KCFLAGS=-D__ANDROID_COMMON_KERNEL__"
+MK="make -j$JOBS ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu-"
 
 echo "=============================================="
 echo " [SEIRAN-OSS] Starting Qualcomm OSS Build"
