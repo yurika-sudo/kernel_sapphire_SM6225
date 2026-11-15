@@ -82,6 +82,7 @@ fun SettingsScreen(theme: ThemeState) {
             true,
         ) { theme.setAmoled(it) }
         KeyColorCard(theme)
+        LanguageCard()
         ContributorsSection()
         CreditsCard()
     }
