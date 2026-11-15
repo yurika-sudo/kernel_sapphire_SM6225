@@ -29,8 +29,7 @@ _insmod() {
   fi
 }
 : > "$_WLOG"
-# AR9271 (TL-WN722N v1) — mac80211 based
-_insmod cfg80211
+# AR9271 (TL-WN722N v1) — mac80211 based; cfg80211 is built into the kernel
 _insmod mac80211
 _insmod ath
 _insmod ath9k_hw
@@ -42,7 +41,7 @@ _insmod ath9k_htc
   grep -E '^(cfg80211|mac80211|ath|ath9k)' /proc/modules
   ls -l /vendor/firmware/htc_9271.fw
   ${MODDIR}/tools/iw dev
-  ip -br link
+  ip -o link
 } >> "$_WLOG" 2>&1
 # Vorpal cpufreq governor — SM6225 has 2 fixed clusters (little: policy0, big: policy4)
 _GV=$(_pick cpufreq vorpal /sys/devices/system/cpu/cpufreq/policy0/scaling_available_governors)
