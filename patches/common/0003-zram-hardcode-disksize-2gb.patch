@@ -1,10 +1,10 @@
 diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
-index ddd32c96a6911..85c835fac56c6 100644
+index 3536d44c2edba..b326a4bdffa70 100644
 --- a/drivers/block/zram/zram_drv.c
 +++ b/drivers/block/zram/zram_drv.c
-@@ -1731,9 +1731,10 @@ static ssize_t disksize_store(struct device *dev,
- 	struct zram *zram = dev_to_zram(dev);
+@@ -2209,9 +2209,10 @@ static ssize_t disksize_store(struct device *dev,
  	int err;
+ 	u32 prio;
  
 -	disksize = memparse(buf, NULL);
 -	if (!disksize)
