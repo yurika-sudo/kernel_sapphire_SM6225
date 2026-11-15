@@ -24,7 +24,7 @@ VENDOR_DLKM_DIR="${DIST_DIR}/vendor_dlkm"
 mkdir -p "$DIST_DIR" "$VENDOR_DLKM_DIR" "$K/out"
 
 # Modern Clang (LLVM 16+) warning & error suppressions
-export KCFLAGS="-D__ANDROID_COMMON_KERNEL__ -Wno-error -Wno-uninitialized-const-pointer -Wno-unknown-warning-option -Wno-array-bounds -Wno-implicit-int -Wno-int-conversion"
+export KCFLAGS="-D__ANDROID_COMMON_KERNEL__ -Wno-error -Wno-error=strict-prototypes -Wno-strict-prototypes -Wno-error=implicit-function-declaration -Wno-error=implicit-int -Wno-error=incompatible-pointer-types -Wno-uninitialized-const-pointer -Wno-unknown-warning-option -Wno-array-bounds -Wno-implicit-int -Wno-int-conversion"
 export KBUILD_MODPOST_WARN=1
 
 # Clean dirty flag and strip -dirty from setlocalversion
@@ -39,10 +39,14 @@ if [ -f "$SYS_REGS" ]; then
 	sed -i 's/struct sys_reg_desc clidr;/struct sys_reg_desc clidr = { 0 };/' "$SYS_REGS"
 fi
 
-# Fix missing bool return type in msm_vidc_driver.h on modern Clang (LLVM 16+)
+# Fix missing bool return type and prototype declarations in video-driver for modern Clang
 VIDC_HDR="$V/video-driver/driver/vidc/inc/msm_vidc_driver.h"
 if [ -f "$VIDC_HDR" ]; then
 	sed -i 's/static inline is_/static inline bool is_/g' "$VIDC_HDR"
+fi
+VIDC_DBG="$V/video-driver/driver/vidc/src/msm_vidc_debug.c"
+if [ -f "$VIDC_DBG" ]; then
+	sed -i 's/msm_vidc_debugfs_init_drv()/msm_vidc_debugfs_init_drv(void)/g' "$VIDC_DBG"
 fi
 
 JOBS=${JOBS:-$(nproc)}
