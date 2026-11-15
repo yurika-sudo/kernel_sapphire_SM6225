@@ -6,6 +6,15 @@ env:
 on:
   workflow_dispatch:
     inputs:
+      target:
+        description: "Select build variant"
+        type: choice
+        options:
+          - "OSS-KSU-Next"
+          - "all"
+          - "GKI-KSU-Next"
+          - "GKI-SukiSU-Ultra"
+        default: "OSS-KSU-Next"
       notify:
         description: "Send Telegram notifications"
         type: boolean
@@ -21,24 +30,35 @@ permissions:
 
 jobs:
 
+  setup:
+    name: "Prepare Target"
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        run: |
+          case "${{ inputs.target }}" in
+            "OSS-KSU-Next")
+              echo 'matrix={"variant":[{"name":"OSS-KSU-Next","source":"oss","ksu":"ksun","artifact":"staging-oss-ksun"}]}' >> $GITHUB_OUTPUT
+              ;;
+            "GKI-KSU-Next")
+              echo 'matrix={"variant":[{"name":"GKI-KSU-Next","source":"gki","ksu":"ksun","artifact":"staging-ksun"}]}' >> $GITHUB_OUTPUT
+              ;;
+            "GKI-SukiSU-Ultra")
+              echo 'matrix={"variant":[{"name":"GKI-SukiSU-Ultra","source":"gki","ksu":"sksu","artifact":"staging-sksu"}]}' >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo 'matrix={"variant":[{"name":"OSS-KSU-Next","source":"oss","ksu":"ksun","artifact":"staging-oss-ksun"},{"name":"GKI-KSU-Next","source":"gki","ksu":"ksun","artifact":"staging-ksun"},{"name":"GKI-SukiSU-Ultra","source":"gki","ksu":"sksu","artifact":"staging-sksu"}]}' >> $GITHUB_OUTPUT
+              ;;
+          esac
+
   staging:
     name: "${{ matrix.variant.name }}"
+    needs: [setup]
     strategy:
       fail-fast: false
-      matrix:
-        variant:
-          - name:     "GKI-KSU-Next"
-            source:   "gki"
-            ksu:      "ksun"
-            artifact: "staging-ksun"
-          - name:     "GKI-SukiSU-Ultra"
-            source:   "gki"
-            ksu:      "sksu"
-            artifact: "staging-sksu"
-          - name:     "OSS-KSU-Next"
-            source:   "oss"
-            ksu:      "ksun"
-            artifact: "staging-oss-ksun"
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     uses: ./.github/workflows/build-kernel.yml
     with:
       variant_name:  ${{ matrix.variant.name }}
