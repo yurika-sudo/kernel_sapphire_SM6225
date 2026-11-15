@@ -105,6 +105,41 @@ fun SeiranApp() {
         if (tab == 0 && rootOk) thread { stats = Sys.load(true) }
     }
 
+    // Live battery current: only while Home is visible and the app is resumed.
+    // Direct sysfs read (no su), average of the last 4 samples, 1 s interval.
+    var currentMa by remember { mutableStateOf<Int?>(null) }
+    var live by remember {
+        mutableStateOf(activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+    DisposableEffect(activity) {
+        val obs = object : LifecycleEventObserver {
+            override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
+                if (event == Lifecycle.Event.ON_RESUME) live = true
+                if (event == Lifecycle.Event.ON_PAUSE) live = false
+            }
+        }
+        activity.lifecycle.addObserver(obs)
+        onDispose { activity.lifecycle.removeObserver(obs) }
+    }
+    LaunchedEffect(tab, rootOk, live) {
+        if (tab != 0 || !rootOk || !live) {
+            currentMa = null
+            return@LaunchedEffect
+        }
+        val buf = ArrayDeque<Long>()
+        while (true) {
+            val v = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                Sys.read("/sys/class/power_supply/battery/current_now", false)?.toLongOrNull()
+            }
+            if (v != null) {
+                buf.addLast(v)
+                if (buf.size > 4) buf.removeFirst()
+                currentMa = (buf.sum() / buf.size / 1000L).toInt()
+            }
+            kotlinx.coroutines.delay(1000L)
+        }
+    }
+
     val hazeState = rememberHazeState()
 
     SeiranTheme(theme, dark) {
@@ -131,7 +166,7 @@ fun SeiranApp() {
                             .background(MaterialTheme.colorScheme.background),
                     ) {
                         if (tab == 0) {
-                            HomeScreen(stats, true, runCheck)
+                            HomeScreen(stats, true, runCheck, currentMa)
                         } else {
                             if (tab == 1) TuneScreen() else SettingsScreen(theme)
                         }

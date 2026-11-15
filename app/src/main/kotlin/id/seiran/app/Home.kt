@@ -47,7 +47,7 @@ import androidx.compose.ui.unit.sp
 const val SIGNER_FP = "4db3a8eed2aa932528556ef95e186542f96d85c64e95289e1ee5dc0c633f54db"
 
 @Composable
-fun HomeScreen(stats: Stats?, rootOk: Boolean, onGrantRoot: () -> Unit) {
+fun HomeScreen(stats: Stats?, rootOk: Boolean, onGrantRoot: () -> Unit, currentMa: Int? = null) {
     val ctx = LocalContext.current
     val version = remember {
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }
@@ -105,7 +105,7 @@ fun HomeScreen(stats: Stats?, rootOk: Boolean, onGrantRoot: () -> Unit) {
             Tile(
                 "Battery health",
                 s?.health ?: dash,
-                s?.battery,
+                s?.battery.let { b -> if (currentMa == null) b else listOfNotNull(b, "$currentMa mA").joinToString(" \u00b7 ") },
                 Modifier.weight(1f).fillMaxHeight(),
             )
         }
