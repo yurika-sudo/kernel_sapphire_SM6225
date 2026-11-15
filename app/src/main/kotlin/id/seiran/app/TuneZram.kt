@@ -56,8 +56,9 @@ object TuneZram {
             ?: Sys.active(Sys.read("$Z/recomp_algorithm", true))?.takeIf { safe.matches(it) }
         val rc = if (r != null) "echo \"algo=$r priority=1\" > $Z/recomp_algorithm;" else ""
         Shell.cmd(
-            "swapoff $D && { echo 1 > $Z/reset; echo $a > $Z/comp_algorithm; " +
-                "$rc echo 2G > $Z/disksize; mkswap $D; }; swapon -p -2 $D",
+            "{ ! grep -q '^$D ' /proc/swaps || swapoff $D; } && " +
+                "{ echo 1 > $Z/reset; echo $a > $Z/comp_algorithm; " +
+                "$rc echo 2G > $Z/disksize; mkswap $D; }; swapon $D",
         ).exec()
 
         val after = Sys.active(Sys.read("$Z/comp_algorithm", true))
