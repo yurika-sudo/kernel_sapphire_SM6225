@@ -45,11 +45,16 @@ fun TuneScreen() {
         msg = null
         TuneZram.err = null
         thread {
-            val ok = block()
-            msg = if (ok) null else (TuneZram.err ?: "Could not apply that setting")
-            st = Tune.load()
-            zp = TuneZram.load()
-            busy = false
+            try {
+                val ok = block()
+                msg = if (ok) null else (TuneZram.err ?: "Could not apply that setting")
+                st = Tune.load()
+                zp = TuneZram.load()
+            } catch (t: Throwable) {
+                msg = t.message ?: "Operation failed"
+            } finally {
+                busy = false
+            }
         }
     }
 

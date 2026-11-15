@@ -50,27 +50,34 @@ object Tune {
 
     fun setCpufreq(g: String, list: List<String>): Boolean {
         if (!valid(g, list)) return false
-        save("cpufreq", g)
         Shell.cmd(
             "echo $g > $CPUFREQ/policy0/scaling_governor",
-            "echo $g > $CPUFREQ/policy4/scaling_governor",
+            "if [ -d $CPUFREQ/policy4 ]; then echo $g > $CPUFREQ/policy4/scaling_governor; fi",
         ).exec()
-        return Sys.read("$CPUFREQ/policy0/scaling_governor", true) == g &&
-            Sys.read("$CPUFREQ/policy4/scaling_governor", true) == g
+        val ok0 = Sys.read("$CPUFREQ/policy0/scaling_governor", true) == g
+        val p4 = Sys.read("$CPUFREQ/policy4/scaling_governor", true)
+        val ok4 = p4 == null || p4 == g
+        if (ok0 && ok4) {
+            save("cpufreq", g)
+            return true
+        }
+        return false
     }
 
     fun setCpuidle(g: String, list: List<String>): Boolean {
         if (!valid(g, list)) return false
-        save("cpuidle", g)
         Shell.cmd("echo $g > $CPUIDLE/current_governor").exec()
-        return Sys.read("$CPUIDLE/current_governor", true) == g
+        val ok = Sys.read("$CPUIDLE/current_governor", true) == g
+        if (ok) save("cpuidle", g)
+        return ok
     }
 
     fun setIo(g: String, list: List<String>): Boolean {
         if (!valid(g, list)) return false
-        save("io", g)
         Shell.cmd("for d in /sys/block/sd*/queue/scheduler; do echo $g > \$d; done").exec()
-        return Sys.active(Sys.read(IO, true)) == g
+        val ok = Sys.active(Sys.read(IO, true)) == g
+        if (ok) save("io", g)
+        return ok
     }
 
     // zram recomp algo can't change live; applied by post-fs-data.sh at next boot
@@ -89,7 +96,7 @@ object Tune {
         if ("vorpal" in s.cpufreq) {
             Shell.cmd(
                 "echo vorpal > $CPUFREQ/policy0/scaling_governor",
-                "echo vorpal > $CPUFREQ/policy4/scaling_governor",
+                "if [ -d $CPUFREQ/policy4 ]; then echo vorpal > $CPUFREQ/policy4/scaling_governor; fi",
             ).exec()
         }
         if ("teo" in s.cpuidle) Shell.cmd("echo teo > $CPUIDLE/current_governor").exec()

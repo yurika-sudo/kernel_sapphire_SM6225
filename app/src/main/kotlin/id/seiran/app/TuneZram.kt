@@ -33,16 +33,13 @@ object TuneZram {
     // /proc/swaps columns: Filename Type Size Used Priority
     private fun swapUsedKb(): Long =
         Sys.read("/proc/swaps", true)?.lineSequence()
-            ?.firstOrNull { it.startsWith(D) }
+            ?.firstOrNull { it.contains("zram0") }
             ?.split(Regex("\\s+"))?.getOrNull(3)?.toLongOrNull() ?: 0L
 
     // comp_algorithm only changes on an uninitialised device (-EBUSY otherwise):
     // swapoff, reset, set algo, disksize, mkswap, swapon. swapon always runs last.
     fun setPrimary(a: String, list: List<String>): Boolean {
         if (a !in list || !safe.matches(a)) return false
-        if (!Shell.cmd("mkdir -p $DIR", "echo $a > $DIR/zram_comp").exec().isSuccess) {
-            return fail("Could not save the choice")
-        }
         val now = Sys.active(Sys.read("$Z/comp_algorithm", true))
         if (a == now) return true
 
@@ -52,21 +49,31 @@ object TuneZram {
             return fail("Not enough free RAM: need ${need / 1024} MB, have ${avail / 1024} MB")
         }
 
+        val curSize = Sys.read("$Z/disksize", true)?.takeIf { safe.matches(it) } ?: "2G"
         val r = Sys.read("$DIR/zram_recomp", true)?.takeIf { safe.matches(it) }
             ?: Sys.active(Sys.read("$Z/recomp_algorithm", true))?.takeIf { safe.matches(it) }
-        val rc = if (r != null) "echo \"algo=$r priority=1\" > $Z/recomp_algorithm;" else ""
+        val rc = if (r != null) "echo \"algo=$r priority=1\" > $Z/recomp_algorithm && " else ""
+
+        val off = Shell.cmd("if grep -q -E '^/dev/(block/)?zram0([[:space:]]|$)' /proc/swaps; then swapoff $D; fi").exec()
+        if (!off.isSuccess) {
+            return fail("swapoff failed: memory constrained or device busy")
+        }
+
         Shell.cmd(
-            "{ ! grep -q '^$D ' /proc/swaps || swapoff $D; } && " +
-                "{ echo 1 > $Z/reset; echo $a > $Z/comp_algorithm; " +
-                "$rc echo 2G > $Z/disksize; mkswap $D; }; swapon $D",
+            "echo 1 > $Z/reset && { echo $a > $Z/comp_algorithm || true; } && " +
+                "${rc}echo $curSize > $Z/disksize && mkswap $D; swapon $D",
         ).exec()
 
         val after = Sys.active(Sys.read("$Z/comp_algorithm", true))
         val swapOn = Sys.read("/proc/swaps", true)?.contains("zram0") == true
-        if (after == a && swapOn) return true
-        return fail(
-            if (after != a) "Switch failed (active: ${after ?: "?"})"
-            else "Switched, but swap is off. Check: cat /proc/swaps",
-        )
+        if (after != a) {
+            return fail("Switch failed (active: ${after ?: "?"})")
+        }
+        if (!swapOn) {
+            return fail("Switched to $a, but swap is off. Check: cat /proc/swaps")
+        }
+
+        Shell.cmd("mkdir -p $DIR", "echo $a > $DIR/zram_comp").exec()
+        return true
     }
 }
