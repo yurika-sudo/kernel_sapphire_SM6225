@@ -104,20 +104,21 @@ CONFIG_UPROBE_EVENTS=y
 CONFIG_ENCORE_FAS=m
 CONFIG_WLAN=y
 CONFIG_WLAN_VENDOR_ATH=y
-# cfg80211 must be built into the kernel, not a module: the ROM's own
-# cfg80211.ko (5.15.94) is loaded during first-stage init, before any module
-# overlay exists, and it lacks the wiphy_work_* / wiphy_delayed_work_* exports
-# that our 5.15.223 mac80211 needs ("unknown symbol in module"). Built-in gives
-# exactly one cfg80211 for qcacld, mac80211 and the dongle drivers.
-CONFIG_CFG80211=y
+# Keep the ROM's cfg80211 as a module. It is loaded during first-stage init and
+# the prebuilt qcacld blob (`wlan.ko`) is built against it: building cfg80211
+# into the kernel makes cfg80211.ko fail with "exports duplicate symbol" and
+# internal Wi-Fi never comes up.
+# mac80211.ko is kept compatible by reverting the two "wiphy work" backports in
+# net/mac80211 — see patches/common/mac80211-revert-wiphy-work-5.15.patch.
+CONFIG_CFG80211=m
 # ROM's cfg80211 was built without WEXT (verified on device: no
-# cfg80211_wext_* in /proc/kallsyms). Must stay off, otherwise the
-# `const struct iw_handler_def *wext` field in struct wiphy shifts every field
-# after it and the prebuilt qcacld blob writes at the wrong offsets.
+# cfg80211_wext_* in /proc/kallsyms). Must stay off: struct wiphy and struct
+# wireless_dev embed CONFIG_CFG80211_WEXT fields, so mac80211.ko has to be
+# compiled with the exact same layout as the ROM's cfg80211.ko.
 # CONFIG_CFG80211_WEXT is not set
 CONFIG_MAC80211=m
-# Keep every export: cfg80211's newer helpers are not in GKI's abi_symbollist,
-# so trimming would silently remove the symbols mac80211.ko links against.
+# The in-tree cfg80211 build only exists to give modpost the symbols; the .ko is
+# not shipped. Trimming would remove exports mac80211.ko links against.
 # CONFIG_TRIM_UNUSED_KSYMS is not set
 CONFIG_ATH9K_HTC=m
 CONFIG_ATH=m

@@ -29,7 +29,16 @@ _insmod() {
   fi
 }
 : > "$_WLOG"
-# AR9271 (TL-WN722N v1) — mac80211 based; cfg80211 is built into the kernel
+# Firmware must be reachable at /vendor/firmware (where this module ships
+# htc_9271.fw). Android normally sets this path; append it if it is missing so
+# ath9k_htc's request_firmware() cannot fail with -ENOENT.
+_FWP=$(cat /sys/module/firmware_class/parameters/path 2>/dev/null)
+case ",$_FWP," in
+  *,/vendor/firmware,*) ;;
+  *) echo "${_FWP:+$_FWP,}/vendor/firmware" > \
+       /sys/module/firmware_class/parameters/path 2>/dev/null ;;
+esac
+# AR9271 (TL-WN722N v1) — mac80211 based; cfg80211 is the ROM's own module.
 _insmod mac80211
 _insmod ath
 _insmod ath9k_hw
@@ -40,6 +49,7 @@ _insmod ath9k_htc
   echo "--- state after load ---"
   grep -E '^(cfg80211|mac80211|ath|ath9k)' /proc/modules
   ls -l /vendor/firmware/htc_9271.fw
+  echo "firmware path: $(cat /sys/module/firmware_class/parameters/path 2>/dev/null)"
   ${MODDIR}/tools/iw dev
   ip -o link
 } >> "$_WLOG" 2>&1

@@ -43,8 +43,9 @@ cp "${KO_DIR}/zsmalloc.ko" "$STAGE_DIR/module/zsmalloc.ko"
 [ -f "${KO_DIR}/8188gu.ko" ] && cp "${KO_DIR}/8188gu.ko" "$STAGE_DIR/module/8188gu.ko"
 [ -f "${KO_DIR}/ath9k_htc.ko" ]  && cp "${KO_DIR}/ath9k_htc.ko"  "$STAGE_DIR/module/ath9k_htc.ko"
 [ -f "${KO_DIR}/mac80211.ko" ] && cp "${KO_DIR}/mac80211.ko" "$STAGE_DIR/module/mac80211.ko"
-# No cfg80211 here on purpose: it is built into the kernel (CONFIG_CFG80211=y),
-# so a shipped cfg80211.ko could only ever fail with EEXIST and mislead init.
+# No cfg80211 here on purpose: the ROM already loads its own cfg80211.ko during
+# first-stage init. Shipping ours would only collide ("duplicate symbol") and is
+# never used. mac80211.ko is built to work with the ROM's cfg80211.ko.
 
 chmod +x "$STAGE_DIR/customize.sh" "$STAGE_DIR/post-fs-data.sh" "$STAGE_DIR/action.sh"
 chmod +x "$STAGE_DIR/tools/wifi-restore.sh"

@@ -19,7 +19,7 @@ echo "dongle (0cf3:9271 / AR9271): $([ $DONGLE_CONNECTED -eq 1 ] && echo 'connec
 echo "ath9k_htc: $([ $ATH9K_LOADED -eq 1 ] && echo 'loaded' || echo 'not loaded')"
 echo "dongle (0bda:b711|2005 / RTL8188GU): $([ $RTL8188GU_CONNECTED -eq 1 ] && echo 'connected' || echo 'not connected')"
 echo "8188gu: $([ $RTL8188GU_LOADED -eq 1 ] && echo 'loaded' || echo 'not loaded')"
-echo "cfg80211: $([ -d /sys/module/cfg80211 ] && echo 'in kernel' || echo 'missing')"
+echo "cfg80211: $([ -d /sys/module/cfg80211 ] && echo 'loaded' || echo 'missing')"
 echo "mac80211: $(lsmod | grep -q '^mac80211' && echo 'loaded' || echo 'not loaded')"
 echo "wlan: $(lsmod | grep -q '^wlan' && echo 'loaded' || echo 'not loaded')"
 echo "wlan0/wlan0mon: $(ip link show 2>/dev/null | grep -qE 'wlan0|wlan0mon' && echo 'up/present' || echo 'not present')"
@@ -55,7 +55,7 @@ if [ "$1" = "activate" ]; then
     exit 1
   fi
   echo ">> Activating AR9271 dongle..."
-  # cfg80211 is built into the kernel; never touch the vendor qcacld module
+  # cfg80211 is the ROM's own module; never touch the vendor qcacld module
   # (`wlan`) — unloading it is what used to kill internal Wi-Fi until reboot.
   lsmod | grep -q "^mac80211" || insmod $MDIR/mac80211.ko || { echo "!! mac80211 failed"; exit 1; }
   lsmod | grep -q "^ath " || insmod $MDIR/ath.ko       || { echo "!! ath failed"; exit 1; }
@@ -94,7 +94,7 @@ if [ "$1" = "activate-rtl" ]; then
     exit 1
   fi
   echo ">> Activating RTL8188GU dongle..."
-  # cfg80211 is built into the kernel; never unload the vendor qcacld module.
+  # cfg80211 is the ROM's own module; never unload the vendor qcacld module.
   lsmod | grep -q "^mac80211" || insmod $MDIR/mac80211.ko || { echo "!! mac80211 failed"; exit 1; }
   insmod $MDIR/8188gu.ko && echo "  8188gu ok" || { echo "!! 8188gu failed"; exit 1; }
   echo ">> Waiting for phy..."
@@ -124,7 +124,7 @@ if [ "$1" = "deactivate" ]; then
   ip link set wlan0mon down 2>/dev/null
   $IW dev wlan0mon del 2>/dev/null
   rmmod ath9k_htc 2>/dev/null && echo "  ath9k_htc unloaded"
-  # mac80211/cfg80211 stay loaded: cfg80211 is built in and mac80211 is shared
+  # mac80211/cfg80211 stay loaded: cfg80211 belongs to the ROM and mac80211 is shared
   # with the other dongles. Nothing here touches `wlan`, so internal Wi-Fi keeps
   # working and no reboot is needed.
   echo ">> Done."
