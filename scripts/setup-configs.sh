@@ -15,7 +15,7 @@ sed -i 's/ cgroup_disable=pressure//'                    "$CF"
 sed -i 's/kvm-arm\.mode=protected/kvm-arm.mode=none/' "$CF"
 sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off noirqdebug mitigations=off /' "$CF"
 sed -i 's/kasan\.stacktrace=off/kasan=off/'               "$CF"
-sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 transparent_hugepage=madvise audit=0 rcu_nocbs=0-3 loglevel=3 silent_boot.mode=silent log_buf_len=2M cpuidle.governor=teo"/' "$CF"
+sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 transparent_hugepage=madvise audit=0 rcu_nocbs=0-7 loglevel=6 log_buf_len=2M cpuidle.governor=teo"/' "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
 for SYM in WLAN_VENDOR_ATH \
@@ -182,3 +182,9 @@ EOF
 fi
 
 echo "[OK] Configs written for KSU_TYPE=$KSU_TYPE SOURCE_TYPE=$SOURCE_TYPE"
+
+# QPNP power/battery drivers built-in (avoid vendor module ABI mismatch)
+CONFIG_INPUT_QPNP_POWER_ON=y
+CONFIG_QPNP_QG=y
+CONFIG_QPNP_SMB5=y
+CONFIG_LEDS_QPNP_VIBRATOR_LDO=y
