@@ -74,6 +74,7 @@ jobs:
       build_type:    ${{ inputs.build_type || 'stable' }}
       notify:        ${{ inputs.notify == true }}
       use_ccache:    ${{ inputs.use_ccache == true }}
+      apply_eevdf_patch: ${{ matrix.variant.apply_eevdf_patch }}
     secrets: inherit
 
   build:
@@ -104,6 +105,24 @@ jobs:
             prefix:    "GKI_NoKSU"
             artifact:  "gki-nksu"
             defconfig: "gki_defconfig"
+
+          - name:      "GKI-KSU-Next-AB-on"
+            source:    "gki"
+            ksu:       "ksun"
+            prefix:    "GKI_KSU-Next-AB-on"
+            artifact:  "gki-ksun-ab"
+            defconfig: "gki_defconfig"
+            apply_eevdf_patch: true
+            pinned_sha: "0d108e1e8c7b51616fafc1e0c9bef100c9d97d86"
+
+          - name:      "GKI-KSU-Next-AB-off"
+            source:    "gki"
+            ksu:       "ksun"
+            prefix:    "GKI_KSU-Next-AB-off"
+            artifact:  "gki-ksun-ab"
+            defconfig: "gki_defconfig"
+            apply_eevdf_patch: false
+            pinned_sha: "0d108e1e8c7b51616fafc1e0c9bef100c9d97d86"
 
     uses: ./.github/workflows/build-kernel.yml
     with:

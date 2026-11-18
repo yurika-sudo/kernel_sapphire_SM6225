@@ -21,6 +21,11 @@ case "$SOURCE_TYPE" in
       sleep 30
     done
     [ -d "$KERNEL_SRC/.git" ] || { echo "[ERROR] GKI clone failed after 3 attempts"; exit 1; }
+    # Pin to immutable SHA if provided at workflow run time
+    if [ -n "$PINNED_SHA" ]; then
+      echo "[PIN] Checking out pinned SHA: $PINNED_SHA"
+      git -C "$KERNEL_SRC" checkout -f "$PINNED_SHA" || { echo "[ERROR] Failed to checkout pinned SHA $PINNED_SHA"; exit 1; }
+    fi
     ;;
 
   gki-legacy)

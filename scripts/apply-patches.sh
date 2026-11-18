@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # apply-patches.sh — apply patches from patches/ folder + WildKernels patches
-# env: SOURCE_TYPE, KSU_TYPE, BUILD_TYPE, KERNEL_SRC, DEFCONFIG
+# env: SOURCE_TYPE, KSU_TYPE, BUILD_TYPE, KERNEL_SRC, DEFCONFIG, SKIP_EEVDF_PATCH
 set -e
 
 : "${KERNEL_SRC:?}"
@@ -9,8 +9,8 @@ set -e
 : "${BUILD_TYPE:-stable}"
 : "${WORK_DIR:=$GITHUB_WORKSPACE}"
 
+# Source apply_patch function unconditionally
 source /tmp/apply_patch.sh
-cd "$KERNEL_SRC"
 
 # gki-legacy: WildKernels + KSU/BBG/NoMount only — skip common/testing
 [ "$SOURCE_TYPE" = "gki-legacy" ] && echo "[GKI-LEGACY] Skipping common/testing patches — WildKernels block follows"
@@ -69,6 +69,11 @@ elif [ -d "$PATCHES_DIR/common" ]; then
         fi
         continue
       fi
+    fi
+    # Skip EEVDF backport patch when requested for A/B diagnostic
+    if [ "$NAME" = "eevdf-backport-sched" ] && [ "${SKIP_EEVDF_PATCH:-}" = "1" ]; then
+      echo "[DIAG] Skipping eevdf-backport-sched.patch (SKIP_EEVDF_PATCH=1)"
+      continue
     fi
     apply_patch "$PATCH" "$NAME"
   done

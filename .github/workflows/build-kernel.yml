@@ -12,8 +12,10 @@ on:
       build_type:    { type: string, required: true }   # stable | testing
       notify:        { type: boolean, default: true }
       use_ccache:    { type: boolean, default: false }
+      apply_eevdf_patch: { type: boolean, default: true }  # true=apply EEVDF patch, false=skip for A/B diagnostic
       ksun_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
       sksu_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
+      pinned_sha:    { type: string, required: false, default: "" }  # immutable SHA pin for clone-source.sh
 
 env:
   OUT_DIR: "out"
@@ -40,6 +42,7 @@ jobs:
         env:
           SOURCE_TYPE:   ${{ inputs.source_type }}
           KSU_TYPE:      ${{ inputs.ksu_type }}
+          PINNED_SHA:    ${{ inputs.pinned_sha || '' }}
         run: bash scripts/clone-source.sh
 
       - name: "Fix source warnings"
@@ -81,6 +84,7 @@ jobs:
           KSU_TYPE:    ${{ inputs.ksu_type }}
           BUILD_TYPE:  ${{ inputs.build_type }}
           DEFCONFIG:   ${{ inputs.defconfig }}
+          SKIP_EEVDF_PATCH: ${{ inputs.apply_eevdf_patch == false && '1' || '0' }}
         run: |
           set -o pipefail
           bash scripts/apply-patches.sh
