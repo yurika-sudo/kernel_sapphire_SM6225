@@ -252,6 +252,12 @@ jobs:
             [ -f "${{ env.WORK_DIR }}/$f" ] && \
               cp "${{ env.WORK_DIR }}/$f" "$STAGE/" || true
           done
+          # Collect .config for diagnostics
+          [ -f "${{ env.WORK_DIR }}/out/dist/.config" ] && \
+            cp "${{ env.WORK_DIR }}/out/dist/.config" "$STAGE/" || echo "[WARN] .config not found in build output"
+          # Collect Module.symvers for diagnostics
+          [ -f "${{ env.WORK_DIR }}/out/modules-${{ inputs.source_type }}/Module.symvers" ] && \
+            cp "${{ env.WORK_DIR }}/out/modules-${{ inputs.source_type }}/Module.symvers" "$STAGE/" || echo "[WARN] Module.symvers not found in build output"
           echo "--- artifact-stage contents ---"
           ls -lh "$STAGE"
 
@@ -260,4 +266,14 @@ jobs:
         with:
           name: ${{ inputs.artifact_name }}
           path: ${{ env.WORK_DIR }}/artifact-stage/
+          retention-days: 1
+
+      - name: "Upload metadata artifact"
+        if: success()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: staging-build-metadata
+          path: |
+            ${{ env.WORK_DIR }}/artifact-stage/.config
+            ${{ env.WORK_DIR }}/artifact-stage/Module.symvers
           retention-days: 1
