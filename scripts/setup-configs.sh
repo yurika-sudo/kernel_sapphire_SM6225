@@ -15,7 +15,7 @@ sed -i 's/ cgroup_disable=pressure//'                    "$CF"
 sed -i 's/kvm-arm\.mode=protected/kvm-arm.mode=none/' "$CF"
 sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off noirqdebug mitigations=off /' "$CF"
 sed -i 's/kasan\.stacktrace=off/kasan=off/'               "$CF"
-sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 transparent_hugepage=madvise audit=0 rcu_nocbs=0-3 loglevel=3 silent_boot.mode=silent log_buf_len=2M cpuidle.governor=teo"/' "$CF"
+sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 transparent_hugepage=madvise audit=0 rcu_nocbs=0-7 loglevel=6 log_buf_len=2M cpuidle.governor=teo"/' "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
 for SYM in WLAN_VENDOR_ATH \
@@ -31,7 +31,7 @@ for SYM in WLAN_VENDOR_ATH \
 done
 
 # Common configs (all variants)
-cat >> "$CF" << 'EOF'
+cat >> "$CF" << 'EOFCFG'
 CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y
 CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y
 # CONFIG_SCHED_WALT is not set
@@ -105,7 +105,9 @@ CONFIG_ENCORE_FAS=m
 CONFIG_WLAN=y
 CONFIG_WLAN_VENDOR_ATH=y
 CONFIG_CFG80211=m
+# CONFIG_CFG80211_WEXT is not set
 CONFIG_MAC80211=m
+# CONFIG_TRIM_UNUSED_KSYMS is not set
 CONFIG_ATH9K_HTC=m
 CONFIG_ATH=m
 CONFIG_ATH9K_HW=m
@@ -121,11 +123,11 @@ CONFIG_USER_NS=y
 CONFIG_KFENCE_DEFERRABLE=y
 # CONFIG_LOCALVERSION_AUTO is not set
 CONFIG_BOEFFLA_WL_BLOCKER=y
-EOF
+EOFCFG
 
 # KSU-Next
 if [ "$KSU_TYPE" = "ksun" ]; then
-cat >> "$CF" << 'EOF'
+cat >> "$CF" << 'EOFCFG'
 CONFIG_KSU=y
 CONFIG_KSU_SUSFS=y
 CONFIG_KSU_SUSFS_SUS_MAP=y
@@ -144,11 +146,11 @@ CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
 CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
 CONFIG_KSU_SUSFS_SUS_SU=y
 CONFIG_BBG=y
-EOF
+EOFCFG
 
 # SukiSU-Ultra
 elif [ "$KSU_TYPE" = "sksu" ]; then
-cat >> "$CF" << 'EOF'
+cat >> "$CF" << 'EOFCFG'
 CONFIG_KSU=y
 CONFIG_KPM=y
 CONFIG_KSU_SUSFS=y
@@ -167,18 +169,25 @@ CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
 CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
 CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
 CONFIG_KSU_SUSFS_SUS_SU=y
-EOF
+EOFCFG
 
 # NoKSU — no extras, common configs above apply
-# (only common configs above apply — nothing extra here)
 fi
 
 # GKI-only configs
 if [ "$SOURCE_TYPE" = "gki" ]; then
-cat >> "$CF" << 'EOF'
+cat >> "$CF" << 'EOFCFG'
 CONFIG_FAIR_GROUP_SCHED=y
 CONFIG_CFS_BANDWIDTH=y
-EOF
+EOFCFG
 fi
+
+# QPNP power/battery drivers built-in (avoid vendor module ABI mismatch on A13/14)
+cat >> "$CF" << 'EOFCFG'
+CONFIG_INPUT_QPNP_POWER_ON=y
+CONFIG_QPNP_QG=y
+CONFIG_QPNP_SMB5=y
+CONFIG_LEDS_QPNP_VIBRATOR_LDO=y
+EOFCFG
 
 echo "[OK] Configs written for KSU_TYPE=$KSU_TYPE SOURCE_TYPE=$SOURCE_TYPE"
