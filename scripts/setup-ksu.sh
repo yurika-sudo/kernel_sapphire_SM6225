@@ -157,6 +157,7 @@ _patch_susfs_def_h() {
 _patch_namespace_gki_hunk1() {
   # susfs patch hunk#1 fails on GKI: trace/hooks/blk.h shifts context lines.
   # Manually applies the rejected include + extern decls + CL_COPY_MNT_NS define.
+  # After the manual edit, drop any leftover .rej so the next run is clean.
   grep -q "susfs_def.h" fs/namespace.c && return 0
   python3 - <<'EOF'
 txt = open("fs/namespace.c").read()
@@ -181,6 +182,8 @@ txt = txt.replace(
 open("fs/namespace.c", "w").write(txt)
 print("[OK] namespace.c: hunk#1 applied manually")
 EOF
+  # Drop leftover reject file from manual hunk application
+  [ -f fs/namespace.c.rej ] && rm -f fs/namespace.c.rej && echo "[OK] removed fs/namespace.c.rej"
 }
 
 _fix_ksu_umount_missing_set() {
@@ -383,62 +386,6 @@ if [ "$KSU_TYPE" = "ksun" ]; then
 
 
 elif [ "$KSU_TYPE" = "sksu" ]; then
-  rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Ultra
-
-  git clone --depth=1 --branch "${SKSU_TAG_PIN:-builtin}" \
-    https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
-  [ -d "SukiSU-Ultra" ] || { echo "[ERROR] SukiSU-Ultra not found"; exit 1; }
-
-  cd SukiSU-Ultra
-  git fetch --tags 2>/dev/null || true
-  SKSU_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null | tr -d '[:space:]')
-  SKSU_TAG=${SKSU_TAG:-$(git describe --tags --abbrev=0 HEAD 2>/dev/null | tr -d '[:space:]')}
-  _sksu_short=$(git rev-parse --short=8 HEAD 2>/dev/null || echo "")
-  if [ -z "$SKSU_TAG" ] || [ "$SKSU_TAG" = "unknown" ]; then
-    _latest_tag=$(git tag -l "v*" --sort=-v:refname 2>/dev/null | head -1 | tr -d '[:space:]')
-    SKSU_TAG="${_latest_tag:-v4.3.0-r2}-${_sksu_short}@builtin"
-  fi
-  SKSU_SHA=$(git rev-parse HEAD)
-  echo "SKSU_TAG=$SKSU_TAG"  >> "${GITHUB_ENV:-/dev/null}"
-  echo "SKSU_SHA=$SKSU_SHA"  >> "${GITHUB_ENV:-/dev/null}"
-  echo "$SKSU_TAG"                > "$WORK_DIR/sksu_tag.txt"
-  echo "$SKSU_SHA"                > "$WORK_DIR/sksu_sha.txt"
-  _sksu_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
-    | awk 'NR==1{print $NF}' | tr -d '[:space:]')
-  if [ -z "$_sksu_ver" ]; then
-    _count=$(git rev-list --count HEAD 2>/dev/null || echo "")
-    if [ -n "$_count" ]; then
-      _sksu_ver=$((40000 + _count - 2815))
-    fi
-  fi
-  echo "${_sksu_ver:-41179}" > "$WORK_DIR/sksu_version.txt"
-  cd ..
-
-  # Apply SUSFS to kernel tree; SukiSU builtin branch has native SUSFS support
-  git clone --depth=1 -b gki-android13-5.15 https://gitlab.com/simonpunk/susfs4ksu.git
-
-  SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
-  echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
-  echo "[OK] SUSFS commit: $SUSFS_COMMIT"
-
-  SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
-  [ -f "$SUSFS_PATCH" ] && patch -p1 --forward --batch --fuzz=3 < "$SUSFS_PATCH" || true
-  _patch_namespace_gki_hunk1
-  mkdir -p fs include/linux
-  cp -f susfs4ksu/kernel_patches/fs/*            fs/
-  cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
-  _patch_susfs_def_h
-  if [ "$_SPOOF_ACTIVE" -eq 1 ]; then
-    _pin_susfs_lvc
-    _pin_sksu_lvc || exit 1
-  else
-    echo "[SKIP] LINUX_VERSION_CODE pins: tree is not spoofed"
-  fi
-  _link_ksu_driver "SukiSU-Ultra/kernel"
-  rm -rf susfs4ksu
-
-
-
   rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Ultra
 
   git clone --depth=1 --branch "${SKSU_TAG_PIN:-builtin}" \
