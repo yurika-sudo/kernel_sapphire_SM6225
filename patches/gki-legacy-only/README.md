@@ -37,8 +37,6 @@ The following common patches do not apply on 5.15.123 and have no legacy variant
 
 ## Not applicable on 5.15.123 (target file absent)
 
-- `qcom-logbuf-print-caller-arity-fix.patch` — target file `drivers/soc/qcom/qcom_logbuf_boot_log.c` does not exist
-- `walt-early-migrate-battery.patch` — target file `kernel/sched/walt/sysctl.c` does not exist (no WALT scheduler)
 - `blk-adios-rebalance.patch` — not applicable on 5.15.123
 
 ## Note

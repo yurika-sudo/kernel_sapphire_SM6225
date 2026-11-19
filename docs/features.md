@@ -89,7 +89,7 @@ Stable patches applied to all variants (GKI, GKI-Legacy). See [`patches/common/`
 Compatibility shims for the GKI-Legacy tree (pinned to 5.15.123, deprecated/android13-5.15-2023-10).
 For gki-legacy the patches/gki-legacy-only/ variant is used INSTEAD of the common patch of the same name when it exists; if no legacy-only variant exists the common patch is tried and, if it does not apply on 5.15.123, it is reported as needing manual review and skipped (build continues).
 
-Verified state against 5.15.123 (sequential baseline, --fuzz=0)
+Verified state against 5.15.123 (end-to-end run of scripts/apply-patches.sh with SOURCE_TYPE=gki-legacy)
 -------------------------------------------------------------
 - 82 of 92 patches/common patches apply cleanly (deprecated/android13-5.15-2023-10).
 - 10 common patches are skipped (not yet ported to 5.15.123); the build continues with the remaining patches.
