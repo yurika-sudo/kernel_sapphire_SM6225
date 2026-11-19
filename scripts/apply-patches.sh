@@ -56,12 +56,20 @@ elif [ "$SOURCE_TYPE" = "gki-legacy" ]; then
   FALLBACK_DIR="$PATCHES_DIR/gki-legacy-only"
 fi
 if [ -d "$PATCHES_DIR/common" ]; then
+  # Skipped by default: the RTL8188GU wifi dongle driver is not needed for
+  # the target devices and the patch is very large, so it only slows the build.
+  SKIP_PATCHES="rtl8188gu-driver-5.15-sapphire"
   for PATCH in "$PATCHES_DIR/common"/*.patch; do
     [ -f "$PATCH" ] || continue
     NAME="$(basename "$PATCH" .patch)"
-    # For gki-legacy: if a legacy-only variant exists, use it instead of
-    # the common patch (common version is not applied at all). Otherwise
-    # fall through to try the common patch below.
+    # Skip optional large driver patches not needed for target devices.
+    if echo "$SKIP_PATCHES" | grep -qw "$NAME"; then
+      echo "[SKIP-BUILD] $NAME - disabled (large optional driver)"
+      continue
+    fi
+    # For gki-legacy: if a legacy-only variant exists, use it instead of the
+    # common patch (common version is not applied at all). Otherwise fall
+    # through to try the common patch below.
     if [ "$SOURCE_TYPE" = "gki-legacy" ] && [ -f "$FALLBACK_DIR/${NAME}.patch" ]; then
       echo "[LEGACY-ONLY] $NAME — using gki-legacy-only variant, skipping common"
       apply_patch "$FALLBACK_DIR/${NAME}.patch" "$NAME"
