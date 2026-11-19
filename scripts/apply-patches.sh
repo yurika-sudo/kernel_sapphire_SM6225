@@ -12,8 +12,9 @@ set -e
 source /tmp/apply_patch.sh
 cd "$KERNEL_SRC"
 
-# gki-legacy: WildKernels + KSU/BBG/NoMount only — skip common/testing
-[ "$SOURCE_TYPE" = "gki-legacy" ] && echo "[GKI-LEGACY] Skipping common/testing patches — WildKernels block follows"
+# GKI-Legacy now applies patches/common from patches/common/,
+# with patches/gki-legacy-only/ providing regenerated legacy variants
+# for patches that do not apply on 5.15.123. Testing patches remain opt-in.
 
 # WildKernels patches
 echo "=== Applying upstream optimization patches ==="
@@ -48,27 +49,36 @@ apply_patch "$BASE/use_unlikely_wrap_cpufreq.patch"                "use_unlikely
 # Local common patches
 echo "=== Applying local common patches ==="
 PATCHES_DIR="$WORK_DIR/patches"
-if [ "$SOURCE_TYPE" = "gki-legacy" ]; then
-  echo "[GKI-LEGACY] Skipping patches/common"
-elif [ -d "$PATCHES_DIR/common" ]; then
+FALLBACK_DIR=""
+if [ "$SOURCE_TYPE" = "gki-compat" ]; then
+  FALLBACK_DIR="$PATCHES_DIR/gki-compat-only"
+elif [ "$SOURCE_TYPE" = "gki-legacy" ]; then
+  FALLBACK_DIR="$PATCHES_DIR/gki-legacy-only"
+fi
+if [ -d "$PATCHES_DIR/common" ]; then
   for PATCH in "$PATCHES_DIR/common"/*.patch; do
     [ -f "$PATCH" ] || continue
     NAME="$(basename "$PATCH" .patch)"
-    # For gki-compat: try common patch first; on failure look for a
-    # compat-specific fallback in gki-compat-only/ before giving up.
-    if [ "$SOURCE_TYPE" = "gki-compat" ]; then
-      COMPAT_FB="$PATCHES_DIR/gki-compat-only/${NAME}.patch"
-      if ! patch -p1 --dry-run --forward --quiet < "$PATCH" 2>/dev/null; then
-        if patch -p1 --dry-run --reverse --quiet < "$PATCH" 2>/dev/null; then
-          echo "[SKIP] $NAME — already applied"
-        elif [ -f "$COMPAT_FB" ]; then
-          echo "[COMPAT-FB] $NAME — common failed, trying gki-compat-only fallback"
-          apply_patch "$COMPAT_FB" "$NAME"
-        else
-          echo "[SKIP] $NAME — not applicable to gki-compat (no fallback)"
-        fi
-        continue
+    # For gki-legacy: if a legacy-only variant exists, use it instead of
+    # the common patch (common version is not applied at all). Otherwise
+    # fall through to try the common patch below.
+    if [ "$SOURCE_TYPE" = "gki-legacy" ] && [ -f "$FALLBACK_DIR/${NAME}.patch" ]; then
+      echo "[LEGACY-ONLY] $NAME — using gki-legacy-only variant, skipping common"
+      apply_patch "$FALLBACK_DIR/${NAME}.patch" "$NAME"
+      continue
+    fi
+    # Try common patch first; on failure look for a
+    # source-specific fallback before giving up.
+    if ! patch -p1 --dry-run --forward --quiet < "$PATCH" 2>/dev/null; then
+      if patch -p1 --dry-run --reverse --quiet < "$PATCH" 2>/dev/null; then
+        echo "[SKIP] $NAME — already applied"
+      elif [ -n "$FALLBACK_DIR" ] && [ -f "$FALLBACK_DIR/${NAME}.patch" ]; then
+        echo "[FALLBACK] $NAME — common failed, trying ${SOURCE_TYPE}-only fallback"
+        apply_patch "$FALLBACK_DIR/${NAME}.patch" "$NAME"
+      else
+        echo "[SKIP] $NAME — not applicable to ${SOURCE_TYPE} (no fallback)"
       fi
+      continue
     fi
     apply_patch "$PATCH" "$NAME"
   done

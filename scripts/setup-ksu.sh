@@ -421,6 +421,57 @@ elif [ "$KSU_TYPE" = "sksu" ]; then
   _link_ksu_driver "SukiSU-Ultra/kernel"
   rm -rf susfs4ksu
 
+
+elif [ "$KSU_TYPE" = "rsku" ]; then
+  # rsku maps to SukiSU-Ultra path (same as sksu, minimal, no new features)
+  rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Ultra
+
+  git clone --depth=1 --branch "${SKSU_TAG_PIN:-builtin}" \
+    https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
+  [ -d "SukiSU-Ultra" ] || { echo "[ERROR] SukiSU-Ultra not found"; exit 1; }
+
+  cd SukiSU-Ultra
+  git fetch --tags 2>/dev/null || true
+  SKSU_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null | tr -d '[:space:]')
+  SKSU_TAG=${SKSU_TAG:-$(git describe --tags --abbrev=0 HEAD 2>/dev/null | tr -d '[:space:]')}
+  _sksu_short=$(git rev-parse --short=8 HEAD 2>/dev/null || echo "")
+  if [ -z "$SKSU_TAG" ] || [ "$SKSU_TAG" = "unknown" ]; then
+    _latest_tag=$(git tag -l "v*" --sort=-v:refname 2>/dev/null | head -1 | tr -d '[:space:]')
+    SKSU_TAG="${_latest_tag:-v4.3.0-r2}-${_sksu_short}@builtin"
+  fi
+  SKSU_SHA=$(git rev-parse HEAD)
+  echo "SKSU_TAG=$SKSU_TAG"  >> "${GITHUB_ENV:-/dev/null}"
+  echo "SKSU_SHA=$SKSU_SHA"  >> "${GITHUB_ENV:-/dev/null}"
+  echo "$SKSU_TAG"                > "$WORK_DIR/sksu_tag.txt"
+  echo "$SKSU_SHA"                > "$WORK_DIR/sksu_sha.txt"
+  _sksu_ver=$(grep -rh "^#define KSU_VERSION\b" kernel/ 2>/dev/null \
+    | awk 'NR==1{print $NF}' | tr -d '[:space:]')
+  if [ -z "$_sksu_ver" ]; then
+    _count=$(git rev-list --count HEAD 2>/dev/null || echo "")
+    if [ -n "$_count" ]; then
+      _sksu_ver=$((40000 + _count - 2815))
+    fi
+  fi
+  echo "${_sksu_ver:-41179}" > "$WORK_DIR/sksu_version.txt"
+  cd ..
+  # Apply SUSFS to kernel tree; SukiSU builtin branch has native SUSFS support
+  git clone --depth=1 -b gki-android13-5.15 https://gitlab.com/simonpunk/susfs4ksu.git
+  SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
+  echo "[OK] SUSFS commit: $SUSFS_COMMIT"
+  SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
+  [ -f "$SUSFS_PATCH" ] && patch -p1 --forward --batch --fuzz=3 < "$SUSFS_PATCH" || true
+  _patch_namespace_gki_hunk1
+  mkdir -p fs include/linux
+  cp -f susfs4ksu/kernel_patches/fs/*            fs/
+  cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
+  _patch_susfs_def_h
+  _pin_susfs_lvc
+  _fix_susfs_log_rl_stubs || exit 1
+  _pin_sksu_lvc || exit 1
+  _link_ksu_driver "SukiSU-Ultra/kernel"
+  rm -rf susfs4ksu
+
 fi
 
 echo "[OK] KSU setup complete: $KSU_TYPE"

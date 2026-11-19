@@ -173,8 +173,8 @@ EOF
 # (only common configs above apply — nothing extra here)
 fi
 
-# GKI-only configs
-if [ "$SOURCE_TYPE" = "gki" ]; then
+# GKI and GKI-Legacy configs
+if [ "$SOURCE_TYPE" = "gki" ] || [ "$SOURCE_TYPE" = "gki-legacy" ]; then
 cat >> "$CF" << 'EOF'
 CONFIG_FAIR_GROUP_SCHED=y
 CONFIG_CFS_BANDWIDTH=y

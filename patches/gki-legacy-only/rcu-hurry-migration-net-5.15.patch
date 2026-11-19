@@ -1,0 +1,54 @@
+diff --git a/include/net/nexthop.h b/include/net/nexthop.h
+index 28085b995..43ae4b806 100644
+--- a/include/net/nexthop.h
++++ b/include/net/nexthop.h
+@@ -237,7 +237,7 @@ static inline bool nexthop_get(struct nexthop *nh)
+ static inline void nexthop_put(struct nexthop *nh)
+ {
+ 	if (refcount_dec_and_test(&nh->refcnt))
+-		call_rcu(&nh->rcu, nexthop_free_rcu);
++		call_rcu_hurry(&nh->rcu, nexthop_free_rcu);
+ }
+ 
+ static inline bool nexthop_cmp(const struct nexthop *nh1,
+diff --git a/net/ipv4/devinet.c b/net/ipv4/devinet.c
+index 9ac41ffdc..17df4712c 100644
+--- a/net/ipv4/devinet.c
++++ b/net/ipv4/devinet.c
+@@ -221,6 +221,7 @@ static struct in_ifaddr *inet_alloc_ifa(void)
+ static void inet_rcu_free_ifa(struct rcu_head *head)
+ {
+ 	struct in_ifaddr *ifa = container_of(head, struct in_ifaddr, rcu_head);
++
+ 	if (ifa->ifa_dev)
+ 		in_dev_put(ifa->ifa_dev);
+ 	kfree(ifa);
+diff --git a/net/ipv4/fib_semantics.c b/net/ipv4/fib_semantics.c
+index 607a4f816..10fcdc62f 100644
+--- a/net/ipv4/fib_semantics.c
++++ b/net/ipv4/fib_semantics.c
+@@ -252,7 +252,7 @@ void free_fib_info(struct fib_info *fi)
+ 		return;
+ 	}
+ 
+-	call_rcu(&fi->rcu, free_fib_info_rcu);
++	call_rcu_hurry(&fi->rcu, free_fib_info_rcu);
+ }
+ EXPORT_SYMBOL_GPL(free_fib_info);
+ 
+diff --git a/net/ipv6/anycast.c b/net/ipv6/anycast.c
+index dacdea7fc..b0f56f8e5 100644
+--- a/net/ipv6/anycast.c
++++ b/net/ipv6/anycast.c
+@@ -252,9 +252,8 @@ static void aca_free_rcu(struct rcu_head *h)
+ 
+ static void aca_put(struct ifacaddr6 *ac)
+ {
+-	if (refcount_dec_and_test(&ac->aca_refcnt)) {
+-		call_rcu(&ac->rcu, aca_free_rcu);
+-	}
++	if (refcount_dec_and_test(&ac->aca_refcnt))
++		call_rcu_hurry(&ac->rcu, aca_free_rcu);
+ }
+ 
+ static struct ifacaddr6 *aca_alloc(struct fib6_info *f6i,
