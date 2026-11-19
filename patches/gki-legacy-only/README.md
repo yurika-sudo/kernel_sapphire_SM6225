@@ -12,6 +12,7 @@ For `SOURCE_TYPE=gki-legacy`: if a file with the same name exists in this direct
 
 The following files were present in this directory at the time of writing:
 
+- `cve-2026-64560-posix-cpu-timers-uaf.patch`
 - `rcu-hurry-migration-net-5.15.patch`
 
 ## Verified pipeline status on 5.15.123
