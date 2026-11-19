@@ -17,6 +17,16 @@ git config --global advice.addEmbeddedRepo false
 
 cd "$KERNEL_DIR"
 
+# Detect kernel-release-spoof: VERSION=6 PATCHLEVEL=12 in Makefile
+_SPOOF_ACTIVE=0
+if [ -f "Makefile" ]; then
+  if grep -q '^VERSION = 6' Makefile && grep -q '^PATCHLEVEL = 12' Makefile; then
+    _SPOOF_ACTIVE=1
+  fi
+else
+  echo "[WARN] Makefile not found; treating as not spoofed"
+fi
+
 _link_ksu_driver() {
   local DIR="$1"   # KernelSU-Next or SukiSU-Ultra
   [ ! -L "drivers/kernelsu" ] && [ ! -d "drivers/kernelsu" ] && \
@@ -358,9 +368,13 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
-  _pin_susfs_lvc
+  if [ "$_SPOOF_ACTIVE" -eq 1 ]; then
+    _pin_susfs_lvc
+    _pin_ksun_lvc
+  else
+    echo "[SKIP] LINUX_VERSION_CODE pins: tree is not spoofed"
+  fi
   _fix_susfs_log_rl_stubs || exit 1
-  _pin_ksun_lvc
   _fix_susfs_fake_state
 
   _inject_susfs_init "KernelSU-Next/kernel/ksu.c"
@@ -414,10 +428,12 @@ elif [ "$KSU_TYPE" = "sksu" ]; then
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
-  _pin_susfs_lvc
-  _fix_susfs_log_rl_stubs || exit 1
-
-  _pin_sksu_lvc || exit 1
+  if [ "$_SPOOF_ACTIVE" -eq 1 ]; then
+    _pin_susfs_lvc
+    _pin_sksu_lvc || exit 1
+  else
+    echo "[SKIP] LINUX_VERSION_CODE pins: tree is not spoofed"
+  fi
   _link_ksu_driver "SukiSU-Ultra/kernel"
   rm -rf susfs4ksu
 
@@ -465,12 +481,15 @@ elif [ "$KSU_TYPE" = "sksu" ]; then
   cp -f susfs4ksu/kernel_patches/fs/*            fs/
   cp -f susfs4ksu/kernel_patches/include/linux/* include/linux/
   _patch_susfs_def_h
-  _pin_susfs_lvc
+  if [ "$_SPOOF_ACTIVE" -eq 1 ]; then
+    _pin_susfs_lvc
+    _pin_sksu_lvc || exit 1
+  else
+    echo "[SKIP] LINUX_VERSION_CODE pins: tree is not spoofed"
+  fi
   _fix_susfs_log_rl_stubs || exit 1
-  _pin_sksu_lvc || exit 1
   _link_ksu_driver "SukiSU-Ultra/kernel"
   rm -rf susfs4ksu
-
 fi
 
 echo "[OK] KSU setup complete: $KSU_TYPE"
