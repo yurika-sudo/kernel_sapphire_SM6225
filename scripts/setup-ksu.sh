@@ -422,8 +422,7 @@ elif [ "$KSU_TYPE" = "sksu" ]; then
   rm -rf susfs4ksu
 
 
-elif [ "$KSU_TYPE" = "rsku" ]; then
-  # rsku maps to SukiSU-Ultra path (same as sksu, minimal, no new features)
+
   rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Ultra
 
   git clone --depth=1 --branch "${SKSU_TAG_PIN:-builtin}" \
