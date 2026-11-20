@@ -1,0 +1,46 @@
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index a83cce15d..27c746b00 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -6503,6 +6503,13 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool
+ 	if (!this_sd)
+ 		return -1;
+ 
++	/*
++	 * BACKPORT (Linux 6.12): Skip LLC scan when root domain is overutilized.
++	 * Saturated clusters rarely have idle CPUs; scanning wastes cycles.
++	 */
++	if (READ_ONCE(this_rq()->rd->overutilized))
++		return -1;
++
+ 	cpumask_and(cpus, sched_domain_span(sd), p->cpus_ptr);
+ 
+ 	if (sched_feat(SIS_PROP) && !has_idle_core) {
+@@ -6530,6 +6537,8 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool
+ 		else
+ 			nr = 4;
+ 
++		nr = min_t(int, nr, sd->span_weight);
++
+ 		time = cpu_clock(this);
+ 	}
+ 
+diff --git a/kernel/time/hrtimer.c b/kernel/time/hrtimer.c
+index 43a4a2a4f..26e22db1a 100644
+--- a/kernel/time/hrtimer.c
++++ b/kernel/time/hrtimer.c
+@@ -1235,6 +1235,14 @@ static int __hrtimer_start_range_ns(struct hrtimer *timer, ktime_t tim,
+ 
+ 	tim = hrtimer_update_lowres(timer, tim, mode);
+ 
++	/*
++	 * BACKPORT (Linux 6.12): Auto-apply timer_slack_ns for normal tasks
++	 * in process context to coalesce timer interrupts and extend C-state sleep.
++	 */
++	if (!delta_ns && !in_interrupt() && !rt_task(current) && !dl_task(current) &&
++	    !(mode & HRTIMER_MODE_PINNED))
++		delta_ns = current->timer_slack_ns ?: 50000;
++
+ 	hrtimer_set_expires_range_ns(timer, tim, delta_ns);
+ 
+ 	/* Switch the timer base, if necessary: */

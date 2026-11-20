@@ -1,0 +1,14 @@
+diff --git a/drivers/usb/dwc3/Makefile b/drivers/usb/dwc3/Makefile
+index 2d499de6f..9650c5063 100644
+--- a/drivers/usb/dwc3/Makefile
++++ b/drivers/usb/dwc3/Makefile
+@@ -1,6 +1,9 @@
+ # SPDX-License-Identifier: GPL-2.0
+ # define_trace.h needs to know how to find our header
+ CFLAGS_trace.o				:= -I$(src)
++CFLAGS_core.o				+= -O1 -fno-inline
++CFLAGS_gadget.o				+= -O1 -fno-inline
++CFLAGS_dwc3-msm.o			+= -O1 -fno-inline
+ 
+ obj-$(CONFIG_USB_DWC3)			+= dwc3.o
+ 

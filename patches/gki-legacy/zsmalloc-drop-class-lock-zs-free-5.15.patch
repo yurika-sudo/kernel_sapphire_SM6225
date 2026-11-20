@@ -1,0 +1,82 @@
+diff --git a/mm/zsmalloc.c b/mm/zsmalloc.c
+index 45596e2d8..4892ccd1b 100644
+--- a/mm/zsmalloc.c
++++ b/mm/zsmalloc.c
+@@ -924,19 +924,11 @@ static int trylock_zspage(struct zspage *zspage)
+ 	return 0;
+ }
+ 
+-static void __free_zspage(struct zs_pool *pool, struct size_class *class,
+-				struct zspage *zspage)
++static inline void __free_zspage_lockless(struct zs_pool *pool, struct zspage *zspage)
+ {
+ 	struct page *page, *next;
+-	enum fullness_group fg;
+-	unsigned int class_idx;
+-
+-	get_zspage_mapping(zspage, &class_idx, &fg);
+-
+-	assert_spin_locked(&class->lock);
+ 
+ 	VM_BUG_ON(get_zspage_inuse(zspage));
+-	VM_BUG_ON(fg != ZS_EMPTY);
+ 
+ 	next = page = get_first_page(zspage);
+ 	do {
+@@ -950,7 +942,21 @@ static void __free_zspage(struct zs_pool *pool, struct size_class *class,
+ 	} while (page != NULL);
+ 
+ 	cache_free_zspage(pool, zspage);
++}
++
++static void __free_zspage(struct zs_pool *pool, struct size_class *class,
++				struct zspage *zspage)
++{
++	enum fullness_group fg;
++	unsigned int class_idx;
++
++	get_zspage_mapping(zspage, &class_idx, &fg);
++
++	assert_spin_locked(&class->lock);
++
++	VM_BUG_ON(fg != ZS_EMPTY);
+ 
++	__free_zspage_lockless(pool, zspage);
+ 	zs_stat_dec(class, OBJ_ALLOCATED, class->objs_per_zspage);
+ 	atomic_long_sub(class->pages_per_zspage,
+ 					&pool->pages_allocated);
+@@ -1498,6 +1504,7 @@ void zs_free(struct zs_pool *pool, unsigned long handle)
+ 	struct size_class *class;
+ 	enum fullness_group fullness;
+ 	bool isolated;
++	struct zspage *zspage_to_free = NULL;
+ 
+ 	if (unlikely(!handle))
+ 		return;
+@@ -1523,11 +1530,24 @@ void zs_free(struct zs_pool *pool, unsigned long handle)
+ 	isolated = is_zspage_isolated(zspage);
+ 	migrate_read_unlock(zspage);
+ 	/* If zspage is isolated, zs_page_putback will free the zspage */
+-	if (likely(!isolated))
+-		free_zspage(pool, class, zspage);
++	if (likely(!isolated)) {
++		if (trylock_zspage(zspage)) {
++			remove_zspage(class, zspage, ZS_EMPTY);
++			zs_stat_dec(class, OBJ_ALLOCATED, class->objs_per_zspage);
++			zspage_to_free = zspage;
++		} else {
++			kick_deferred_free(pool);
++		}
++	}
+ out:
+ 
+ 	spin_unlock(&class->lock);
++
++	if (zspage_to_free) {
++		__free_zspage_lockless(pool, zspage_to_free);
++		atomic_long_sub(class->pages_per_zspage, &pool->pages_allocated);
++	}
++
+ 	unpin_tag(handle);
+ 	cache_free_handle(pool, handle);
+ }

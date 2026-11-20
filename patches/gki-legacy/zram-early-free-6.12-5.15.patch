@@ -1,0 +1,38 @@
+diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
+index d689b279cd23b..7e37a19581138 100644
+--- a/drivers/block/zram/zram_drv.c
++++ b/drivers/block/zram/zram_drv.c
+@@ -1556,13 +1556,22 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
+ 	 * if we have a 'non-null' handle here then we are coming
+ 	 * from the slow path and handle has already been allocated.
+ 	 */
+-	if (!handle)
++	if (!handle) {
++		/*
++		 * Free old slot memory early before allocating the new handle.
++		 * Prevents holding both old and new objects in zsmalloc simultaneously,
++		 * reducing pool memory spikes and writestalls under memory pressure.
++		 */
++		zram_slot_lock(zram, index);
++		zram_free_page(zram, index);
++		zram_slot_unlock(zram, index);
+ 		handle = zs_malloc(zram->mem_pool, comp_len,
+ 				__GFP_KSWAPD_RECLAIM |
+ 				__GFP_NOWARN |
+ 				__GFP_HIGHMEM |
+ 				__GFP_MOVABLE |
+ 				__GFP_CMA);
++	}
+ 	if (!handle) {
+ 		zcomp_stream_put(zram->comps[prio]);
+ 		atomic64_inc(&zram->stats.writestall);
+@@ -1601,7 +1610,8 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
+ 	 * before overwriting unused sectors.
+ 	 */
+ 	zram_slot_lock(zram, index);
+-	zram_free_page(zram, index);
++	if (flags == ZRAM_SAME)
++		zram_free_page(zram, index);
+ 
+ 	if (flags == ZRAM_SAME) {
+ 		zram_set_flag(zram, index, ZRAM_SAME);

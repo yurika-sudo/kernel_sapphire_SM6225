@@ -9,7 +9,7 @@
 | GKI-Legacy-SukiSU | AOSP 2023-10 (legacy) | SukiSU-Ultra + SUSFS | — |
 | GKI-Legacy-NoKSU | AOSP 2023-10 (legacy) | Vanilla | — |
 
-**Supported Android versions:** GKI-Legacy targets Android 13/14 baseline only — applies patches/common (legacy overlay via patches/gki-legacy-only/ for patches that do not apply on 5.15.123) + KSU/SuSFS. Main **GKI** targets Android 15+ ROMs.
+**Supported Android versions:** GKI-Legacy targets Android 13/14 baseline only — applies its own patch set in `patches/gki-legacy/` (one file per common patch, verified to apply on 5.15.123) + KSU/SuSFS. Main **GKI** targets Android 15+ ROMs.
 
 ---
 

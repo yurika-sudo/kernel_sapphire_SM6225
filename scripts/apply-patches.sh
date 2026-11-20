@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# apply-patches.sh — apply patches from patches/ folder + WildKernels patches
+# apply-patches.sh - apply patches from patches/ folder + WildKernels patches
 # env: SOURCE_TYPE, KSU_TYPE, BUILD_TYPE, KERNEL_SRC, DEFCONFIG
 set -e
 
@@ -11,10 +11,6 @@ set -e
 
 source /tmp/apply_patch.sh
 cd "$KERNEL_SRC"
-
-# GKI-Legacy now applies patches/common from patches/common/,
-# with patches/gki-legacy-only/ providing regenerated legacy variants
-# for patches that do not apply on 5.15.123. Testing patches remain opt-in.
 
 # WildKernels patches
 echo "=== Applying upstream optimization patches ==="
@@ -46,19 +42,34 @@ apply_patch "$BASE/silence_system_logspam.patch"                   "silence_syst
 apply_patch "$BASE/unicode_bypass_fix_6.1-.patch"                  "unicode_bypass_fix_6.1-"
 apply_patch "$BASE/use_unlikely_wrap_cpufreq.patch"                "use_unlikely_wrap_cpufreq"
 
-# Local common patches
-echo "=== Applying local common patches ==="
+# Patch roles:
+#   patches/common/     - the AIO set (kernel 5.15.225), used by SOURCE_TYPE=gki
+#   patches/gki-legacy/ - the GKI-Legacy set (kernel 5.15.123), used by SOURCE_TYPE=gki-legacy
+#   patches/<src>-only/ - patches that exist only for one source type
+# GKI-Legacy never touches patches/common: it has its own set, and the patches
+# that could not be ported are listed in patches/gki-legacy/PENDING.txt.
+echo "=== Applying local patches ==="
 PATCHES_DIR="$WORK_DIR/patches"
+
+# Skipped by default: the RTL8188GU wifi dongle driver is not needed for the
+# target devices and the patch is very large, so it only slows the build.
+SKIP_PATCHES="rtl8188gu-driver-5.15-sapphire"
 FALLBACK_DIR=""
 if [ "$SOURCE_TYPE" = "gki-compat" ]; then
   FALLBACK_DIR="$PATCHES_DIR/gki-compat-only"
-elif [ "$SOURCE_TYPE" = "gki-legacy" ]; then
-  FALLBACK_DIR="$PATCHES_DIR/gki-legacy-only"
 fi
-if [ -d "$PATCHES_DIR/common" ]; then
-  # Skipped by default: the RTL8188GU wifi dongle driver is not needed for
-  # the target devices and the patch is very large, so it only slows the build.
-  SKIP_PATCHES="rtl8188gu-driver-5.15-sapphire"
+
+if [ "$SOURCE_TYPE" = "gki-legacy" ]; then
+  echo "=== Applying GKI-Legacy patch set (5.15.123) ==="
+  LEGACY_COUNT=0
+  for PATCH in "$PATCHES_DIR"/gki-legacy/*.patch; do
+    [ -f "$PATCH" ] || continue
+    NAME="$(basename "$PATCH" .patch)"
+    apply_patch "$PATCH" "$NAME"
+    LEGACY_COUNT=$((LEGACY_COUNT + 1))
+  done
+  echo "[OK] gki-legacy: processed $LEGACY_COUNT patches from patches/gki-legacy"
+elif [ -d "$PATCHES_DIR/common" ]; then
   for PATCH in "$PATCHES_DIR/common"/*.patch; do
     [ -f "$PATCH" ] || continue
     NAME="$(basename "$PATCH" .patch)"
@@ -67,24 +78,16 @@ if [ -d "$PATCHES_DIR/common" ]; then
       echo "[SKIP-BUILD] $NAME - disabled (large optional driver)"
       continue
     fi
-    # For gki-legacy: if a legacy-only variant exists, use it instead of the
-    # common patch (common version is not applied at all). Otherwise fall
-    # through to try the common patch below.
-    if [ "$SOURCE_TYPE" = "gki-legacy" ] && [ -f "$FALLBACK_DIR/${NAME}.patch" ]; then
-      echo "[LEGACY-ONLY] $NAME — using gki-legacy-only variant, skipping common"
-      apply_patch "$FALLBACK_DIR/${NAME}.patch" "$NAME"
-      continue
-    fi
-    # Try common patch first; on failure look for a
+    # For gki-compat: try common patch first; on failure look for a
     # source-specific fallback before giving up.
     if ! patch -p1 --dry-run --forward --quiet < "$PATCH" 2>/dev/null; then
       if patch -p1 --dry-run --reverse --quiet < "$PATCH" 2>/dev/null; then
-        echo "[SKIP] $NAME — already applied"
+        echo "[SKIP] $NAME - already applied"
       elif [ -n "$FALLBACK_DIR" ] && [ -f "$FALLBACK_DIR/${NAME}.patch" ]; then
-        echo "[FALLBACK] $NAME — common failed, trying ${SOURCE_TYPE}-only fallback"
+        echo "[FALLBACK] $NAME - common failed - trying ${SOURCE_TYPE}-only fallback"
         apply_patch "$FALLBACK_DIR/${NAME}.patch" "$NAME"
       else
-        echo "[SKIP] $NAME — not applicable to ${SOURCE_TYPE} (no fallback)"
+        echo "[SKIP] $NAME - not applicable to ${SOURCE_TYPE} (no fallback)"
       fi
       continue
     fi

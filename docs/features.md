@@ -84,30 +84,12 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 
 Stable patches applied to all variants (GKI, GKI-Legacy). See [`patches/common/`](../patches/common/) for the full list.
 
-### GKI-Legacy only (`patches/gki-legacy-only/`)
+### GKI-Legacy (`patches/gki-legacy/`)
 
-Compatibility shims for the GKI-Legacy tree (pinned to 5.15.123, deprecated/android13-5.15-2023-10).
-For gki-legacy the patches/gki-legacy-only/ variant is used INSTEAD of the common patch of the same name when it exists; if no legacy-only variant exists the common patch is tried and, if it does not apply on 5.15.123, it is reported as needing manual review and skipped (build continues).
+Legacy uses its own patch set in `patches/gki-legacy/` (one file per common patch, applied INSTEAD of `patches/common/` for gki-legacy). The GKI-Legacy tree is pinned to kernel 5.15.123. Currently 79 patches are in the legacy set and 13 common patches are still pending — see `patches/gki-legacy/PENDING.txt` for the reason per patch. Patches that cannot apply on 5.15.123 as-is are listed as pending; those that have a rebuilt variant for 5.15.123 live in `patches/gki-legacy-overrides/` (currently only the CVE-2026-64560 posix-cpu-timers UAF fix, where the common version uses `guard(rcu)()` which is unavailable on 5.15.123 and the legacy rebuild uses `synchronize_rcu()` instead). KSU-Next and SukiSU-Ultra integrations verified on the legacy tree: driver linked, SUSFS applies, LINUX_VERSION_CODE pins skipped because the legacy tree is not spoofed.
 
-Verified state against 5.15.123 (end-to-end run of scripts/apply-patches.sh with SOURCE_TYPE=gki-legacy)
--------------------------------------------------------------
-- 82 of 92 patches/common patches apply cleanly (deprecated/android13-5.15-2023-10).
-- 10 common patches are skipped (not yet ported to 5.15.123); the build continues with the remaining patches.
-- KSU-Next and SukiSU-Ultra integrations verified on the legacy tree: driver linked, SUSFS applies, LINUX_VERSION_CODE pins skipped because the legacy tree is not spoofed.
-- The following 10 patches are skipped (not yet ported to 5.15.123):
-  - bbrv3-5.15-sapphire.patch — TCP struct divergence on 5.15.123
-  - binder-get-node-fastpath-6.12-5.15.patch — new binder API path
-  - cfs-bandwidth-kabi-safe-gki-5.15-sapphire.patch — already covered by the earlier cass patch
-  - kernel-release-spoof-6.12-5.15.patch — legacy variant still pending (proc osrelease spoof differs on 5.15.123)
-  - qcom-logbuf-print-caller-arity-fix.patch — target file drivers/soc/qcom/qcom_logbuf_boot_log.c does not exist on 5.15.123
-  - rcu-lazy-flush-3s-module-param.patch — missing LAZY_FLUSH_JIFFIES define
-  - sched-cambyses-v0.7.0-5.15.patch — scheduler core divergence on 5.15.123
-  - schedutil-rate-limit-latency-6.12-5.15.patch — new scheduler API
-  - walt-early-migrate-battery.patch — target file kernel/sched/walt/sysctl.c does not exist on 5.15.123
-  - zstd-upgrade-v157.patch — new zstd API and files missing on 5.15.123
-
-GKI-Legacy variant resolution:
-- Verified legacy-only variant: `rcu-hurry-migration-net-5.15.patch`
+- 79 patches in the legacy set apply cleanly on 5.15.123
+- 13 common patches are pending (not yet ported to 5.15.123)
 
 ### Testing (`patches/testing/`)
 

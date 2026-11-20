@@ -1,0 +1,29 @@
+From 586d5bd9cbc589dafbe914aff5fa520eee19f396 Mon Sep 17 00:00:00 2001
+From: Sultan Alsawaf <sultan@kerneltoast.com>
+Date: Mon, 9 Oct 2023 15:07:32 -0700
+Subject: [PATCH] sched: Disable TTWU_QUEUE
+
+Queuing wake-ups is not measurably beneficial in any way. Disable it.
+
+Signed-off-by: Sultan Alsawaf <sultan@kerneltoast.com>
+Signed-off-by: yurika-sudo <yurika0uu@gmail.com>
+---
+ kernel/sched/features.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/kernel/sched/features.h b/kernel/sched/features.h
+index 1dce8f1de6d7..767975bf981e 100644
+--- a/kernel/sched/features.h
++++ b/kernel/sched/features.h
+@@ -50,7 +50,7 @@ SCHED_FEAT(NONTASK_CAPACITY, true)
+  * Queue remote wakeups on the target CPU and process them
+  * using the scheduler IPI. Reduces rq->lock contention/bounces.
+  */
+-SCHED_FEAT(TTWU_QUEUE, true)
++SCHED_FEAT(TTWU_QUEUE, false)
+ 
+ /*
+  * When doing wakeups, attempt to limit superfluous scans of the LLC domain.
+-- 
+2.34.1
+
