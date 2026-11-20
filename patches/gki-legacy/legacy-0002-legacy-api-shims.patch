@@ -1,0 +1,21 @@
+diff --git a/include/linux/rcupdate.h b/include/linux/rcupdate.h
+index aed84b154..54a58cbef 100644
+--- a/include/linux/rcupdate.h
++++ b/include/linux/rcupdate.h
+@@ -81,6 +81,16 @@ static inline int rcu_preempt_depth(void)
+ 
+ #endif /* #else #ifdef CONFIG_PREEMPT_RCU */
+ 
++/*
++ * sapphire: 5.15.123 has no RCU-lazy paths, so call_rcu_hurry() - which newer
++ * RCU trees provide - is a plain call_rcu() here. Required by the rcu-hurry
++ * patches in this set.
++ */
++static inline void call_rcu_hurry(struct rcu_head *head, rcu_callback_t func)
++{
++	call_rcu(head, func);
++}
++
+ /* Internal to kernel */
+ void rcu_init(void);
+ extern int rcu_scheduler_active;

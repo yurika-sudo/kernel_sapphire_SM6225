@@ -4,11 +4,11 @@ This directory contains the GKI-Legacy patch set, one file per common patch, app
 
 ## Contents
 
-- **patches/gki-legacy/** — 79 patches that apply cleanly on 5.15.123. These replace the corresponding patches from patches/common/ when building for the GKI-Legacy tree.
-- **patches/gki-legacy/PENDING.txt** — 13 common patches that are not yet ported to 5.15.123, each listed with a reason (missing files, unsupported APIs, build-speed disabled drivers, or the 6.x guard macro being unavailable). These patches are skipped during a gki-legacy build.
+- **patches/gki-legacy/** - The patch set that applies cleanly on 5.15.123. See PENDING.txt for the not-ported list. These replace the corresponding patches from patches/common/ when building for the GKI-Legacy tree.
+- **patches/gki-legacy/PENDING.txt** - Common patches that are not yet ported to 5.15.123, each listed with a reason (missing files, unsupported APIs, build-speed disabled drivers, or the 6.x guard macro being unavailable). These patches are skipped during a gki-legacy build.
 - **patches/gki-legacy-overrides/** — Rebuilt versions of specific common patches that cannot apply on 5.15.123 as-is. Currently only contains the CVE-2026-64560 posix-cpu-timers UAF fix variant (the common version uses `guard(rcu)()` which is unavailable on 5.15.123).
 - **patches/gki-legacy/** — legacy-only compatibility patches that add symbols or macros required by out-of-tree integrations (e.g. SUSFS uses `VMA_PAD_START`, which only exists on trees with pgsize_migration support). These are allowed extra files.
-- **PENDING.txt** — Lists the 13 common patches that are not ported yet, with the real file+line reason for each.
+- **PENDING.txt** - Lists the common patches that are not ported yet, with the real file+line reason for each.
 
 ## Maintenance scripts
 
