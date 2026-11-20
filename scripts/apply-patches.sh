@@ -80,8 +80,9 @@ elif [ -d "$PATCHES_DIR/common" ]; then
     fi
     # For gki-compat: try common patch first; on failure look for a
     # source-specific fallback before giving up.
-    if ! patch -p1 --dry-run --forward --quiet < "$PATCH" 2>/dev/null; then
-      if patch -p1 --dry-run --reverse --quiet < "$PATCH" 2>/dev/null; then
+    DRY_LOG="/tmp/patchdry_${NAME//[^a-zA-Z0-9]/_}.log"
+    if ! patch -p1 --dry-run --forward --quiet < "$PATCH" > "$DRY_LOG" 2>&1; then
+      if patch -p1 --dry-run --reverse --quiet < "$PATCH" > "$DRY_LOG" 2>&1; then
         echo "[SKIP] $NAME - already applied"
       elif [ -n "$FALLBACK_DIR" ] && [ -f "$FALLBACK_DIR/${NAME}.patch" ]; then
         echo "[FALLBACK] $NAME - common failed - trying ${SOURCE_TYPE}-only fallback"
@@ -89,8 +90,10 @@ elif [ -d "$PATCHES_DIR/common" ]; then
       else
         echo "[SKIP] $NAME - not applicable to ${SOURCE_TYPE} (no fallback)"
       fi
+      rm -f "$DRY_LOG"
       continue
     fi
+    rm -f "$DRY_LOG"
     apply_patch "$PATCH" "$NAME"
   done
 fi

@@ -3,6 +3,7 @@
 apply_patch() {
   local SRC="$1" NAME="$2" STRICT="${3:-0}"
   local TMP="/tmp/p_${NAME//[^a-zA-Z0-9]/_}"
+  local LOG="/tmp/patch_${NAME//[^a-zA-Z0-9]/_}.log"
 
   if [[ "$SRC" == http* ]]; then
     curl -LSs --fail "$SRC" -o "$TMP" 2>/dev/null || { echo "[SKIP] $NAME — download failed"; return 0; }
@@ -18,26 +19,26 @@ apply_patch() {
     [[ "$t" == "/dev/null" ]] && continue
     [ -f "$t" ] || missing="$missing $t"
   done < "$TMP"
-  [ -n "$missing" ] && { echo "[SKIP] $NAME — missing:$missing"; rm -f "$TMP"; return 0; }
+  [ -n "$missing" ] && { echo "[SKIP] $NAME — missing:$missing"; rm -f "$TMP" "$LOG"; return 0; }
 
-  if ! patch -p1 --dry-run --forward --quiet < "$TMP" 2>/dev/null; then
+  if ! patch -p1 --dry-run --forward --quiet < "$TMP" > "$LOG" 2>&1; then
     # forward dry-run failed — check if it's because the patch is already
     # applied (reverse succeeds) vs a genuine conflict (reverse also fails)
-    if patch -p1 --dry-run --reverse --quiet < "$TMP" 2>/dev/null; then
+    if patch -p1 --dry-run --reverse --quiet < "$TMP" > "$LOG" 2>&1; then
       echo "[SKIP] $NAME — already applied"
     else
       echo "[FAIL] $NAME — context mismatch, needs manual review"
-      [ "$STRICT" = "1" ] && { rm -f "$TMP"; return 1; }
+      [ "$STRICT" = "1" ] && { rm -f "$TMP" "$LOG"; return 1; }
     fi
-    rm -f "$TMP"
+    rm -f "$TMP" "$LOG"
     return 0
   fi
 
-  if patch -p1 --forward < "$TMP"; then
+  if patch -p1 --forward < "$TMP" > "$LOG" 2>&1; then
     echo "[OK]  $NAME"
   else
-    [ "$STRICT" = "1" ] && { echo "[FAIL] $NAME"; rm -f "$TMP"; return 1; }
-    echo "[WARN] $NAME — skipped"
+    [ "$STRICT" = "1" ] && { echo "[FAIL] $NAME"; rm -f "$TMP" "$LOG"; return 1; }
+    echo "[WARN] $NAME - skipped (see $LOG)"
   fi
-  rm -f "$TMP"
+  rm -f "$TMP" "$LOG"
 }
