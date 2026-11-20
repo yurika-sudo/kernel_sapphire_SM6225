@@ -82,7 +82,7 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 
 ### Stable (`patches/common/`)
 
-Stable patches applied to all variants (GKI, GKI-Legacy). See [`patches/common/`](../patches/common/) for the full list.
+Stable patches for the GKI (AIO) variant. See [`patches/common/`](../patches/common/) for the full list.
 
 ### GKI-Legacy (`patches/gki-legacy/`)
 
