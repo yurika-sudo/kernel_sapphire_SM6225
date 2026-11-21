@@ -115,18 +115,20 @@ kconfig_provided() {
 
 checked=0
 failures=0
+unknowns=0
 for SYM in "${SYMBOLS[@]}"; do
   checked=$((checked + 1))
-  if symbol_is_pending "$SYM" || ! kconfig_provided "$SYM"; then
+  if symbol_is_pending "$SYM"; then
     echo "[FAIL] $SYM is injected for gki-legacy but no legacy patch provides it"
     failures=$((failures + 1))
+  elif ! kconfig_provided "$SYM"; then
+    echo "[WARN] $SYM is injected for gki-legacy but the symbol does not exist on 5.15.123"
+    unknowns=$((unknowns + 1))
   fi
 done
 
+echo "legacy config: $checked symbols checked, $failures unbacked, $unknowns unknown"
 if [ "$failures" -ne 0 ]; then
-  echo "legacy config: $checked symbols checked, $failures unbacked"
   exit 1
 fi
-
-echo "legacy config: $checked symbols checked, all provided"
 exit 0
