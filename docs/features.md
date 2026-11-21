@@ -23,6 +23,7 @@
 
 **Network**
 - BBRv3 + Westwood TCP congestion control · FQ default qdisc (CAKE / PIE also available)
+- GKI-Legacy 5.15.123 includes the BBRv3 TCP congestion-control backport with the legacy PLB and sysctl adaptation.
 - TCP write buffer increased to 16MB
 
 **Security / stability**
