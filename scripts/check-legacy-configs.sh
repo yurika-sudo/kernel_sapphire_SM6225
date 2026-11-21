@@ -25,19 +25,54 @@ if [ ! -f "$PENDING_FILE" ]; then
   exit 1
 fi
 
-# Derive the symbols from the existing per-source-type blocks in setup-configs.sh.
-# We collect only the blocks whose condition names gki-legacy, not the common block.
+# Derive symbols from shared config heredocs and gki-legacy-specific blocks.
+# Vendor-gated blocks are shared for legacy; KSU-specific blocks are not.
 mapfile -t SYMBOLS < <(
   awk '
-    /^[[:space:]]*(if|elif)[[:space:]].*SOURCE_TYPE/ {
-      legacy_block = ($0 ~ /"gki-legacy"/)
+    function classify_block(    i, has_source, has_ksu, has_other, has_legacy) {
+      has_source = has_ksu = has_other = has_legacy = 0
+      for (i = 1; i <= depth; i++) {
+        if (condition[i] ~ /SOURCE_TYPE/) {
+          has_source = 1
+          if (condition[i] ~ /"gki-legacy"/)
+            has_legacy = 1
+        } else if (condition[i] ~ /KSU_TYPE/) {
+          has_ksu = 1
+        } else if (condition[i] !~ /VENDOR/) {
+          has_other = 1
+        }
+      }
+      applicable = has_legacy || (!has_source && !has_ksu && !has_other)
+    }
+    /^[[:space:]]*if[[:space:]]/ {
+      condition[++depth] = $0
+      next
+    }
+    /^[[:space:]]*elif[[:space:]]/ {
+      condition[depth] = $0
+      next
+    }
+    /^[[:space:]]*else[[:space:]]/ {
+      condition[depth] = $0
+      next
     }
     /^[[:space:]]*fi([[:space:]]|$)/ {
-      legacy_block = 0
+      delete condition[depth]
+      depth--
+      next
     }
-    legacy_block && /^[[:space:]]*CONFIG_[A-Za-z0-9_]+=y[[:space:]]*$/ {
+    /^[[:space:]]*cat[[:space:]]+>>[[:space:]]+"\$CF"[[:space:]]*<<[[:space:]]*.EOF./ {
+      classify_block()
+      in_heredoc = 1
+      next
+    }
+    in_heredoc && /^EOF[[:space:]]*$/ {
+      in_heredoc = 0
+      next
+    }
+    in_heredoc && applicable && /^[[:space:]]*CONFIG_[A-Za-z0-9_]+=/ {
       sub(/^[[:space:]]*CONFIG_/, "")
-      sub(/=y[[:space:]]*$/, "")
+      sub(/=.*/, "")
       print
     }
   ' "$SETUP_CONFIGS" | sort -u
@@ -45,12 +80,8 @@ mapfile -t SYMBOLS < <(
 
 # Search the applied tree, not patch backup files.
 mapfile -t KCONFIG_FILES < <(
-  for DIR in "$TREE_DIR"/include "$TREE_DIR"/kernel "$TREE_DIR"/net \
-             "$TREE_DIR"/block "$TREE_DIR"/drivers "$TREE_DIR"/fs \
-             "$TREE_DIR"/mm "$TREE_DIR"/crypto "$TREE_DIR"/init "$TREE_DIR"/arch; do
-    [ -d "$DIR" ] || continue
-    find "$DIR" -type f -name 'Kconfig*' ! -name '*.orig' ! -name '*.rej' ! -name '*~' -print
-  done | sort
+  find "$TREE_DIR" -type f -name 'Kconfig*' ! -path "$TREE_DIR/.git/*" \
+    ! -name '*.orig' ! -name '*.rej' ! -name '*~' -print | sort
 )
 
 # A pending patch implements a symbol when PENDING.txt or the patch names it.
@@ -89,8 +120,6 @@ for SYM in "${SYMBOLS[@]}"; do
   if symbol_is_pending "$SYM" || ! kconfig_provided "$SYM"; then
     echo "[FAIL] $SYM is injected for gki-legacy but no legacy patch provides it"
     failures=$((failures + 1))
-  else
-    echo "[OK] $SYM is provided by the legacy set"
   fi
 done
 
