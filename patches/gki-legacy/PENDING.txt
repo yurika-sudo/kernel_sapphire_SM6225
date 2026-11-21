@@ -1,11 +1,10 @@
 0002-logspam-filter-nfc-hwsvc.patch - kernel/printk/printk.c hunk @@ -720,7 +720,8 @@ does not match on 5.15.123
 bbrv3-5.15-sapphire.patch - net/ipv4/tcp.c hunk @@ -56,7 +56,7 @@ does not match on 5.15.123
 binder-get-node-fastpath-6.12-5.15.patch - drivers/android/binder.c hunk @@ -5540,7 +5540,7 @@ does not match on 5.15.123
-blk-adios-rebalance.patch - applies on top of the restored blk-adios-backport, but is not part of the legacy set
 kernel-release-spoof-6.12-5.15.patch - Makefile hunk @@ -1,6 +1,6 @@ does not match on 5.15.123, and the 6.x guard(rcu)() macro is unavailable on 5.15.123 so the common version does not compile there (legacy rebuild pending)
 qcom-logbuf-print-caller-arity-fix.patch - drivers/soc/qcom/qcom_logbuf_boot_log.c does not exist on 5.15.123
 rcu-hurry-workqueue-queue-rcu-work.patch - already covered by rcu-hurry-migration-net-5.15.patch
-rcu-lazy-flush-3s-module-param.patch - kernel/rcu/tree_nocb.h hunk @@ -250,7 +250,7 @@ does not match on 5.15.123
+rcu-lazy-flush-3s-module-param.patch - 5.15.123 has no CONFIG_RCU_LAZY, call_rcu_lazy(), or jiffies_till_flush; porting the module parameter requires a separate RCU lazy feature backport
 rtl8188gu-driver-5.15-sapphire.patch - disabled by default for build speed (the driver patch is skipped for every source type)
 sched-cambyses-v0.7.0-5.15.patch - kernel/sched/fair.c hunk @@ -8446,7 +8446,9 @@ does not match on 5.15.123
 schedutil-rate-limit-latency-6.12-5.15.patch - kernel/sched/cpufreq_schedutil.c hunk @@ -359,7 +359,7 @@ does not match on 5.15.123
