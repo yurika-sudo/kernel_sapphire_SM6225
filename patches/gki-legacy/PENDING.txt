@@ -2,7 +2,7 @@
 bbrv3-5.15-sapphire.patch - net/ipv4/tcp.c hunk @@ -56,7 +56,7 @@ does not match on 5.15.123
 binder-get-node-fastpath-6.12-5.15.patch - drivers/android/binder.c hunk @@ -5540,7 +5540,7 @@ does not match on 5.15.123
 blk-adios-rebalance.patch - applies on top of the restored blk-adios-backport, but is not part of the legacy set
-cfs-bandwidth-kabi-safe-gki-5.15-sapphire.patch - kernel/sched/debug.c hunk @@ -2432,7 +2432,9 @@ does not match on 5.15.123
+cfs-bandwidth-kabi-safe-gki-5.15-sapphire.patch - CONFIG_CFS_BANDWIDTH and CONFIG_FAIR_GROUP_SCHED are gated until this kabi-safe patch is ported to 5.15.123 (kernel/sched/debug.c hunk @@ -2432,7 +2432,9 @@ does not match on 5.15.123)
 kernel-release-spoof-6.12-5.15.patch - Makefile hunk @@ -1,6 +1,6 @@ does not match on 5.15.123, and the 6.x guard(rcu)() macro is unavailable on 5.15.123 so the common version does not compile there (legacy rebuild pending)
 qcom-logbuf-print-caller-arity-fix.patch - drivers/soc/qcom/qcom_logbuf_boot_log.c does not exist on 5.15.123
 rcu-hurry-workqueue-queue-rcu-work.patch - already covered by rcu-hurry-migration-net-5.15.patch
