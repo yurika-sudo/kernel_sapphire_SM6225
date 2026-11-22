@@ -1,5 +1,3 @@
-0002-logspam-filter-nfc-hwsvc.patch - kernel/printk/printk.c hunk @@ -720,7 +720,8 @@ does not match on 5.15.123
-binder-get-node-fastpath-6.12-5.15.patch - drivers/android/binder.c hunk @@ -5540,7 +5540,7 @@ does not match on 5.15.123
 qcom-logbuf-print-caller-arity-fix.patch - drivers/soc/qcom/qcom_logbuf_boot_log.c does not exist on 5.15.123
 rcu-hurry-workqueue-queue-rcu-work.patch - already covered by rcu-hurry-migration-net-5.15.patch
 rcu-lazy-flush-3s-module-param.patch - 5.15.123 has no CONFIG_RCU_LAZY, call_rcu_lazy(), or jiffies_till_flush; porting the module parameter requires a separate RCU lazy feature backport

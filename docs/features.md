@@ -39,6 +39,8 @@
 - arm64 memcmp optimization for Snapdragon 685
 - timer slack reduced to 50ns
 - DRM/mi_disp, NFC, WLAN HDD, CMN MLME logspam filtering
+- GKI-Legacy filters `android.hardware.nfc@1.2` logspam through the existing printk filter.
+- GKI-Legacy uses a Binder empty-tree lookup fast path and a single-lock poll work check.
 - Droidspaces support (see below)
 
 ---
