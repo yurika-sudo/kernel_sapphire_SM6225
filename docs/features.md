@@ -86,6 +86,8 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 
 ## Patch Inventory
 
+Local patch failures now fail the build (opt out with `APPLY_PATCHES_STRICT=0`).
+
 ### Stable (`patches/common/`)
 
 Stable patches for the GKI (AIO) variant. See [`patches/common/`](../patches/common/) for the full list.

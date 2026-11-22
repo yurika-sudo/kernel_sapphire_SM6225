@@ -51,6 +51,22 @@ apply_patch "$BASE/use_unlikely_wrap_cpufreq.patch"                "use_unlikely
 echo "=== Applying local patches ==="
 PATCHES_DIR="$WORK_DIR/patches"
 
+LOCAL_APPLIED=0
+LOCAL_SKIPPED=0
+LOCAL_FAILED=0
+
+apply_local_patch() {
+  local patch="$1" name="$2" output
+  output="$(apply_patch "$patch" "$name")"
+  printf '%s\n' "$output"
+  case "$output" in
+    "[FAIL] "*) LOCAL_FAILED=$((LOCAL_FAILED + 1)) ;;
+    "[OK] "*) LOCAL_APPLIED=$((LOCAL_APPLIED + 1)) ;;
+    "[SKIP] "*) LOCAL_SKIPPED=$((LOCAL_SKIPPED + 1)) ;;
+    *) LOCAL_FAILED=$((LOCAL_FAILED + 1)) ;;
+  esac
+}
+
 # Skipped by default: the RTL8188GU wifi dongle driver is not needed for the
 # target devices and the patch is very large, so it only slows the build.
 SKIP_PATCHES="rtl8188gu-driver-5.15-sapphire"
@@ -65,7 +81,7 @@ if [ "$SOURCE_TYPE" = "gki-legacy" ]; then
   for PATCH in "$PATCHES_DIR"/gki-legacy/*.patch; do
     [ -f "$PATCH" ] || continue
     NAME="$(basename "$PATCH" .patch)"
-    apply_patch "$PATCH" "$NAME"
+    apply_local_patch "$PATCH" "$NAME"
     LEGACY_COUNT=$((LEGACY_COUNT + 1))
   done
   echo "[OK] gki-legacy: processed $LEGACY_COUNT patches from patches/gki-legacy"
@@ -76,6 +92,7 @@ elif [ -d "$PATCHES_DIR/common" ]; then
     # Skip optional large driver patches not needed for target devices.
     if echo "$SKIP_PATCHES" | grep -qw "$NAME"; then
       echo "[SKIP-BUILD] $NAME - disabled (large optional driver)"
+      LOCAL_SKIPPED=$((LOCAL_SKIPPED + 1))
       continue
     fi
     # For gki-compat: try common patch first; on failure look for a
@@ -84,17 +101,18 @@ elif [ -d "$PATCHES_DIR/common" ]; then
     if ! patch -p1 --dry-run --forward --quiet < "$PATCH" > "$DRY_LOG" 2>&1; then
       if patch -p1 --dry-run --reverse --quiet < "$PATCH" > "$DRY_LOG" 2>&1; then
         echo "[SKIP] $NAME - already applied"
+        LOCAL_SKIPPED=$((LOCAL_SKIPPED + 1))
       elif [ -n "$FALLBACK_DIR" ] && [ -f "$FALLBACK_DIR/${NAME}.patch" ]; then
         echo "[FALLBACK] $NAME - common failed - trying ${SOURCE_TYPE}-only fallback"
-        apply_patch "$FALLBACK_DIR/${NAME}.patch" "$NAME"
+        apply_local_patch "$FALLBACK_DIR/${NAME}.patch" "$NAME"
       else
-        echo "[SKIP] $NAME - not applicable to ${SOURCE_TYPE} (no fallback)"
+        apply_local_patch "$PATCH" "$NAME"
       fi
       rm -f "$DRY_LOG"
       continue
     fi
     rm -f "$DRY_LOG"
-    apply_patch "$PATCH" "$NAME"
+    apply_local_patch "$PATCH" "$NAME"
   done
 fi
 
@@ -109,7 +127,7 @@ echo "=== Applying $SOURCE_TYPE-specific patches ==="
 if [ -d "$PATCHES_DIR/${SOURCE_TYPE}-only" ]; then
   for PATCH in "$PATCHES_DIR/${SOURCE_TYPE}-only"/*.patch; do
     [ -f "$PATCH" ] || continue
-    apply_patch "$PATCH" "$(basename "$PATCH" .patch)"
+    apply_local_patch "$PATCH" "$(basename "$PATCH" .patch)"
   done
 fi
 
@@ -119,9 +137,15 @@ if [ "$BUILD_TYPE" = "testing" ] && [ "$SOURCE_TYPE" != "gki-legacy" ]; then
   if [ -d "$PATCHES_DIR/testing" ]; then
     for PATCH in "$PATCHES_DIR/testing"/*.patch; do
       [ -f "$PATCH" ] || continue
-      apply_patch "$PATCH" "$(basename "$PATCH" .patch)"
+      apply_local_patch "$PATCH" "$(basename "$PATCH" .patch)"
     done
   fi
 fi
 
-echo "[OK] All patches applied"
+echo "[OK] local patches: $LOCAL_APPLIED applied, $LOCAL_SKIPPED skipped, $LOCAL_FAILED failed"
+if [ "$LOCAL_FAILED" -gt 0 ]; then
+  echo "[ERROR] $LOCAL_FAILED local patch(es) failed to apply - see the [FAIL] lines above (set APPLY_PATCHES_STRICT=0 to continue anyway)"
+  [ "${APPLY_PATCHES_STRICT:-1}" = "0" ] || exit 1
+else
+  echo "[OK] All patches applied"
+fi
