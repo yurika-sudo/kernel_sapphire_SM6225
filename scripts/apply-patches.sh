@@ -98,6 +98,12 @@ elif [ -d "$PATCHES_DIR/common" ]; then
   done
 fi
 
+# ntsync-compat: the SUSFS ntsync source selects its code path from
+# LINUX_VERSION_CODE, so the rewrite must run AFTER the spoof patch is in.
+if [ "$SOURCE_TYPE" = "gki-legacy" ]; then
+  python3 "$WORK_DIR/scripts/ntsync-compat.py" "$KERNEL_SRC"
+fi
+
 # Source-type patches
 echo "=== Applying $SOURCE_TYPE-specific patches ==="
 if [ -d "$PATCHES_DIR/${SOURCE_TYPE}-only" ]; then
