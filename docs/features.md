@@ -14,7 +14,8 @@
 - MGLRU forced on (`CONFIG_LRU_GEN_ENABLED=y`)
 - [le9uo](https://github.com/firelzrd/le9uo) workingset protection
 - ZRAM multi-comp + zram-ir tiered recompression with huge/idle-page recompression — requires [Seiran Core](#seiran-core-module)
-- zstd upgraded to v1.5.7
+- zstd upgraded to v1.5.7, including the GKI-Legacy 5.15.123 variant.
+- GKI-Legacy 5.15.123 includes the zstdn sysfs knob and ZRAM writeback support.
 
 **I/O**
 - ADIOS (Adaptive Deadline I/O Scheduler) multi-queue scheduler

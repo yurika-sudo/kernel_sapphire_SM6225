@@ -3,5 +3,3 @@ rcu-hurry-workqueue-queue-rcu-work.patch - already covered by rcu-hurry-migratio
 rcu-lazy-flush-3s-module-param.patch - 5.15.123 has no CONFIG_RCU_LAZY, call_rcu_lazy(), or jiffies_till_flush; porting the module parameter requires a separate RCU lazy feature backport
 rtl8188gu-driver-5.15-sapphire.patch - disabled by default for build speed (the driver patch is skipped for every source type)
 walt-early-migrate-battery.patch - kernel/sched/walt/sysctl.c does not exist on 5.15.123 (no WALT scheduler)
-zstd-upgrade-v157.patch - crypto/zstd.c hunk @@ -420,7 +420,7 @@ does not match on 5.15.123
-zstdn-zstdn-o-crypto-zram-5.15.patch - needs the zstd v1.5.7 library upgrade (zstd-upgrade-v157), which is itself still pending on 5.15.123
