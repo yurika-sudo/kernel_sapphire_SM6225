@@ -8,6 +8,7 @@
 - prefer_silver — silver-cluster affinity layer on top of CASS
 - [NAP](https://github.com/firelzrd/nap) — cpuidle governor (fixedpoint steambot12)
 - Battery-oriented tuning: WALT early-migration thresholds, `sched_nr_migrate`, `watermark_scale_factor`, `vm_swappiness`, yield ratelimit, LIFO wait accept
+- The Cambyses CFS load balancer is included in the GKI-Legacy 5.15.123 patch set.
 
 **Memory**
 - MGLRU forced on (`CONFIG_LRU_GEN_ENABLED=y`)
