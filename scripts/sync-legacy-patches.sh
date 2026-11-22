@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
-# sync-legacy-patches.sh — regenerate patches/gki-legacy/ from common + overrides
-# Usage: bash scripts/sync-legacy-patches.sh [PATCHES_DIR]
-# Never touches patches/common/.
+# sync-legacy-patches.sh - fill missing GKI-Legacy patches from common
+# Usage: bash scripts/sync-legacy-patches.sh [--dry-run] [PATCHES_DIR]
+# Never touches patches/common/ or existing files in patches/gki-legacy/.
 
 set -e
+
+DRY_RUN=0
+if [ "$1" = "--dry-run" ]; then
+  DRY_RUN=1
+  shift
+fi
+
+if [ "$#" -gt 1 ]; then
+  echo "Usage: bash scripts/sync-legacy-patches.sh [--dry-run] [PATCHES_DIR]" >&2
+  exit 2
+fi
 
 if [ -z "$1" ]; then
   PATCHES_DIR="/root/kernel_sapphire_SM6225"
@@ -13,14 +24,12 @@ fi
 
 COMMON_DIR="$PATCHES_DIR/patches/common"
 LEGACY_DIR="$PATCHES_DIR/patches/gki-legacy"
-OVERRIDES_DIR="$PATCHES_DIR/patches/gki-legacy-overrides"
-PENDING_FILE="$PATCHES_DIR/patches/gki-legacy/PENDING.txt"
+PENDING_FILE="$LEGACY_DIR/PENDING.txt"
 
-# Read pending patch names (first field before the first space or dash)
-declare -A PENDING_NAMES
+# Read pending patch names (first field before the first " - ")
+declare -A PENDING_NAMES=()
 if [ -f "$PENDING_FILE" ]; then
   while IFS= read -r line; do
-    # Name is the part before the first " - "
     name="${line%% - *}"
     name="${name%.patch}"
     PENDING_NAMES["$name"]=1
@@ -30,39 +39,40 @@ fi
 # Build-wide skip (rtl8188gu)
 SKIP_NAME="rtl8188gu-driver-5.15-sapphire"
 
-# Remove everything from gki-legacy/ (we rebuild from scratch)
-rm -f "$LEGACY_DIR"/*.patch
-
-# Copy overrides first (these rebuild specific patches, e.g. the CVE variant)
-override_count=0
-for patchfile in "$OVERRIDES_DIR"/*.patch; do
-  [ -f "$patchfile" ] || continue
-  NAME="$(basename "$patchfile" .patch)"
-  cp "$patchfile" "$LEGACY_DIR/"
-  echo "OVERRIDE: $NAME.patch"
-  override_count=$((override_count + 1))
-done
-
-# Copy every common patch EXCEPT those in PENDING.txt and the build-wide skip
-common_count=0
-common_skipped=0
+added=0
+skipped=0
 for patchfile in "$COMMON_DIR"/*.patch; do
   [ -f "$patchfile" ] || continue
   NAME="$(basename "$patchfile" .patch)"
-  common_count=$((common_count + 1))
-  # Skip if pending or build-wide skipped
-  if [ -n "${PENDING_NAMES[$NAME]}" ] || [ "$NAME" = "$SKIP_NAME" ]; then
-    echo "SKIP common: $NAME.patch"
-    common_skipped=$((common_skipped + 1))
-    continue
+  DESTINATION="$LEGACY_DIR/$NAME.patch"
+
+  if [ "$NAME" = "$SKIP_NAME" ]; then
+    echo "SKIP build-wide: $NAME.patch"
+    skipped=$((skipped + 1))
+  elif [ -n "${PENDING_NAMES[$NAME]+x}" ]; then
+    echo "SKIP pending: $NAME.patch"
+    skipped=$((skipped + 1))
+  elif [ -e "$DESTINATION" ] || [ -L "$DESTINATION" ]; then
+    echo "SKIP existing: $NAME.patch"
+    skipped=$((skipped + 1))
+  elif [ "$DRY_RUN" -eq 1 ]; then
+    echo "ADD (dry-run): $NAME.patch"
+    added=$((added + 1))
+  else
+    cp "$patchfile" "$DESTINATION"
+    echo "ADD: $NAME.patch"
+    added=$((added + 1))
   fi
-  # Skip if an override already covers this patch name
-  if [ -f "$OVERRIDES_DIR/${NAME}.patch" ]; then
-    echo "SKIP common (overridden): $NAME.patch"
-    continue
-  fi
-  cp "$patchfile" "$LEGACY_DIR/"
-  echo "COPY common: $NAME.patch"
 done
 
-echo "legacy set: $common_count patches, $(wc -l < "$PENDING_FILE") pending"
+legacy_count=0
+for patchfile in "$LEGACY_DIR"/*.patch; do
+  [ -f "$patchfile" ] || continue
+  legacy_count=$((legacy_count + 1))
+done
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "dry run: no files copied"
+fi
+echo "sync: $added added, $skipped skipped"
+echo "legacy set: $legacy_count patches, $(wc -l < "$PENDING_FILE") pending"
