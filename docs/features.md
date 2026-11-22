@@ -21,6 +21,7 @@
 
 **CPU governor**
 - [Reflex](https://github.com/firelzrd/reflex) cpufreq governor (backported)
+- GKI-Legacy schedutil bypasses its rate limit for DL, RT, iowait, and latency-sensitive or boosted tasks.
 
 **Network**
 - BBRv3 + Westwood TCP congestion control · FQ default qdisc (CAKE / PIE also available)
