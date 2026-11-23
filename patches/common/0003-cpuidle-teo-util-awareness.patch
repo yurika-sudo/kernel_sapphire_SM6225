@@ -1,0 +1,91 @@
+diff --git a/drivers/cpuidle/governors/teo.c b/drivers/cpuidle/governors/teo.c
+index d9262db79cae..337c5b80d221 100644
+--- a/drivers/cpuidle/governors/teo.c
++++ b/drivers/cpuidle/governors/teo.c
+@@ -104,7 +104,9 @@
+ #include <linux/cpuidle.h>
+ #include <linux/jiffies.h>
+ #include <linux/kernel.h>
++#include <linux/sched.h>
+ #include <linux/sched/clock.h>
++#include <linux/sched/topology.h>
+ #include <linux/tick.h>
+ 
+ /*
+@@ -148,10 +150,34 @@ struct teo_cpu {
+ 	unsigned int total;
+ 	int next_recent_idx;
+ 	int recent_idx[NR_RECENT];
++	unsigned long util_threshold;
+ };
+ 
+ static DEFINE_PER_CPU(struct teo_cpu, teo_cpus);
+ 
++static bool teo_cpu_is_utilized(int cpu, struct teo_cpu *cpu_data)
++{
++	unsigned long max = arch_scale_cpu_capacity(cpu);
++
++	return max ? sched_cpu_util(cpu, max) > cpu_data->util_threshold : false;
++}
++
++unsigned long teo_cpu_get_util_threshold(int cpu)
++{
++	struct teo_cpu *cpu_data = per_cpu_ptr(&teo_cpus, cpu);
++
++	return cpu_data->util_threshold;
++}
++EXPORT_SYMBOL_GPL(teo_cpu_get_util_threshold);
++
++void teo_cpu_set_util_threshold(int cpu, unsigned long util)
++{
++	struct teo_cpu *cpu_data = per_cpu_ptr(&teo_cpus, cpu);
++
++	cpu_data->util_threshold = util;
++}
++EXPORT_SYMBOL_GPL(teo_cpu_set_util_threshold);
++
+ /**
+  * teo_update - Update CPU metrics after wakeup.
+  * @drv: cpuidle driver containing state data.
+@@ -452,6 +478,16 @@ static int teo_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
+ 	if (idx > constraint_idx)
+ 		idx = constraint_idx;
+ 
++	/*
++	 * If the CPU is utilized, avoid deep idle states to reduce latency.
++	 */
++	if (idx > 0 && teo_cpu_is_utilized(dev->cpu, cpu_data)) {
++		u64 span_ns = drv->states[idx].target_residency_ns >> 1;
++
++		idx = teo_find_shallower_state(drv, dev, idx, span_ns);
++		duration_ns = span_ns;
++	}
++
+ end:
+ 	/*
+ 	 * Don't stop the tick if the selected state is a polling one or if the
+@@ -515,6 +551,8 @@ static int teo_enable_device(struct cpuidle_driver *drv,
+ 	for (i = 0; i < NR_RECENT; i++)
+ 		cpu_data->recent_idx[i] = -1;
+ 
++	cpu_data->util_threshold = arch_scale_cpu_capacity(dev->cpu) >> 6;
++
+ 	return 0;
+ }
+ 
+diff --git a/include/linux/cpuidle.h b/include/linux/cpuidle.h
+index 1035cb423fc1..e5e4480bfea7 100644
+--- a/include/linux/cpuidle.h
++++ b/include/linux/cpuidle.h
+@@ -279,6 +279,11 @@ struct cpuidle_governor {
+ extern int cpuidle_register_governor(struct cpuidle_governor *gov);
+ extern s64 cpuidle_governor_latency_req(unsigned int cpu);
+ 
++#ifdef CONFIG_CPU_IDLE_GOV_TEO
++unsigned long teo_cpu_get_util_threshold(int cpu);
++void teo_cpu_set_util_threshold(int cpu, unsigned long util);
++#endif
++
+ #define __CPU_PM_CPU_IDLE_ENTER(low_level_idle_enter,			\
+ 				idx,					\
+ 				state,					\
