@@ -1,0 +1,17 @@
+diff --git a/mm/compaction.c b/mm/compaction.c
+index 4eb7d274df4b..8d918ea54351 100644
+--- a/mm/compaction.c
++++ b/mm/compaction.c
+@@ -860,7 +860,11 @@ isolate_migratepages_block(struct compact_control_ext *cc_ext, unsigned long low
+ 			return -EINTR;
+ 	}
+ 
+-	cond_resched();
++	if (cond_resched()) {
++		/* Async terminates prematurely on need_resched() */
++		if (cc->mode == MIGRATE_ASYNC)
++			return 0;
++	}
+ 
+ 	if (cc->direct_compaction && (cc->mode == MIGRATE_ASYNC)) {
+ 		skip_on_failure = true;
