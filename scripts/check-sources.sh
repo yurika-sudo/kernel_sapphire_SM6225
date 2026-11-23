@@ -38,8 +38,17 @@ echo "=== Fetching upstream sources ==="
 KSUN_TAG=$(_latest_tag "https://api.github.com/repos/KernelSU-Next/KernelSU-Next/tags")
 echo "KSU-Next tag      : $KSUN_TAG (informational)"
 
-SKSU_TAG=$(_latest_tag "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/tags")
-echo "SukiSU-Ultra tag  : $SKSU_TAG (informational)"
+SUKISU_BRANCH="${SUKISU_BRANCH:-builtin}"
+SUKISU_BRANCH_PATH=$(jq -rn --arg branch "$SUKISU_BRANCH" '$branch|@uri')
+
+SKSU_TAG=$(_latest_tag \
+  "https://git.zako.shirkneko.top:20004/api/v1/repos/shirkneko/SukiSU/tags")
+if [ "$SKSU_TAG" = "unknown" ]; then
+  echo "[WARN] SukiSU Nova Forgejo tags unavailable; falling back to GitHub"
+  SKSU_TAG=$(_latest_tag \
+    "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/tags")
+fi
+echo "SukiSU Nova tag  : $SKSU_TAG (informational)"
 
 SUSFS_TAG=$(_latest_tag "https://api.github.com/repos/sidex15/susfs4ksu-module/tags")
 echo "SUSFS module tag  : $SUSFS_TAG (informational)"
@@ -49,8 +58,15 @@ KSUN_COMMIT=$(_commit_sha \
 echo "KSU-Next HEAD     : $KSUN_COMMIT"
 
 SKSU_COMMIT=$(_commit_sha \
-  "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/commits/builtin" ".sha")
-echo "SukiSU-Ultra HEAD : $SKSU_COMMIT"
+  "https://git.zako.shirkneko.top:20004/api/v1/repos/shirkneko/SukiSU/branches/${SUKISU_BRANCH_PATH}" \
+  ".commit.id")
+if [ "$SKSU_COMMIT" = "unknown" ]; then
+  echo "[WARN] SukiSU Nova Forgejo branch query failed; falling back to GitHub"
+  SKSU_COMMIT=$(_commit_sha \
+    "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/commits/${SUKISU_BRANCH_PATH}" \
+    ".sha")
+fi
+echo "SukiSU Nova HEAD : $SKSU_COMMIT"
 
 SUSFS_COMMIT=$(_commit_sha \
   "https://gitlab.com/api/v4/projects/simonpunk%2Fsusfs4ksu/repository/commits/gki-android13-5.15" ".id")
@@ -85,7 +101,7 @@ PIN_SKSU_COMMIT=$(_pin "sksu_commit")
 PIN_SUSFS_COMMIT=$(_pin "susfs_commit")
 
 echo "Pinned KSU-Next HEAD     : ${PIN_KSUN_COMMIT:-empty}"
-echo "Pinned SukiSU-Ultra HEAD : ${PIN_SKSU_COMMIT:-empty}"
+echo "Pinned SukiSU Nova HEAD : ${PIN_SKSU_COMMIT:-empty}"
 echo "Pinned SUSFS HEAD        : ${PIN_SUSFS_COMMIT:-empty}"
 
 UPDATES=()
@@ -112,7 +128,7 @@ if [ "$KSUN_TAG" = "unknown" ]; then
   FAILED+=("KSU-Next tag"); KSUN_TAG="$PIN_KSUN"
 fi
 if [ "$SKSU_TAG" = "unknown" ]; then
-  FAILED+=("SukiSU-Ultra tag"); SKSU_TAG="$PIN_SKSU"
+  FAILED+=("SukiSU Nova tag"); SKSU_TAG="$PIN_SKSU"
 fi
 if [ "$SUSFS_TAG" = "unknown" ]; then
   FAILED+=("SUSFS tag"); SUSFS_TAG="$PIN_SUSFS"
@@ -126,9 +142,9 @@ elif [ "$KSUN_COMMIT" != "$PIN_KSUN_COMMIT" ]; then
 fi
 
 if [ "$SKSU_COMMIT" = "unknown" ]; then
-  FAILED+=("SukiSU-Ultra commit"); SKSU_COMMIT="$PIN_SKSU_COMMIT"
+  FAILED+=("SukiSU Nova commit"); SKSU_COMMIT="$PIN_SKSU_COMMIT"
 elif [ "$SKSU_COMMIT" != "$PIN_SKSU_COMMIT" ]; then
-  UPDATES+=("SukiSU-Ultra: ${PIN_SKSU_COMMIT:-empty} -> ${SKSU_COMMIT}")
+  UPDATES+=("SukiSU Nova: ${PIN_SKSU_COMMIT:-empty} -> ${SKSU_COMMIT}")
   SKSU_CHANGED="true"
 fi
 

@@ -33,6 +33,18 @@ on:
         description: "Enable ccache compiler acceleration (experimental / test only)"
         type: boolean
         default: false
+      sukisu_repo_url:
+        description: "SukiSU repository URL"
+        type: string
+        default: "https://git.zako.shirkneko.top:20004/shirkneko/SukiSU"
+      sukisu_branch:
+        description: "SukiSU branch to clone"
+        type: string
+        default: "builtin"
+      sukisu_ref:
+        description: "Optional exact SukiSU commit SHA"
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -74,6 +86,9 @@ jobs:
       build_type:    ${{ inputs.build_type || 'stable' }}
       notify:        ${{ inputs.notify == true }}
       use_ccache:    ${{ inputs.use_ccache == true }}
+      sukisu_repo_url: ${{ inputs.sukisu_repo_url }}
+      sukisu_branch: ${{ inputs.sukisu_branch }}
+      sukisu_ref: ${{ inputs.sukisu_ref }}
     secrets: inherit
 
   build:
@@ -116,6 +131,9 @@ jobs:
       build_type:    ${{ inputs.build_type || 'stable' }}
       notify:        ${{ inputs.notify == true }}
       use_ccache:    ${{ inputs.use_ccache == true }}
+      sukisu_repo_url: ${{ inputs.sukisu_repo_url }}
+      sukisu_branch: ${{ inputs.sukisu_branch }}
+      sukisu_ref: ${{ inputs.sukisu_ref }}
     secrets: inherit
 
   release:

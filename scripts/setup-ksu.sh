@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # setup-ksu.sh - integrate KSU variant + SUSFS into kernel source
 # env: KSU_TYPE (ksun|sksu|none), KERNEL_DIR, WORK_DIR
-# optional env: KSUN_TAG_PIN, SKSU_TAG_PIN, SUSFS_COMMIT_PIN - if set, checkout
+# optional env:
+#   SUKISU_REPO_URL - SukiSU repo URL (default: https://git.zako.shirkneko.top:20004/shirkneko/SukiSU)
+#   SUKISU_BRANCH - SukiSU branch to clone (default: builtin)
+#   SUKISU_REF - optional exact 40-character SukiSU commit SHA
+#   KSUN_TAG_PIN, SKSU_TAG_PIN, SUSFS_COMMIT_PIN - if set, checkout
 #   that exact ref instead of floating branch HEAD. Pins may be tags, branches,
-#   or 40-character commit SHAs. Used only by check-updates.yml's verify gate
-#   to test a specific candidate before it is committed to source-pins.json.
-#   Normal builds never set these, so day-to-day behavior is unchanged.
+#   or 40-character commit SHAs. SUKISU_* overrides take precedence for SukiSU.
+#   Used only by check-updates.yml's verify gate to test a specific candidate
+#   before it is committed to source-pins.json.
 set -e
 
 : "${KSU_TYPE:?}"
@@ -406,18 +410,28 @@ if [ "$KSU_TYPE" = "ksun" ]; then
 elif [ "$KSU_TYPE" = "sksu" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Ultra
 
-  _sksu_ref="${SKSU_TAG_PIN:-builtin}"
-  if _is_sha "$_sksu_ref"; then
-    _sksu_ref="builtin"
+  _sukisu_repo="${SUKISU_REPO_URL:-https://git.zako.shirkneko.top:20004/shirkneko/SukiSU}"
+  _sukisu_branch="${SUKISU_BRANCH:-builtin}"
+  _sukisu_ref=""
+  if [ -n "${SUKISU_REF:-}" ]; then
+    _is_sha "$SUKISU_REF" || { echo "[ERROR] SUKISU_REF must be a 40-character commit SHA"; exit 1; }
+    _sukisu_ref="$SUKISU_REF"
+  elif [ -n "${SKSU_TAG_PIN:-}" ]; then
+    if _is_sha "$SKSU_TAG_PIN"; then
+      _sukisu_ref="$SKSU_TAG_PIN"
+    elif [ -z "${SUKISU_BRANCH:-}" ]; then
+      _sukisu_branch="$SKSU_TAG_PIN"
+    fi
   fi
-  git clone --depth=1 --branch "$_sksu_ref" \
-    https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
+  echo "[SUKISU] repo=$_sukisu_repo branch=$_sukisu_branch ref=${_sukisu_ref:-none}"
+  git clone --depth=1 --branch "$_sukisu_branch" \
+    "$_sukisu_repo" SukiSU-Ultra
   [ -d "SukiSU-Ultra" ] || { echo "[ERROR] SukiSU-Ultra not found"; exit 1; }
 
   cd SukiSU-Ultra
   git fetch --tags 2>/dev/null || true
-  if _is_sha "${SKSU_TAG_PIN:-}"; then
-    _checkout_pin "." "${SKSU_TAG_PIN}" "SukiSU-Ultra"
+  if [ -n "$_sukisu_ref" ]; then
+    _checkout_pin "." "$_sukisu_ref" "SukiSU Nova"
   fi
   SKSU_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null | tr -d '[:space:]')
   SKSU_TAG=${SKSU_TAG:-$(git describe --tags --abbrev=0 HEAD 2>/dev/null | tr -d '[:space:]')}

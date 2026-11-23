@@ -14,6 +14,9 @@ on:
       use_ccache:    { type: boolean, default: false }
       ksun_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
       sksu_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
+      sukisu_repo_url: { type: string, required: false, default: "https://git.zako.shirkneko.top:20004/shirkneko/SukiSU" }
+      sukisu_branch: { type: string, required: false, default: "builtin" }
+      sukisu_ref: { type: string, required: false, default: "" }
       susfs_commit_pin: { type: string, required: false, default: "" }  # verify-gate only
 
 env:
@@ -117,6 +120,9 @@ jobs:
           work_dir:     ${{ env.WORK_DIR }}
           ksun_tag_pin: ${{ inputs.ksun_tag_pin }}
           sksu_tag_pin: ${{ inputs.sksu_tag_pin }}
+          sukisu_repo_url: ${{ inputs.sukisu_repo_url }}
+          sukisu_branch: ${{ inputs.sukisu_branch }}
+          sukisu_ref: ${{ inputs.sukisu_ref }}
           susfs_commit_pin: ${{ inputs.susfs_commit_pin }}
 
       - name: "Droidspaces"

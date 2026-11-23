@@ -16,6 +16,18 @@ inputs:
     description: "Optional exact SukiSU-Ultra tag or commit SHA to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
     required: false
     default: ""
+  sukisu_repo_url:
+    description: "SukiSU repository URL"
+    required: false
+    default: "https://git.zako.shirkneko.top:20004/shirkneko/SukiSU"
+  sukisu_branch:
+    description: "SukiSU branch to clone"
+    required: false
+    default: "builtin"
+  sukisu_ref:
+    description: "Optional exact SukiSU commit SHA"
+    required: false
+    default: ""
   susfs_commit_pin:
     description: "Optional exact SUSFS commit SHA to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
     required: false
@@ -31,5 +43,8 @@ runs:
         WORK_DIR:     ${{ inputs.work_dir }}
         KSUN_TAG_PIN: ${{ inputs.ksun_tag_pin }}
         SKSU_TAG_PIN: ${{ inputs.sksu_tag_pin }}
+        SUKISU_REPO_URL: ${{ inputs.sukisu_repo_url }}
+        SUKISU_BRANCH: ${{ inputs.sukisu_branch }}
+        SUKISU_REF: ${{ inputs.sukisu_ref }}
         SUSFS_COMMIT_PIN: ${{ inputs.susfs_commit_pin }}
       run: bash ${{ github.workspace }}/scripts/setup-ksu.sh

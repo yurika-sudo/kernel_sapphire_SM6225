@@ -86,7 +86,7 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 
 ## Upstream Update Tracking
 
-The source update check tracks the HEAD commit of the branches the build actually uses: `dev-susfs` for KernelSU-Next, `builtin` for SukiSU-Ultra, and `gki-android13-5.15` for SUSFS. Tag names are informational only, because SukiSU-Ultra is not release-tagged.
+The source update check tracks the HEAD commit of the branches the build actually uses: `dev-susfs` for KernelSU-Next, `builtin` for SukiSU Nova, and `gki-android13-5.15` for SUSFS. SukiSU Nova now lives on the Forgejo instance as `shirkneko/SukiSU`; the old GitHub repository redirects to `SukiSU-Nova/SukiSU-Nova`. The SukiSU repository, branch, and exact ref can be overridden per build, while tag names remain informational.
 
 ---
 
