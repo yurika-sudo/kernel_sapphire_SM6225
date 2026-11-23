@@ -1,0 +1,16 @@
+diff --git a/mm/compaction.c b/mm/compaction.c
+index 6f9d25d90..b5893a907 100644
+--- a/mm/compaction.c
++++ b/mm/compaction.c
+@@ -1108,8 +1108,10 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
+ 			/* Try get exclusive access under lock */
+ 			if (!skip_updated) {
+ 				skip_updated = true;
+-				if (test_and_set_skip(cc, page, low_pfn))
++				if (test_and_set_skip(cc, page, low_pfn)) {
++					low_pfn = end_pfn;
+ 					goto isolate_abort;
++				}
+ 			}
+ 
+ 			/*
