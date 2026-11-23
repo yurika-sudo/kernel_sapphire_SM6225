@@ -1,0 +1,26 @@
+#!/bin/sh
+
+# Skip merge, squash, fixup, and amend-by-template messages.
+case "${2:-}" in
+    merge|squash|template|commit)
+        exit 0
+        ;;
+esac
+
+[ "$#" -ge 1 ] || exit 0
+message_file=$1
+[ -f "$message_file" ] || exit 0
+
+case "$(sed -n '1p' "$message_file")" in
+    fixup\!*|squash\!*)
+        exit 0
+        ;;
+esac
+
+grep -q '^Assisted-by:' "$message_file" && exit 0
+
+if [ -s "$message_file" ] && [ -z "$(tail -c 1 "$message_file")" ]; then
+    printf '\nAssisted-by: %s\n' "${AI_ASSISTED_BY:-Claude <claude-opus-5-5>}" >> "$message_file"
+else
+    printf '\n\nAssisted-by: %s\n' "${AI_ASSISTED_BY:-Claude <claude-opus-5-5>}" >> "$message_file"
+fi
