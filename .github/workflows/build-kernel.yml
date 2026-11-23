@@ -14,6 +14,7 @@ on:
       use_ccache:    { type: boolean, default: false }
       ksun_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
       sksu_tag_pin:  { type: string, required: false, default: "" }  # verify-gate only
+      susfs_commit_pin: { type: string, required: false, default: "" }  # verify-gate only
 
 env:
   OUT_DIR: "out"
@@ -116,6 +117,7 @@ jobs:
           work_dir:     ${{ env.WORK_DIR }}
           ksun_tag_pin: ${{ inputs.ksun_tag_pin }}
           sksu_tag_pin: ${{ inputs.sksu_tag_pin }}
+          susfs_commit_pin: ${{ inputs.susfs_commit_pin }}
 
       - name: "Droidspaces"
         if: inputs.source_type != 'kernel-org'
@@ -248,7 +250,7 @@ jobs:
           [ -f "${{ env.KERNEL_SRC }}/out/dist/kernel_uname.txt" ] && \
             cp "${{ env.KERNEL_SRC }}/out/dist/kernel_uname.txt" "$STAGE/"
           for f in ksun_tag.txt ksun_sha.txt ksun_version.txt \
-                   sksu_tag.txt sksu_sha.txt sksu_version.txt; do
+                   sksu_tag.txt sksu_sha.txt sksu_version.txt susfs_commit.txt; do
             [ -f "${{ env.WORK_DIR }}/$f" ] && \
               cp "${{ env.WORK_DIR }}/$f" "$STAGE/" || true
           done

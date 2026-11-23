@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# setup-ksu.sh — integrate KSU variant + SUSFS into kernel source
+# setup-ksu.sh - integrate KSU variant + SUSFS into kernel source
 # env: KSU_TYPE (ksun|sksu|none), KERNEL_DIR, WORK_DIR
-# optional env: KSUN_TAG_PIN, SKSU_TAG_PIN — if set, checkout that exact tag
-#   instead of floating branch HEAD. Used only by check-updates.yml's verify
-#   gate to test a specific candidate tag before it's committed to
-#   source-pins.json. Normal builds never set these, so day-to-day behavior
-#   (float + record detected tag) is unchanged.
+# optional env: KSUN_TAG_PIN, SKSU_TAG_PIN, SUSFS_COMMIT_PIN - if set, checkout
+#   that exact ref instead of floating branch HEAD. Pins may be tags, branches,
+#   or 40-character commit SHAs. Used only by check-updates.yml's verify gate
+#   to test a specific candidate before it is committed to source-pins.json.
+#   Normal builds never set these, so day-to-day behavior is unchanged.
 set -e
 
 : "${KSU_TYPE:?}"
@@ -251,16 +251,37 @@ print("[OK] exec.c: stripped exec.c SUSFS hooks")
 PYEOF
 }
 
+# Return success for a full 40-character hexadecimal commit SHA.
+_is_sha() {
+  [[ "$1" =~ ^[0-9a-fA-F]{40}$ ]]
+}
+
 # Checkout an exact tag/ref in the given dir if a pin override was supplied.
-# Hard-fails (not falls back) — this path is only used by the verify gate,
+# Hard-fails (not falls back) - this path is only used by the verify gate,
 # so a bad pin should surface loudly rather than silently building HEAD.
 _checkout_pin() {
   local DIR="$1" PIN="$2" LABEL="$3"
   [ -z "$PIN" ] && return 0
   echo "[PIN] ${LABEL}: checking out ${PIN} (override)"
+  if _is_sha "$PIN"; then
+    git -C "$DIR" fetch --depth=1 origin "$PIN" 2>/dev/null || true
+  fi
   git -C "$DIR" checkout -q "$PIN" || {
     echo "[ERROR] ${LABEL}: failed to checkout pinned ref '${PIN}'"; exit 1;
   }
+}
+
+# Clone the SUSFS branch used by the build, optionally at an exact commit.
+_clone_susfs() {
+  git clone --depth=1 -b gki-android13-5.15 \
+    https://gitlab.com/simonpunk/susfs4ksu.git susfs4ksu
+  if _is_sha "${SUSFS_COMMIT_PIN:-}"; then
+    _checkout_pin "susfs4ksu" "$SUSFS_COMMIT_PIN" "SUSFS"
+  fi
+  SUSFS_COMMIT=$(git -C susfs4ksu rev-parse HEAD 2>/dev/null || echo "unknown")
+  echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
+  echo "$SUSFS_COMMIT" > "$WORK_DIR/susfs_commit.txt"
+  echo "[OK] SUSFS commit: $SUSFS_COMMIT"
 }
 
 _pin_lvc_after() {
@@ -358,11 +379,8 @@ if [ "$KSU_TYPE" = "ksun" ]; then
   echo "${_ksun_ver:-}" > "$WORK_DIR/ksun_version.txt"
   cd ..
 
-  # SUSFS — simonpunk main branch (compatible with KSU-Next)
-  git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-  SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
-  echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
-  echo "[OK] SUSFS commit: $SUSFS_COMMIT"
+  # SUSFS - simonpunk gki-android13-5.15 branch (compatible with KSU-Next)
+  _clone_susfs
 
   SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
   [ -f "$SUSFS_PATCH" ] && patch -p1 --forward --batch --fuzz=3 < "$SUSFS_PATCH" || true
@@ -388,12 +406,19 @@ if [ "$KSU_TYPE" = "ksun" ]; then
 elif [ "$KSU_TYPE" = "sksu" ]; then
   rm -rf ./KernelSU ./drivers/kernelsu ./SukiSU-Ultra
 
-  git clone --depth=1 --branch "${SKSU_TAG_PIN:-builtin}" \
+  _sksu_ref="${SKSU_TAG_PIN:-builtin}"
+  if _is_sha "$_sksu_ref"; then
+    _sksu_ref="builtin"
+  fi
+  git clone --depth=1 --branch "$_sksu_ref" \
     https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
   [ -d "SukiSU-Ultra" ] || { echo "[ERROR] SukiSU-Ultra not found"; exit 1; }
 
   cd SukiSU-Ultra
   git fetch --tags 2>/dev/null || true
+  if _is_sha "${SKSU_TAG_PIN:-}"; then
+    _checkout_pin "." "${SKSU_TAG_PIN}" "SukiSU-Ultra"
+  fi
   SKSU_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null | tr -d '[:space:]')
   SKSU_TAG=${SKSU_TAG:-$(git describe --tags --abbrev=0 HEAD 2>/dev/null | tr -d '[:space:]')}
   _sksu_short=$(git rev-parse --short=8 HEAD 2>/dev/null || echo "")
@@ -417,10 +442,7 @@ elif [ "$KSU_TYPE" = "sksu" ]; then
   echo "${_sksu_ver:-41179}" > "$WORK_DIR/sksu_version.txt"
   cd ..
   # Apply SUSFS to kernel tree; SukiSU builtin branch has native SUSFS support
-  git clone --depth=1 -b gki-android13-5.15 https://gitlab.com/simonpunk/susfs4ksu.git
-  SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD 2>/dev/null || echo "unknown")
-  echo "SUSFS_COMMIT=$SUSFS_COMMIT" >> "${GITHUB_ENV:-/dev/null}"
-  echo "[OK] SUSFS commit: $SUSFS_COMMIT"
+  _clone_susfs
   SUSFS_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
   [ -f "$SUSFS_PATCH" ] && patch -p1 --forward --batch --fuzz=3 < "$SUSFS_PATCH" || true
   _patch_namespace_gki_hunk1

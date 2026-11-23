@@ -9,11 +9,15 @@ inputs:
   work_dir:
     required: true
   ksun_tag_pin:
-    description: "Optional exact KSU-Next tag to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
+    description: "Optional exact KSU-Next tag or commit SHA to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
     required: false
     default: ""
   sksu_tag_pin:
-    description: "Optional exact SukiSU-Ultra tag to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
+    description: "Optional exact SukiSU-Ultra tag or commit SHA to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
+    required: false
+    default: ""
+  susfs_commit_pin:
+    description: "Optional exact SUSFS commit SHA to checkout instead of floating HEAD (used by check-updates.yml verify gate)"
     required: false
     default: ""
 
@@ -27,4 +31,5 @@ runs:
         WORK_DIR:     ${{ inputs.work_dir }}
         KSUN_TAG_PIN: ${{ inputs.ksun_tag_pin }}
         SKSU_TAG_PIN: ${{ inputs.sksu_tag_pin }}
+        SUSFS_COMMIT_PIN: ${{ inputs.susfs_commit_pin }}
       run: bash ${{ github.workspace }}/scripts/setup-ksu.sh

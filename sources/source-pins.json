@@ -1,6 +1,9 @@
 {
   "gki_sublevel": "v5.15.223",
   "ksun_tag": "v3.4.2",
+  "ksun_commit": "38b873ca8526328bc0221ac1e8340bb27768d998",
   "sksu_tag": "builtin",
-  "susfs_tag": "v1.5.2+_R28"
+  "sksu_commit": "4bec532dd447e2852aa8932afa768255350c103a",
+  "susfs_tag": "v1.5.2+_R28",
+  "susfs_commit": "c1d1da42b74771944207ec45aaceff9c57e84985"
 }

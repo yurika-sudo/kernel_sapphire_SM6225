@@ -20,9 +20,13 @@ jobs:
       ksun_tag:      ${{ steps.versions.outputs.ksun_tag }}
       sksu_tag:      ${{ steps.versions.outputs.sksu_tag }}
       susfs_tag:     ${{ steps.versions.outputs.susfs_tag }}
+      ksun_commit:   ${{ steps.versions.outputs.ksun_commit }}
+      sksu_commit:   ${{ steps.versions.outputs.sksu_commit }}
+      susfs_commit:  ${{ steps.versions.outputs.susfs_commit }}
       gki_sub:       ${{ steps.versions.outputs.gki_sub }}
       ksun_changed:  ${{ steps.versions.outputs.ksun_changed }}
       sksu_changed:  ${{ steps.versions.outputs.sksu_changed }}
+      susfs_changed: ${{ steps.versions.outputs.susfs_changed }}
       update_detail: ${{ steps.versions.outputs.update_detail }}
       check_failed:  ${{ steps.versions.outputs.check_failed }}
 
@@ -35,7 +39,7 @@ jobs:
         id: versions
         run: bash scripts/check-sources.sh
 
-  # Build-gate: only runs when its tag actually moved. Uses GKI-KSU-Next/GKI-SukiSU-Ultra
+  # Build-gate: only runs when its commit actually moved. Uses GKI-KSU-Next/GKI-SukiSU-Ultra
   # as the cheapest representative variant — goal is "does this candidate
   # compile", not a full 6-way matrix. build_type: stable so testing/ patches
   # don't add noise to the signal.
@@ -52,7 +56,8 @@ jobs:
       artifact_name: verify-ksun
       defconfig:     gki_defconfig
       build_type:    stable
-      ksun_tag_pin:  ${{ needs.check.outputs.ksun_tag }}
+      ksun_tag_pin:  ${{ needs.check.outputs.ksun_commit }}
+      susfs_commit_pin: ${{ needs.check.outputs.susfs_commit }}
     secrets: inherit
 
   verify-sksu:
@@ -68,7 +73,8 @@ jobs:
       artifact_name: verify-sksu
       defconfig:     gki_defconfig
       build_type:    stable
-      sksu_tag_pin:  ${{ needs.check.outputs.sksu_tag }}
+      sksu_tag_pin:  ${{ needs.check.outputs.sksu_commit }}
+      susfs_commit_pin: ${{ needs.check.outputs.susfs_commit }}
     secrets: inherit
 
   apply-pins:
@@ -86,47 +92,65 @@ jobs:
       - name: "Write source-pins.json (skip fields whose gate failed)"
         id: apply
         env:
-          NEW_KSUN:  ${{ needs.check.outputs.ksun_tag }}
-          NEW_SKSU:  ${{ needs.check.outputs.sksu_tag }}
-          NEW_SUSFS: ${{ needs.check.outputs.susfs_tag }}
-          NEW_GKI:   ${{ needs.check.outputs.gki_sub }}
-          KSUN_GATE: ${{ needs.verify-ksun.result }}
-          SKSU_GATE: ${{ needs.verify-sksu.result }}
+          NEW_KSUN_TAG:    ${{ needs.check.outputs.ksun_tag }}
+          NEW_SKSU_TAG:    ${{ needs.check.outputs.sksu_tag }}
+          NEW_SUSFS_TAG:   ${{ needs.check.outputs.susfs_tag }}
+          NEW_KSUN_COMMIT: ${{ needs.check.outputs.ksun_commit }}
+          NEW_SKSU_COMMIT: ${{ needs.check.outputs.sksu_commit }}
+          NEW_SUSFS_COMMIT: ${{ needs.check.outputs.susfs_commit }}
+          NEW_GKI:         ${{ needs.check.outputs.gki_sub }}
+          KSUN_GATE:       ${{ needs.verify-ksun.result }}
+          SKSU_GATE:       ${{ needs.verify-sksu.result }}
         run: |
-          OLD_KSUN=$(jq -r .ksun_tag sources/source-pins.json)
-          OLD_SKSU=$(jq -r .sksu_tag sources/source-pins.json)
+          OLD_KSUN_TAG=$(jq -r '.ksun_tag // ""' sources/source-pins.json)
+          OLD_SKSU_TAG=$(jq -r '.sksu_tag // ""' sources/source-pins.json)
+          OLD_KSUN_COMMIT=$(jq -r '.ksun_commit // ""' sources/source-pins.json)
+          OLD_SKSU_COMMIT=$(jq -r '.sksu_commit // ""' sources/source-pins.json)
 
           HELD_BACK=()
 
-          # "success" = gate ran and passed. "skipped" = tag didn't change
-          # this run, so new==old anyway — safe either way. Anything else
-          # (failure/cancelled) means the candidate broke the build — keep
-          # the last known-good tag instead of bumping to a broken one.
+          # "success" = gate ran and passed. "skipped" = commit did not change
+          # this run, so new==old anyway - safe either way. Anything else
+          # (failure/cancelled) means the candidate broke the build - keep
+          # the last known-good commit and tag instead of bumping to a broken one.
           if [ "$KSUN_GATE" = "success" ] || [ "$KSUN_GATE" = "skipped" ]; then
-            FINAL_KSUN="$NEW_KSUN"
+            FINAL_KSUN_COMMIT="$NEW_KSUN_COMMIT"
+            FINAL_KSUN_TAG="$NEW_KSUN_TAG"
           else
-            FINAL_KSUN="$OLD_KSUN"
-            HELD_BACK+=("KSU-Next: verify build failed, kept ${OLD_KSUN}")
+            FINAL_KSUN_COMMIT="$OLD_KSUN_COMMIT"
+            FINAL_KSUN_TAG="$OLD_KSUN_TAG"
+            HELD_BACK+=("KSU-Next: verify build failed, kept ${OLD_KSUN_COMMIT}")
           fi
 
           if [ "$SKSU_GATE" = "success" ] || [ "$SKSU_GATE" = "skipped" ]; then
-            FINAL_SKSU="$NEW_SKSU"
+            FINAL_SKSU_COMMIT="$NEW_SKSU_COMMIT"
+            FINAL_SKSU_TAG="$NEW_SKSU_TAG"
           else
-            FINAL_SKSU="$OLD_SKSU"
-            HELD_BACK+=("SukiSU-Ultra: verify build failed, kept ${OLD_SKSU}")
+            FINAL_SKSU_COMMIT="$OLD_SKSU_COMMIT"
+            FINAL_SKSU_TAG="$OLD_SKSU_TAG"
+            HELD_BACK+=("SukiSU-Ultra: verify build failed, kept ${OLD_SKSU_COMMIT}")
           fi
 
-          # susfs_tag / gki_sublevel stay ungated — always take the freshly-detected value.
+          # SUSFS and GKI stay ungated - take the freshly-detected values.
+          FINAL_SUSFS_COMMIT="$NEW_SUSFS_COMMIT"
+          FINAL_SUSFS_TAG="$NEW_SUSFS_TAG"
+
           jq -n \
             --arg gki   "$NEW_GKI" \
-            --arg ksun  "$FINAL_KSUN" \
-            --arg sksu  "$FINAL_SKSU" \
-            --arg susfs "$NEW_SUSFS" \
+            --arg ksun_tag "$FINAL_KSUN_TAG" \
+            --arg ksun_commit "$FINAL_KSUN_COMMIT" \
+            --arg sksu_tag "$FINAL_SKSU_TAG" \
+            --arg sksu_commit "$FINAL_SKSU_COMMIT" \
+            --arg susfs_tag "$FINAL_SUSFS_TAG" \
+            --arg susfs_commit "$FINAL_SUSFS_COMMIT" \
             '{
               gki_sublevel: $gki,
-              ksun_tag:     $ksun,
-              sksu_tag:     $sksu,
-              susfs_tag:    $susfs
+              ksun_tag:     $ksun_tag,
+              ksun_commit:  $ksun_commit,
+              sksu_tag:     $sksu_tag,
+              sksu_commit:  $sksu_commit,
+              susfs_tag:    $susfs_tag,
+              susfs_commit: $susfs_commit
             }' > sources/source-pins.json
 
           HELD_BACK_DETAIL=$(printf '%s\n' "${HELD_BACK[@]}")

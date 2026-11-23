@@ -84,6 +84,12 @@ Confirmed working on sapphire — see [community-supported devices](https://gith
 
 ---
 
+## Upstream Update Tracking
+
+The source update check tracks the HEAD commit of the branches the build actually uses: `dev-susfs` for KernelSU-Next, `builtin` for SukiSU-Ultra, and `gki-android13-5.15` for SUSFS. Tag names are informational only, because SukiSU-Ultra is not release-tagged.
+
+---
+
 ## Patch Inventory
 
 Local patch failures now fail the build (opt out with `APPLY_PATCHES_STRICT=0`).
