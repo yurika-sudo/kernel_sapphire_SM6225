@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # pack-module.sh — build a per-variant KSU/Magisk module zip carrying
-# zram.ko + zsmalloc.ko + runtime tweaks (NAP cpuidle, ADIOS I/O, Reflex
-# cpufreq), so the full seiran_core feature set reaches the device
+# zram.ko + zsmalloc.ko + runtime tweaks (ADIOS I/O, Vorpal cpufreq),
+# so the full seiran_core feature set reaches the device
 # (CONFIG_ZRAM=m means it never ships via the Image-only AnyKernel3 zip).
 #
 # env: SOURCE_TYPE (e.g. gki-ksun), WORK_DIR, TEMPLATE_DIR (defaults to

@@ -99,7 +99,6 @@ object Tune {
                 "if [ -d $CPUFREQ/policy4 ]; then echo vorpal > $CPUFREQ/policy4/scaling_governor; fi",
             ).exec()
         }
-        if ("teo" in s.cpuidle) Shell.cmd("echo teo > $CPUIDLE/current_governor").exec()
         if ("adios" in s.io) {
             Shell.cmd("for d in /sys/block/sd*/queue/scheduler; do echo adios > \$d; done").exec()
         }

@@ -55,7 +55,7 @@
 
 The kernel ZIP alone is not enough. `CONFIG_ZRAM=m` means `zram.ko`/`zsmalloc.ko` are loadable modules, not baked into the kernel image. Seiran Core is the KSU/Magisk module that loads them.
 
-**What it does:** loads `zram.ko` + `zsmalloc.ko` with multi-comp + zram-ir tiered recompression, then sets NAP as cpuidle governor, ADIOS as I/O scheduler, and Reflex as cpufreq governor — all at `post-fs-data`.
+**What it does:** loads `zram.ko` + `zsmalloc.ko` with multi-comp + zram-ir tiered recompression, then sets ADIOS as I/O scheduler and Vorpal as cpufreq governor at `post-fs-data`. The kernel command line selects the AEGIS cpuidle governor.
 
 **Download:**
 - **GitHub Release:** `seiran-core.zip` attached alongside the kernel ZIP.

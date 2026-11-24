@@ -22,7 +22,7 @@ chmod +x "$MODPATH/tools/inotifywait"
 
 cat /proc/version | grep -qE '^Linux version (5\.15|6\.12)\.' || abort "! This module only supports the sapphire 5.15 kernel."
 
-description="zram.ko+zsmalloc.ko (multi-comp+zram-ir) + NAP cpuidle + ADIOS + Vorpal · @COMMIT@"
+description="zram.ko+zsmalloc.ko (multi-comp+zram-ir) + ADIOS + Vorpal | @COMMIT@"
 unset description
 cp ${MODPATH}/module.prop ${MODPATH}/module.prop.orig
 
