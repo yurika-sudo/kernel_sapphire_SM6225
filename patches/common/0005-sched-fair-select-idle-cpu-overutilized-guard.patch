@@ -1,0 +1,14 @@
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index 4e5601ee116f..471cf7fea232 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -6923,6 +6923,9 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool
+ 	struct sched_domain *this_sd;
+ 	u64 time = 0;
+ 
++	if (READ_ONCE(this_rq()->rd->overutilized))
++		return -1;
++
+ 	this_sd = rcu_dereference(*this_cpu_ptr(&sd_llc));
+ 	if (!this_sd)
+ 		return -1;
