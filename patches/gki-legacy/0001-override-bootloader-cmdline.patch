@@ -2,7 +2,7 @@ diff --git a/drivers/of/fdt.c b/drivers/of/fdt.c
 index 8d9f6f0771cfa..1ed18c62cf8b2 100644
 --- a/drivers/of/fdt.c
 +++ b/drivers/of/fdt.c
-@@ -1159,6 +1159,60 @@ static const char *config_cmdline = CONFIG_CMDLINE;
+@@ -1159,6 +1159,61 @@ static const char *config_cmdline = CONFIG_CMDLINE;
  static const char *config_cmdline = "";
  #endif
  
@@ -20,6 +20,7 @@ index 8d9f6f0771cfa..1ed18c62cf8b2 100644
 +	"earlycon=",
 +	"msm_rtb.filter=",
 +	"disable_dma32=",
++	"lpm_levels.sleep_disabled=1",
 +	"ftrace_dump_on_oops",
 +	"silent_boot.mode=",
 +};
@@ -63,7 +64,7 @@ index 8d9f6f0771cfa..1ed18c62cf8b2 100644
  int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
  				     int depth, void *data)
  {
-@@ -1196,6 +1250,7 @@ int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
+@@ -1196,6 +1251,7 @@ int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
  			copy_len = min((int)l, copy_len);
  			strncpy(cmdline + cmdline_len, p, copy_len);
  			cmdline[cmdline_len + copy_len] = '\0';

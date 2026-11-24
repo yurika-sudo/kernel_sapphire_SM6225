@@ -15,7 +15,7 @@ sed -i 's/ cgroup_disable=pressure//'                    "$CF"
 sed -i 's/kvm-arm\.mode=protected/kvm-arm.mode=none/' "$CF"
 sed -i 's/CONFIG_CMDLINE="/&slub_debug=- page_owner=off noirqdebug mitigations=off /' "$CF"
 sed -i 's/kasan\.stacktrace=off/kasan=off/'               "$CF"
-sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 transparent_hugepage=madvise audit=0 rcu_nocbs=0-3 loglevel=3 silent_boot.mode=silent log_buf_len=2M cpuidle.governor=teo"/' "$CF"
+sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 transparent_hugepage=madvise audit=0 rcu_nocbs=0-3 loglevel=3 silent_boot.mode=silent log_buf_len=2M cpuidle.governor=aegis"/' "$CF"
 
 # Strip symbols already in base defconfig to avoid "reassigning" warnings
 for SYM in WLAN_VENDOR_ATH \
@@ -96,7 +96,7 @@ CONFIG_CPU_FREQ_GOV_REFLEX=y
 CONFIG_CPU_FREQ_GOV_VORPAL=y
 CONFIG_NOMOUNT=y
 CONFIG_CPU_IDLE_GOV_NAP=y
-# AEGIS is available via the cpuidle.governor=aegis command line option; the default governor stays teo
+# AEGIS is selected via the cpuidle.governor=aegis command line option
 CONFIG_CPU_IDLE_GOV_AEGIS=y
 CONFIG_UPROBES=y
 CONFIG_UPROBE_EVENTS=y
