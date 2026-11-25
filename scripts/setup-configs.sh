@@ -97,6 +97,7 @@ CONFIG_CPU_FREQ_GOV_VORPAL=y
 CONFIG_NOMOUNT=y
 CONFIG_CPU_IDLE_GOV_NAP=y
 # AEGIS is selected via the cpuidle.governor=aegis command line option
+# LPM stays enabled for deep cluster sleep (r17 AEGIS boot test passed)
 CONFIG_CPU_IDLE_GOV_AEGIS=y
 CONFIG_UPROBES=y
 CONFIG_UPROBE_EVENTS=y
