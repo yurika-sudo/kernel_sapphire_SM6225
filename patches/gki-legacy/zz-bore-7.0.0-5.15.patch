@@ -337,19 +337,19 @@ index 21acf51976d8..92bef4e384b7 100644
  	u64				deadline;
 @@ -1521,8 +1534,17 @@
  	ANDROID_KABI_RESERVE(1);
- 	ANDROID_KABI_RESERVE(2);
- 	ANDROID_KABI_RESERVE(3);
 +#ifdef CONFIG_SCHED_BORE
 +	/*
 +	 * BORE 7.0.0 sleep credit & reweight recursion guard in KABI slots
 +	 * so GKI KMI is preserved.
 +	 */
-+	ANDROID_KABI_USE(4, u64 credit_sleep);
-+	ANDROID_KABI_USE(5, bool stop_bore_update);
++	ANDROID_KABI_USE(2, u64 credit_sleep);
++	ANDROID_KABI_USE(3, bool stop_bore_update);
 +#else /* !CONFIG_SCHED_BORE */
+ 	ANDROID_KABI_RESERVE(2);
+ 	ANDROID_KABI_RESERVE(3);
++#endif /* CONFIG_SCHED_BORE */
  	ANDROID_KABI_RESERVE(4);
  	ANDROID_KABI_RESERVE(5);
-+#endif /* CONFIG_SCHED_BORE */
  	ANDROID_KABI_RESERVE(6);
  	ANDROID_KABI_RESERVE(7);
  	ANDROID_KABI_RESERVE(8);
