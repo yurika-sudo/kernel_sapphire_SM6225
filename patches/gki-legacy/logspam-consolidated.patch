@@ -112,7 +112,7 @@ index fbd2455..fbe5881 100644
  		}
  	}
 diff --git a/kernel/printk/printk.c b/kernel/printk/printk.c
-index c731398..d8a29bd 100644
+index c731398..bc610e8 100644
 --- a/kernel/printk/printk.c
 +++ b/kernel/printk/printk.c
 @@ -31,6 +31,7 @@
@@ -123,7 +123,7 @@ index c731398..d8a29bd 100644
  #include <linux/security.h>
  #include <linux/memblock.h>
  #include <linux/syscalls.h>
-@@ -2136,6 +2137,41 @@ static u16 printk_sprint(char *text, u16 size, int facility,
+@@ -2136,6 +2137,56 @@ static u16 printk_sprint(char *text, u16 size, int facility,
  	return text_len;
  }
  
@@ -145,10 +145,25 @@ index c731398..d8a29bd 100644
 +	"QCOM-STEPCHG",
 +	"xm_charge_update_date",
 +	"monitor_low_fast_strategy",
-+	"QG-K: battery_soc",
++	"QG-K:",
 +	"xiaomi-fp fp_ioctl",
 +	"cdsp-loader soc:qcom",
 +	"mi_thermal_notifier",
++	"disagrees about version of symbol",
++	"KernelSU:",
++	"susfs:",
++	"st21nfc",
++	"pm7250b_charger",
++	"smb5_batt_get_prop",
++	"smblib_get_prop_",
++	"VBAT_BASED_RECHG_BIT",
++	"QG_WS: effective voting",
++	"ALG: cap_learning_update",
++	"[USBPD-PM]",
++	"xm_smart_chg",
++	"[ds28e30]",
++	"irq_count)-",
++	"IMlipayService",
 +};
 +
 +static bool is_logspam_msg(const char *msg)
@@ -165,18 +180,20 @@ index c731398..d8a29bd 100644
  __printf(4, 0)
  int vprintk_store(int facility, int level,
  		  const struct dev_printk_info *dev_info,
-@@ -2154,6 +2190,16 @@ int vprintk_store(int facility, int level,
+@@ -2154,6 +2205,18 @@ int vprintk_store(int facility, int level,
  	u16 text_len;
  	int ret = 0;
  	u64 ts_nsec;
++	u16 filter_len;
 +	char filter_buf[200];
 +	enum printk_info_flags filter_flags = 0;
 +	va_list args3;
 +
-+	/* Drop known vendor/charger/display/WLAN logspam before ringbuffer */
++	/* Drop known vendor/charger/display/WLAN/KSU/KMI logspam before ringbuffer */
 +	va_copy(args3, args);
-+	printk_sprint(filter_buf, sizeof(filter_buf), facility, &filter_flags, fmt, args3);
++	filter_len = printk_sprint(filter_buf, sizeof(filter_buf), facility, &filter_flags, fmt, args3);
 +	va_end(args3);
++	filter_buf[min_t(u16, filter_len, sizeof(filter_buf) - 1)] = '\0';
 +	if (is_logspam_msg(filter_buf))
 +		return 0;
  
