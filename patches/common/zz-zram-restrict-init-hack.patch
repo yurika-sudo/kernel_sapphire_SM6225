@@ -1,0 +1,45 @@
+zram: add a hack for restricting init from setting a different compression algorithm
+
+* So we can use OUR (not ROM's) default zram comp. algo, without it being
+  overriden after boot
+
+Rebased for the common patch set: applies AFTER 0001/0002/0003 zram patches
+and zstdn-zstdn-o-crypto-zram-5.15 (multi-comp comp_algorithm_store and
+ZSTDN_O Kconfig entries).
+
+Ported from chickendrop89/device_xiaomi_gemstones-kernel 53b7d0bc73ac.
+---
+diff --git a/drivers/block/zram/Kconfig b/drivers/block/zram/Kconfig
+--- a/drivers/block/zram/Kconfig
++++ b/drivers/block/zram/Kconfig
+@@ -52,6 +52,14 @@
+ 	bool "zstdn_o"
+ 	depends on CRYPTO_ZSTDN
+ 
++config ZRAM_COMP_RESTRICT_INIT
++	bool "Restrict init from setting a compression algorithm"
++	depends on ZRAM
++	help
++	  This is a hack for restricting init from setting a ZRAM compression
++	  algorithm, so the kernel-default algorithm is not overriden after
++	  boot completes.
++
+ endchoice
+ 
+ config ZRAM_DEF_COMP
+diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
+--- a/drivers/block/zram/zram_drv.c
++++ b/drivers/block/zram/zram_drv.c
+@@ -1127,6 +1127,12 @@
+ 	struct zram *zram = dev_to_zram(dev);
+ 	char *compressor;
+ 	size_t sz;
++
++#ifdef CONFIG_ZRAM_COMP_RESTRICT_INIT
++	if (!strncmp(current->comm, "init", sizeof("init")) ||
++	    !strncmp(current->comm, "init.qcom.post_", sizeof("init.qcom.post_")))
++		return len;
++#endif
+ 
+ 	sz = strlen(buf);
+ 	if (sz >= CRYPTO_MAX_ALG_NAME)
