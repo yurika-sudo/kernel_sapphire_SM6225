@@ -624,7 +624,7 @@ index ddb8605b66a7..645b1e3d2972 100644
  }
  EXPORT_SYMBOL_GPL(set_next_entity);
  
-@@ -4775,66 +5019,155 @@
+@@ -4775,67 +5019,156 @@
 -static int
 -wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se);
 -
