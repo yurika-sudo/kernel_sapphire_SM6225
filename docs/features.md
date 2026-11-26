@@ -3,7 +3,7 @@
 ## Core Features
 
 **Scheduler**
-- [BORE](https://github.com/firelzrd/bore-scheduler) — burst-oriented CFS latency tuning
+- [BORE 7.0.0](https://github.com/firelzrd/bore-scheduler) — burst-oriented response enhancer with sleep credit, slice protection, and live-penalty inheritance (GKI KABI-safe)
 - CASS — Capacity Aware Superset Scheduler
 - prefer_silver — silver-cluster affinity layer on top of CASS
 - [NAP](https://github.com/firelzrd/nap) — cpuidle governor (fixedpoint steambot12)

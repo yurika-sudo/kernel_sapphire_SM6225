@@ -2,12 +2,13 @@ diff --git a/include/linux/sched.h b/include/linux/sched.h
 index 9869123aa..e95e874d4 100644
 --- a/include/linux/sched.h
 +++ b/include/linux/sched.h
-@@ -582,6 +582,12 @@ struct sched_entity {
+@@ -568,7 +568,13 @@ struct sched_entity {
+ 	ANDROID_KABI_RESERVE(1);
+ 	ANDROID_KABI_RESERVE(2);
  	ANDROID_KABI_RESERVE(3);
  	ANDROID_KABI_RESERVE(4);
- #endif // CONFIG_SCHED_BORE
 +
-+	/* EEVDF fields — appended at end to preserve KMI */
++	/* EEVDF fields - appended at end to preserve KMI */
 +	u64				deadline;
 +	u64				min_deadline;
 +	s64				vlag;
@@ -19,10 +20,9 @@ diff --git a/kernel/sched/core.c b/kernel/sched/core.c
 index fefa631ce..b21e4f7ce 100644
 --- a/kernel/sched/core.c
 +++ b/kernel/sched/core.c
-@@ -4495,6 +4495,10 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
- #ifdef CONFIG_SCHED_BORE
- 	sched_fork_bore(p);
- #endif // CONFIG_SCHED_BORE
+@@ -4341,5 +4341,9 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
+ 	p->se.nr_migrations		= 0;
+ 	p->se.vruntime			= 0;
 +	p->se.vlag			= 0;
 +	p->se.slice			= sysctl_sched_min_granularity;
 +	p->se.deadline			= 0;
@@ -270,7 +270,7 @@ index 3332fc172..b172da4f1 100644
  }
  
  struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq)
-@@ -674,16 +858,6 @@ struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq)
+@@ -674,16 +858,6 @@ struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq
  	return __node_2_se(left);
  }
  
@@ -340,7 +340,7 @@ index 3332fc172..b172da4f1 100644
   * Update the current task's runtime statistics.
   */
 @@ -932,6 +1124,9 @@ static void update_curr(struct cfs_rq *cfs_rq)
- #endif // CONFIG_SCHED_BORE
+ 	curr->vruntime += calc_delta_fair(delta_exec, curr);
  	update_min_vruntime(cfs_rq);
  
 +	update_deadline(cfs_rq, curr);
@@ -628,9 +628,10 @@ index 3332fc172..b172da4f1 100644
  }
  EXPORT_SYMBOL_GPL(set_next_entity);
  
-@@ -4803,66 +5051,158 @@ static int
- wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se);
- 
+@@ -4803,66 +5051,155 @@
+-static int
+-wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se);
+-
  /*
 - * Pick the next process, keeping these things in mind, in this order:
 - * 1) keep things fair between processes/task groups
@@ -891,7 +892,7 @@ index 3332fc172..b172da4f1 100644
  static void set_last_buddy(struct sched_entity *se)
  {
  	for_each_sched_entity(se) {
-@@ -7649,12 +7941,6 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
+@@ -7649,12 +7941,6 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake
  	/*
  	 * We can come here with TIF_NEED_RESCHED already set from new task
  	 * wake up path.
@@ -904,7 +905,7 @@ index 3332fc172..b172da4f1 100644
  	 */
  	if (test_tsk_need_resched(curr))
  		return;
-@@ -7693,12 +7979,43 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
+@@ -7693,12 +7979,43 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake
  		goto preempt;
  	if (ignore)
  		return;
@@ -953,15 +954,13 @@ index 3332fc172..b172da4f1 100644
  		if (!next_buddy_marked)
  			set_next_buddy(pse);
  		goto preempt;
-@@ -11962,6 +12279,8 @@ static void task_fork_fair(struct task_struct *p)
+@@ -11962,4 +12279,6 @@ static void task_fork_fair(struct task_struct *p)
  		update_curr(cfs_rq);
  		se->vruntime = curr->vruntime;
  	}
 +	/* EEVDF: new task starts with zero lag. */
 +	se->vlag = 0;
- #ifdef CONFIG_SCHED_BORE
- 	update_burst_score(se);
- #endif // CONFIG_SCHED_BORE
+ 	place_entity(cfs_rq, se, 1);
 @@ -11973,10 +12292,12 @@ static void task_fork_fair(struct task_struct *p)
  		 * 'current' within the tree based on its new key value.
  		 */

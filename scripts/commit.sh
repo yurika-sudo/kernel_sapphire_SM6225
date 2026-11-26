@@ -15,14 +15,8 @@ case "$subject" in
     *) printf 'error: subject must not be empty\n' >&2; exit 2 ;;
 esac
 
-ai_name=${AI_AUTHOR_NAME:-Claude}
-ai_email=${AI_AUTHOR_EMAIL:-noreply@anthropic.com}
-if [ -n "${GIT_AUTHOR_NAME:-}" ]; then
-    ai_name=$GIT_AUTHOR_NAME
-fi
-if [ -n "${GIT_AUTHOR_EMAIL:-}" ]; then
-    ai_email=$GIT_AUTHOR_EMAIL
-fi
+ai_name=${GIT_AUTHOR_NAME:-${AI_AUTHOR_NAME:-Claude}}
+ai_email=${GIT_AUTHOR_EMAIL:-${AI_AUTHOR_EMAIL:-noreply@anthropic.com}}
 committer_name=yurika-sudo
 committer_email=yurika0uu@gmail.com
 author="$ai_name <$ai_email>"
