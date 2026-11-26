@@ -2,16 +2,19 @@ diff --git a/kernel/time/timer.c b/kernel/time/timer.c
 index f308726cb53ca..3a9e89626f748 100644
 --- a/kernel/time/timer.c
 +++ b/kernel/time/timer.c
-@@ -228,7 +228,7 @@ static void timer_update_keys(struct work_struct *work);
+@@ -229,17 +229,29 @@ static void timer_update_keys(struct work_struct *work);
  static DECLARE_WORK(timer_update_work, timer_update_keys);
  
  #ifdef CONFIG_SMP
--unsigned int sysctl_timer_migration = 1;
-+unsigned int sysctl_timer_migration = 0;
+-static unsigned int sysctl_timer_migration = 1;
++static unsigned int sysctl_timer_migration = 0;
  
  DEFINE_STATIC_KEY_FALSE(timers_migration_enabled);
  
-@@ -239,6 +239,18 @@ static void timers_update_migration(void)
+ static void timers_update_migration(void)
+ {
+ 	if (sysctl_timer_migration && tick_nohz_active)
+ 		static_branch_enable(&timers_migration_enabled);
  	else
  		static_branch_disable(&timers_migration_enabled);
  }
@@ -27,6 +30,5 @@ index f308726cb53ca..3a9e89626f748 100644
 +	return 1;
 +}
 +__setup("timer_migration=", setup_timer_migration);
- #else
- static inline void timers_update_migration(void) { }
- #endif /* !CONFIG_SMP */
+ 
+ #ifdef CONFIG_SYSCTL
