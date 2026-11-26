@@ -170,7 +170,7 @@ index 9d982e52c..3f72482c0 100644
 +	int "Default value for vm.anon_min_ratio"
 +	depends on SYSCTL
 +	range 0 100
-+	default 15
++	default 10
 +	help
 +	  This option sets the default value for vm.anon_min_ratio sysctl knob.
 +
@@ -188,7 +188,7 @@ index 9d982e52c..3f72482c0 100644
 +	int "Default value for vm.clean_low_ratio"
 +	depends on SYSCTL
 +	range 0 100
-+	default 0
++	default 10
 +	help
 +	  This option sets the default value for vm.clean_low_ratio sysctl knob.
 +
@@ -210,7 +210,7 @@ index 9d982e52c..3f72482c0 100644
 +	int "Default value for vm.clean_min_ratio"
 +	depends on SYSCTL
 +	range 0 100
-+	default 15
++	default 5
 +	help
 +	  This option sets the default value for vm.clean_min_ratio sysctl knob.
 +

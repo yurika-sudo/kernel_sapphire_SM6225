@@ -1,5 +1,5 @@
 diff --git a/arch/arm64/kernel/cpuinfo.c b/arch/arm64/kernel/cpuinfo.c
-index 330b92ea863a..4ef859ab8f17 100644
+index 330b92e..4ef859a 100644
 --- a/arch/arm64/kernel/cpuinfo.c
 +++ b/arch/arm64/kernel/cpuinfo.c
 @@ -345,7 +345,7 @@ static void cpuinfo_detect_icache_policy(struct cpuinfo_arm64 *info)
@@ -12,7 +12,7 @@ index 330b92ea863a..4ef859ab8f17 100644
  
  static void __cpuinfo_store_cpu_32bit(struct cpuinfo_32bit *info)
 diff --git a/arch/arm64/kernel/psci.c b/arch/arm64/kernel/psci.c
-index ab7f4c476104..74b8da57a094 100644
+index ab7f4c4..74b8da5 100644
 --- a/arch/arm64/kernel/psci.c
 +++ b/arch/arm64/kernel/psci.c
 @@ -95,7 +95,7 @@ static int cpu_psci_cpu_kill(unsigned int cpu)
@@ -25,10 +25,10 @@ index ab7f4c476104..74b8da57a094 100644
  			return 0;
  		}
 diff --git a/drivers/android/binder.c b/drivers/android/binder.c
-index 57b9ac23aedc..6788cdbcedeb 100644
+index 32e6b84..8b93919 100644
 --- a/drivers/android/binder.c
 +++ b/drivers/android/binder.c
-@@ -6094,7 +6094,7 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+@@ -5658,7 +5658,7 @@ err:
  		thread->looper_need_return = false;
  	wait_event_interruptible(binder_user_error_wait, binder_stop_on_user_error < 2);
  	if (ret && ret != -EINTR)
@@ -38,7 +38,7 @@ index 57b9ac23aedc..6788cdbcedeb 100644
  	trace_binder_ioctl_done(ret);
  	return ret;
 diff --git a/drivers/clocksource/arm_arch_timer.c b/drivers/clocksource/arm_arch_timer.c
-index 3e2d3015f3a1..0c2296f5fbec 100644
+index 652a647..163125b 100644
 --- a/drivers/clocksource/arm_arch_timer.c
 +++ b/drivers/clocksource/arm_arch_timer.c
 @@ -879,7 +879,7 @@ static void arch_counter_set_user_access(void)
@@ -51,7 +51,7 @@ index 3e2d3015f3a1..0c2296f5fbec 100644
  		cntkctl |= ARCH_TIMER_USR_VCT_ACCESS_EN;
  
 diff --git a/drivers/media/common/videobuf2/videobuf2-core.c b/drivers/media/common/videobuf2/videobuf2-core.c
-index b66e80e6924e..53c7c2bbbbaa 100644
+index 30c8497..8fbe60b 100644
 --- a/drivers/media/common/videobuf2/videobuf2-core.c
 +++ b/drivers/media/common/videobuf2/videobuf2-core.c
 @@ -31,7 +31,7 @@
@@ -64,7 +64,7 @@ index b66e80e6924e..53c7c2bbbbaa 100644
  
  #define dprintk(q, level, fmt, arg...)					\
 diff --git a/drivers/pwm/core.c b/drivers/pwm/core.c
-index 4527f09a5c50..2b71f474c174 100644
+index 4527f09..2b71f47 100644
 --- a/drivers/pwm/core.c
 +++ b/drivers/pwm/core.c
 @@ -1047,7 +1047,7 @@ void pwm_put(struct pwm_device *pwm)
@@ -77,10 +77,10 @@ index 4527f09a5c50..2b71f474c174 100644
  	}
  
 diff --git a/include/linux/kernel.h b/include/linux/kernel.h
-index d747a3a74767..8fbeaf434565 100644
+index 3e5a0f8..6b566c4 100644
 --- a/include/linux/kernel.h
 +++ b/include/linux/kernel.h
-@@ -358,6 +358,9 @@ do {									\
+@@ -363,6 +363,9 @@ do {									\
   * let gcc optimize the rest.
   */
  
@@ -90,7 +90,7 @@ index d747a3a74767..8fbeaf434565 100644
  #define trace_printk(fmt, ...)				\
  do {							\
  	char _______STR[] = __stringify((__VA_ARGS__));	\
-@@ -380,6 +383,7 @@ do {									\
+@@ -385,6 +388,7 @@ do {									\
  	else								\
  		__trace_printk(_THIS_IP_, fmt, ##args);			\
  } while (0)
@@ -99,7 +99,7 @@ index d747a3a74767..8fbeaf434565 100644
  extern __printf(2, 3)
  int __trace_bprintk(unsigned long ip, const char *fmt, ...);
 diff --git a/kernel/cpu.c b/kernel/cpu.c
-index b8083b7df702..ba7b0ee83106 100644
+index fbd2455..fbe5881 100644
 --- a/kernel/cpu.c
 +++ b/kernel/cpu.c
 @@ -1584,7 +1584,7 @@ int freeze_secondary_cpus(int primary)
@@ -111,8 +111,79 @@ index b8083b7df702..ba7b0ee83106 100644
  			break;
  		}
  	}
+diff --git a/kernel/printk/printk.c b/kernel/printk/printk.c
+index c731398..d8a29bd 100644
+--- a/kernel/printk/printk.c
++++ b/kernel/printk/printk.c
+@@ -31,6 +31,7 @@
+ #include <linux/moduleparam.h>
+ #include <linux/delay.h>
+ #include <linux/smp.h>
++#include <linux/string.h>
+ #include <linux/security.h>
+ #include <linux/memblock.h>
+ #include <linux/syscalls.h>
+@@ -2136,6 +2137,41 @@ static u16 printk_sprint(char *text, u16 size, int facility,
+ 	return text_len;
+ }
+ 
++
++static const char * const logspam_patterns[] = {
++	"[drm",
++	"mi_disp",
++	"android.hardware.nfc@1.2",
++	"monitor_smart_chg",
++	"wlan_hdd_send_connectivity_log_to_user",
++	"wlan_hdd_put_connectivity_logging_data",
++	"CMN_MLME",
++	"QCOM-BATT: pl_fv_vote_callback",
++	"pmb_charger: smblib_get_prop_batt_status",
++	"real_type=",
++	"BPF:[] Invalid name_offset",
++	"smb_batt_get_prop",
++	"FCC_MAIN: effective voting",
++	"QCOM-STEPCHG",
++	"xm_charge_update_date",
++	"monitor_low_fast_strategy",
++	"QG-K: battery_soc",
++	"xiaomi-fp fp_ioctl",
++	"cdsp-loader soc:qcom",
++	"mi_thermal_notifier",
++};
++
++static bool is_logspam_msg(const char *msg)
++{
++	size_t i;
++
++	for (i = 0; i < ARRAY_SIZE(logspam_patterns); i++) {
++		if (strstr(msg, logspam_patterns[i]) != NULL)
++			return true;
++	}
++	return false;
++}
++
+ __printf(4, 0)
+ int vprintk_store(int facility, int level,
+ 		  const struct dev_printk_info *dev_info,
+@@ -2154,6 +2190,16 @@ int vprintk_store(int facility, int level,
+ 	u16 text_len;
+ 	int ret = 0;
+ 	u64 ts_nsec;
++	char filter_buf[200];
++	enum printk_info_flags filter_flags = 0;
++	va_list args3;
++
++	/* Drop known vendor/charger/display/WLAN logspam before ringbuffer */
++	va_copy(args3, args);
++	printk_sprint(filter_buf, sizeof(filter_buf), facility, &filter_flags, fmt, args3);
++	va_end(args3);
++	if (is_logspam_msg(filter_buf))
++		return 0;
+ 
+ 	/*
+ 	 * Since the duration of printk() can vary depending on the message
 diff --git a/kernel/trace/Kconfig b/kernel/trace/Kconfig
-index 193ca0cf5d12..9d18d665f4ae 100644
+index 4265d12..f82d2a5 100644
 --- a/kernel/trace/Kconfig
 +++ b/kernel/trace/Kconfig
 @@ -125,6 +125,20 @@ config GENERIC_TRACER
@@ -137,7 +208,7 @@ index 193ca0cf5d12..9d18d665f4ae 100644
  # Minimum requirements an architecture has to meet for us to
  # be able to offer generic tracing facilities:
 diff --git a/lib/Kconfig.debug b/lib/Kconfig.debug
-index d6cc15236725..ab3e6f1d1179 100644
+index c12795f..948a859 100644
 --- a/lib/Kconfig.debug
 +++ b/lib/Kconfig.debug
 @@ -49,7 +49,7 @@ config STACKTRACE_BUILD_ID
@@ -166,7 +237,7 @@ index d6cc15236725..ab3e6f1d1179 100644
  	help
  	  If you say Y here the resulting kernel image will include
  	  debugging info resulting in a larger kernel image.
-@@ -606,6 +607,7 @@ endmenu
+@@ -604,6 +605,7 @@ endmenu
  
  config DEBUG_KERNEL
  	bool "Kernel debugging"
@@ -174,3 +245,18 @@ index d6cc15236725..ab3e6f1d1179 100644
  	help
  	  Say Y here if you are developing drivers or trying to debug and
  	  identify kernel problems.
+diff --git a/security/lsm_audit.c b/security/lsm_audit.c
+index 5a5016e..ced6f59 100644
+--- a/security/lsm_audit.c
++++ b/security/lsm_audit.c
+@@ -28,6 +28,10 @@
+ #include <linux/sctp.h>
+ #include <linux/lsm_audit.h>
+ #include <linux/security.h>
++#include <linux/module.h>
++
++static uint __read_mostly disable_audit_log = 1;
++module_param(disable_audit_log, uint, 0644);
+ 
+ /**
+  * ipv4_skb_to_auditdata : fill auditdata from skb
