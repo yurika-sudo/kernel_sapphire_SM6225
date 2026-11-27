@@ -43,11 +43,9 @@ apply_patch "$BASE/unicode_bypass_fix_6.1-.patch"                  "unicode_bypa
 apply_patch "$BASE/use_unlikely_wrap_cpufreq.patch"                "use_unlikely_wrap_cpufreq"
 
 # Patch roles:
-#   patches/common/     - the AIO set (kernel 5.15.225), used by SOURCE_TYPE=gki
-#   patches/gki-legacy/ - the GKI-Legacy set (kernel 5.15.123), used by SOURCE_TYPE=gki-legacy
+#   patches/common/     - the AIO set (kernel 5.15.226), used by SOURCE_TYPE=gki
 #   patches/<src>-only/ - patches that exist only for one source type
 # GKI-Legacy never touches patches/common: it has its own set, and the patches
-# that could not be ported are listed in patches/gki-legacy/PENDING.txt.
 echo "=== Applying local patches ==="
 PATCHES_DIR="$WORK_DIR/patches"
 
@@ -75,17 +73,7 @@ if [ "$SOURCE_TYPE" = "gki-compat" ]; then
   FALLBACK_DIR="$PATCHES_DIR/gki-compat-only"
 fi
 
-if [ "$SOURCE_TYPE" = "gki-legacy" ]; then
-  echo "=== Applying GKI-Legacy patch set (5.15.123) ==="
-  LEGACY_COUNT=0
-  for PATCH in "$PATCHES_DIR"/gki-legacy/*.patch; do
-    [ -f "$PATCH" ] || continue
-    NAME="$(basename "$PATCH" .patch)"
-    apply_local_patch "$PATCH" "$NAME"
-    LEGACY_COUNT=$((LEGACY_COUNT + 1))
-  done
-  echo "[OK] gki-legacy: processed $LEGACY_COUNT patches from patches/gki-legacy"
-elif [ -d "$PATCHES_DIR/common" ]; then
+if [ -d "$PATCHES_DIR/common" ]; then
   for PATCH in "$PATCHES_DIR/common"/*.patch; do
     [ -f "$PATCH" ] || continue
     NAME="$(basename "$PATCH" .patch)"
@@ -131,7 +119,7 @@ if [ -d "$PATCHES_DIR/${SOURCE_TYPE}-only" ]; then
 fi
 
 # Testing patches
-if [ "$BUILD_TYPE" = "testing" ] && [ "$SOURCE_TYPE" != "gki-legacy" ]; then
+if [ "$BUILD_TYPE" = "testing" ]; then
   echo "=== Applying testing patches ==="
   if [ -d "$PATCHES_DIR/testing" ]; then
     for PATCH in "$PATCHES_DIR/testing"/*.patch; do
