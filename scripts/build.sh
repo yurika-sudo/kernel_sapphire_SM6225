@@ -91,17 +91,18 @@ echo "[${SOURCE_TYPE^^}] Re-enforcing TCP_CONG=bbr3..."
   --set-str DEFAULT_TCP_CONG "bbr3" \
   -d DEFAULT_BBR \
   -e DEFAULT_BBR3
-echo "[${SOURCE_TYPE^^}] Enforcing ZRAM/ZSMALLOC built-in + zstdn_o default..."
+echo "[${SOURCE_TYPE^^}] Enforcing ZRAM/ZSMALLOC built-in + stock lzo-rle default (all backends available)..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -e ZRAM \
   -e ZSMALLOC \
-  -d ZRAM_DEF_COMP_LZORLE \
-  -d ZRAM_DEF_COMP_ZSTD \
-  -d ZRAM_DEF_COMP_LZ4 \
-  -d ZRAM_DEF_COMP_LZO \
-  -e ZRAM_DEF_COMP_ZSTDN_O \
-  -e CRYPTO_ZSTDN \
-  --set-str ZRAM_DEF_COMP "zstdn_o"
+  -e CRYPTO_LZO \
+  -e CRYPTO_LZ4 \
+  -e CRYPTO_LZ4HC \
+  -e CRYPTO_ZSTD \
+  -e CRYPTO_DEFLATE \
+  -e CRYPTO_842 \
+  -e ZRAM_DEF_COMP_LZORLE \
+  --set-str ZRAM_DEF_COMP "lzo-rle"
 echo "[${SOURCE_TYPE^^}] Forcing Net Scheduler to FQ..."
 ./scripts/config --file "${OUT_DIR}/dist/.config" \
   -e NET_SCH_FQ \
