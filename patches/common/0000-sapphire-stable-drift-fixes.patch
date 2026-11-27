@@ -1,0 +1,93 @@
+sapphire: fix stable-5.15.149+ device breakage (io-channels, dwc3, mi_thermald)
+
+Three fixes required for SM6225/sapphire on 5.15.149+:
+
+1. Revert "of: property: fix typo in io-channels" (6315697fc5bf):
+   creates fw_devlink supplier links for IIO channels that break
+   dwc3-msm-core and fuel gauge probe on this platform.
+
+2. Revert "usb: dwc3: Issue core soft reset before enabling run/stop"
+   (a0b5d22b0448): breaks USB tethering on this platform.
+
+3. Redirect mi_thermald hotplug requests: the vendor daemon disables
+   the two E-cores (cpu2/3) when battery < 5%; redirect to the
+   performance cores (cpu4/5) instead.
+
+Ported from chickendrop89/device_xiaomi_gemstones-kernel:
+  2b14b9396332 - Revert "of: property: fix typo in io-channels"
+  082c1c5974a0 - Revert "UPSTREAM: usb: dwc3: Issue core soft reset..."
+  3e85c4293b4d - drivers: base: cpu: redirect mi_thermald to disable 2 P-cores
+---
+diff --git a/drivers/of/property.c b/drivers/of/property.c
+--- a/drivers/of/property.c
++++ b/drivers/of/property.c
+@@ -1270,7 +1270,7 @@
+ DEFINE_SIMPLE_PROP(interconnects, "interconnects", "#interconnect-cells")
+ DEFINE_SIMPLE_PROP(iommus, "iommus", "#iommu-cells")
+ DEFINE_SIMPLE_PROP(mboxes, "mboxes", "#mbox-cells")
+-DEFINE_SIMPLE_PROP(io_channels, "io-channels", "#io-channel-cells")
++DEFINE_SIMPLE_PROP(io_channels, "io-channel", "#io-channel-cells")
+ DEFINE_SIMPLE_PROP(interrupt_parent, "interrupt-parent", NULL)
+ DEFINE_SIMPLE_PROP(dmas, "dmas", "#dma-cells")
+ DEFINE_SIMPLE_PROP(power_domains, "power-domains", "#power-domain-cells")
+diff --git a/drivers/usb/dwc3/gadget.c b/drivers/usb/dwc3/gadget.c
+--- a/drivers/usb/dwc3/gadget.c
++++ b/drivers/usb/dwc3/gadget.c
+@@ -2650,15 +2650,6 @@
+ 
+ static int dwc3_gadget_soft_connect(struct dwc3 *dwc)
+ {
+-	/*
+-	 * In the Synopsys DWC_usb31 1.90a programming guide section
+-	 * 4.1.9, it specifies that for a reconnect after a
+-	 * device-initiated disconnect requires a core soft reset
+-	 * (DCTL.CSftRst) before enabling the run/stop bit.
+-	 */
+-	dwc3_core_soft_reset(dwc);
+-
+-	dwc3_event_buffers_setup(dwc);
+ 	__dwc3_gadget_start(dwc);
+ 	return dwc3_gadget_run_stop(dwc, true);
+ }
+diff --git a/drivers/base/core.c b/drivers/base/core.c
+--- a/drivers/base/core.c
++++ b/drivers/base/core.c
+@@ -2464,16 +2464,37 @@
+ {
+ 	bool val;
+ 	int ret;
++	struct device *target_dev = dev;
++	int requested_cpuid = dev->id;
++	int target_cpuid = requested_cpuid;
+ 
+ 	ret = strtobool(buf, &val);
+ 	if (ret < 0)
+ 		return ret;
+ 
++	/*
++	 * mi_thermald is misconfigured to disable efficient cores when
++	 * battery falls below 5%. Redirect to disable performance cores
++	 * instead as that makes more sense.
++	 */
++	if (!strcmp(current->comm, "mi_thermald")) {
++		if (requested_cpuid == 2)
++			target_cpuid = 4;
++		else if (requested_cpuid == 3)
++			target_cpuid = 5;
++	}
++
++	if (requested_cpuid != target_cpuid) {
++		target_dev = get_cpu_device(target_cpuid);
++		if (!target_dev)
++			return -ENODEV;
++	}
++
+ 	ret = lock_device_hotplug_sysfs();
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = val ? device_online(dev) : device_offline(dev);
++	ret = val ? device_online(target_dev) : device_offline(target_dev);
+ 	unlock_device_hotplug();
+ 	return ret < 0 ? ret : count;
+ }
