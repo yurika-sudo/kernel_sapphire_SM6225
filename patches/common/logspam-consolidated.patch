@@ -123,7 +123,7 @@ index c731398..bc610e8 100644
  #include <linux/security.h>
  #include <linux/memblock.h>
  #include <linux/syscalls.h>
-@@ -2136,6 +2137,56 @@ static u16 printk_sprint(char *text, u16 size, int facility,
+@@ -2136,6 +2137,65 @@ static u16 printk_sprint(char *text, u16 size, int facility,
  	return text_len;
  }
  
@@ -140,6 +140,15 @@ index c731398..bc610e8 100644
 +	"pmb_charger: smblib_get_prop_batt_status",
 +	"real_type=",
 +	"BPF:[] Invalid name_offset",
++	"Invalid name_offset",
++	"wlan: [",
++	"[kworke]",
++	"[schedu]",
++	"fsm_probe",
++	"fsm_i2c_probe",
++	"aw87xxx",
++	"qcom-spmi-adc-tm5",
++	"check_userspace_service_state",
 +	"smb_batt_get_prop",
 +	"FCC_MAIN: effective voting",
 +	"QCOM-STEPCHG",
