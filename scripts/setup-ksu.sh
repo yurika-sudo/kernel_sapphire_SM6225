@@ -347,6 +347,14 @@ _pin_sksu_lvc() {
 
 _pin_ksun_lvc() {
   # KernelSU-Next takes the 6.12 LSM static_call path under the release spoof.
+  # Pin the shared headers FIRST: include/arch.h and include/util.h both
+  # include <linux/version.h> and are included by nearly every KSU .c file.
+  # Without these pins, a <linux/version.h> include downstream re-defines
+  # LINUX_VERSION_CODE to the spoofed 6.12 and version-gated code (e.g. the
+  # ksu_avc_has_perm_compat selector added upstream 2026-11-28) compiles
+  # against the wrong kernel API surface.
+  _pin_lvc_after "KernelSU-Next/kernel/include/arch.h" '#include <linux/version.h>' || return 1
+  _pin_lvc_after "KernelSU-Next/kernel/include/util.h" '#include <linux/version.h>' || return 1
   _pin_lvc_after "KernelSU-Next/kernel/hook/lsm_hook.h" '#include <linux/version.h>' || return 1
   _pin_lvc_after "KernelSU-Next/kernel/hook/lsm_hook.c" '#include "klog.h" // IWYU pragma: keep' || return 1
   _pin_lvc_after "KernelSU-Next/kernel/infra/file_wrapper.c" '#include "infra/file_wrapper.h"' || return 1
