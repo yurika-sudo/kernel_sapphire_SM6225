@@ -1,0 +1,56 @@
+From: yurika-sudo <yurika0uu@gmail.com>
+Subject: [PATCH] mm/page_alloc: floor min_free_kbytes at 64MB and lock sysctl
+ to read-only (sapphire 8GB)
+
+Stock formula value for 8GB is 11.5MB (16*sqrt(lowmem_kbytes)). Android
+burst allocations (bitmap decode, GPU buffers) blow through the resulting
+watermarks and push app threads into direct reclaim:
+
+- measured on r144 over ~8h normal use: 7,790 allocstall events,
+  1.2M pages scanned by app threads (pgscan_direct delta,
+  bench-results/p5_before_B1.txt)
+- benchmark with 64MB floor: 480MB synthetic burst produced ZERO
+  allocstall and zero direct-reclaim pages — kswapd handled all of it
+  in background (bench-results/p5_B1_result.txt)
+
+- mm/page_alloc.c: user_min_free_kbytes boot default -1 -> 65536;
+  calculate_min_free_kbytes() prefers this value whenever higher than
+  the formula, so it acts as an immune floor (larger-RAM formula values
+  still apply above it)
+- kernel/sysctl.c: min_free_kbytes sysctl mode 0644 -> 0444; same
+  rationale as swappiness and watermark_scale_factor locks — prevents
+  ROM init.rc from overwriting the tuned value at boot
+
+- No upstream reference: device-specific tuning, no Linux origin
+
+Signed-off-by: yurika-sudo <yurika0uu@gmail.com>
+---
+ kernel/sysctl.c | 2 +-
+ mm/page_alloc.c | 2 +-
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/kernel/sysctl.c b/kernel/sysctl.c
+index e20878716253..c1a2b9f0d1e7c 100644
+--- a/kernel/sysctl.c
++++ b/kernel/sysctl.c
+@@ -2908,7 +2908,7 @@ static struct ctl_table vm_table[] = {
+ 		.procname	= "min_free_kbytes",
+ 		.data		= &min_free_kbytes,
+ 		.maxlen		= sizeof(min_free_kbytes),
+-		.mode		= 0644,
++		.mode		= 0444,
+ 		.proc_handler	= min_free_kbytes_sysctl_handler,
+ 		.extra1		= SYSCTL_ZERO,
+ 	},
+diff --git a/mm/page_alloc.c b/mm/page_alloc.c
+index de344d7c785b1..8a7c3f2e9b4d1 100644
+--- a/mm/page_alloc.c
++++ b/mm/page_alloc.c
+@@ -437,7 +437,7 @@ compound_page_dtor * const compound_page_dtors[NR_COMPOUND_DTORS] = {
+ 
+ int min_free_kbytes = 1024;
+-int user_min_free_kbytes = -1;
++int user_min_free_kbytes = 65536;
+ int watermark_boost_factor __read_mostly = 0;
+ int watermark_scale_factor = 30;
+ 
