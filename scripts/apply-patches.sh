@@ -74,6 +74,10 @@ if [ "$SOURCE_TYPE" = "gki-compat" ]; then
 fi
 
 if [ -d "$PATCHES_DIR/common" ]; then
+  # seiran source_type: the kernel tree already carries the common set as
+  # source (see superuseryu/kernel_xiaomi_sm6225 branch seiran). Only
+  # build-time-only patches (KSU/SUSFS/NoMount) are applied by later steps.
+  if [ "$SOURCE_TYPE" != "seiran" ]; then
   for PATCH in "$PATCHES_DIR/common"/*.patch; do
     [ -f "$PATCH" ] || continue
     NAME="$(basename "$PATCH" .patch)"
@@ -102,6 +106,7 @@ if [ -d "$PATCHES_DIR/common" ]; then
     rm -f "$DRY_LOG"
     apply_local_patch "$PATCH" "$NAME"
   done
+  fi  # end SOURCE_TYPE != seiran guard
 fi
 
 # ntsync-compat: the SUSFS ntsync source selects its code path from

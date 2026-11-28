@@ -18,6 +18,7 @@ on:
       sukisu_branch: { type: string, required: false, default: "builtin" }
       sukisu_ref: { type: string, required: false, default: "" }
       susfs_commit_pin: { type: string, required: false, default: "" }  # verify-gate only
+      seiran_branch:   { type: string, required: false, default: "seiran" }  # seiran source_type only
 
 env:
   OUT_DIR: "out"
@@ -44,6 +45,7 @@ jobs:
         env:
           SOURCE_TYPE:   ${{ inputs.source_type }}
           KSU_TYPE:      ${{ inputs.ksu_type }}
+          SEIRAN_BRANCH: ${{ inputs.seiran_branch }}
         run: bash scripts/clone-source.sh
 
       - name: "Fix source warnings"

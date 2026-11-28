@@ -1,0 +1,54 @@
+name: "Build Seiran"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+# Manual trigger only — seiran tree is under active bring-up on
+# superuseryu/kernel_xiaomi_sm6225 branch "seiran". Switch the trigger
+# to push on that branch once the build is proven green.
+on:
+  workflow_dispatch:
+    inputs:
+      seiran_branch:
+        description: "seiran kernel branch to build"
+        type: string
+        default: "seiran"
+      notify:
+        description: "Send Telegram notifications"
+        type: boolean
+        default: false
+      use_ccache:
+        description: "Enable ccache compiler acceleration (experimental / test only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions:  read
+
+jobs:
+
+  seiran:
+    name: "${{ matrix.variant.name }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - name:     "Seiran-KSU-Next"
+            ksu:      "ksun"
+            artifact: "seiran-ksun"
+          - name:     "Seiran-SukiSU-Ultra"
+            ksu:      "sksu"
+            artifact: "seiran-sksu"
+    uses: ./.github/workflows/build-kernel.yml
+    with:
+      variant_name:  ${{ matrix.variant.name }}
+      source_type:   "seiran"
+      ksu_type:      ${{ matrix.variant.ksu }}
+      zip_prefix:    "seiran"
+      artifact_name: ${{ matrix.variant.artifact }}
+      defconfig:     "gki_defconfig"
+      build_type:    "testing"
+      notify:        ${{ inputs.notify }}
+      use_ccache:    ${{ inputs.use_ccache }}
+      seiran_branch: ${{ inputs.seiran_branch }}
