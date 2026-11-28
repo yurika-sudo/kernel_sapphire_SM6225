@@ -6,6 +6,26 @@ env:
 on:
   workflow_dispatch:
     inputs:
+      source_type:
+        description: "Kernel source type"
+        type: choice
+        default: "gki"
+        options:
+          - gki
+          - seiran
+      seiran_branch:
+        description: "seiran kernel branch (seiran source only)"
+        type: string
+        default: "seiran"
+      ksu_variants:
+        description: "KSU variant(s) to build"
+        type: choice
+        default: "both"
+        options:
+          - both
+          - ksun
+          - sksu
+          - none
       notify:
         description: "Send Telegram notifications"
         type: boolean
@@ -21,31 +41,55 @@ permissions:
 
 jobs:
 
+  matrix:
+    name: "Resolve matrix"
+    runs-on: ubuntu-latest
+    outputs:
+      variants: ${{ steps.set.outputs.variants }}
+    steps:
+      - name: "Compute variant list"
+        id: set
+        env:
+          SOURCE_TYPE:  ${{ inputs.source_type }}
+          KSU_VARIANTS: ${{ inputs.ksu_variants }}
+        run: |
+          python3 <<'EOF'
+          import json, os
+          src = os.environ["SOURCE_TYPE"]
+          ksu = os.environ["KSU_VARIANTS"]
+          all_variants = [
+              {"name": "GKI-KSU-Next",        "source": "gki",    "ksu": "ksun", "artifact": "staging-ksun"},
+              {"name": "GKI-SukiSU-Ultra",    "source": "gki",    "ksu": "sksu", "artifact": "staging-sksu"},
+              {"name": "Seiran-KSU-Next",     "source": "seiran", "ksu": "ksun", "artifact": "seiran-ksun"},
+              {"name": "Seiran-SukiSU-Ultra", "source": "seiran", "ksu": "sksu", "artifact": "seiran-sksu"},
+          ]
+          chosen = [v for v in all_variants if v["source"] == src]
+          if ksu != "both":
+              chosen = [v for v in chosen if v["ksu"] == ksu]
+          out = f"variants={json.dumps(chosen)}\n"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(out)
+          EOF
+
   staging:
     name: "${{ matrix.variant.name }}"
+    needs: [matrix]
     strategy:
       fail-fast: false
       matrix:
-        variant:
-          - name:     "GKI-KSU-Next"
-            source:   "gki"
-            ksu:      "ksun"
-            artifact: "staging-ksun"
-          - name:     "GKI-SukiSU-Ultra"
-            source:   "gki"
-            ksu:      "sksu"
-            artifact: "staging-sksu"
+        variant: ${{ fromJSON(needs.matrix.outputs.variants) }}
     uses: ./.github/workflows/build-kernel.yml
     with:
       variant_name:  ${{ matrix.variant.name }}
       source_type:   ${{ matrix.variant.source }}
       ksu_type:      ${{ matrix.variant.ksu }}
-      zip_prefix:    "Staging"
+      zip_prefix:    ${{ matrix.variant.source == 'seiran' && 'seiran' || 'Staging' }}
       artifact_name: ${{ matrix.variant.artifact }}
       defconfig:     "gki_defconfig"
       build_type:    "testing"
       notify:        ${{ inputs.notify == true }}
       use_ccache:    ${{ inputs.use_ccache == true }}
+      seiran_branch: ${{ inputs.seiran_branch }}
     secrets: inherit
 
   notify:
