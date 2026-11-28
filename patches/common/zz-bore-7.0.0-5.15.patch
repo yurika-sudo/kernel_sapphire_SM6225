@@ -404,7 +404,7 @@ index ab19acc0731d..a2a3772e5756 100644
  
  EXPORT_TRACEPOINT_SYMBOL_GPL(sched_stat_runtime);
  
-@@ -611,6 +614,485 @@
+@@ -611,6 +614,487 @@
  	return cfs_rq->min_vruntime + avg;
  }
  
@@ -426,15 +426,17 @@ index ab19acc0731d..a2a3772e5756 100644
 +DEFINE_STATIC_KEY_FALSE(sched_credit_key);
 +
 +/*
-+ * 7.0.0 values except two mobile-tuning knobs: penalty_offset 27 (134 ms
-+ * first demotion protects frame threads and nice-0 loads) and penalty_scale
-+ * 1024 (tuned mobile value).
++ * 7.0.0 values except three mobile-tuning knobs:
++ *   penalty_offset 20 (default 27 benchmarked: same-P wake-up p50 392us vs
++ *   499us, -21%; keeps batch detection — see bench-results/p7_bore_sweep)
++ *   penalty_scale 1024 (tuned mobile value)
++ *   sapphire SM6225: 2-tier Kryo 265, wake path sensitive to burst penalty
 + */
 +u8   __read_mostly sched_bore                   = 1;
 +u8   __read_mostly sched_burst_inherit_type     = 2;
 +u8   __read_mostly sched_burst_protect_slice_lv = 1;
 +u8   __read_mostly sched_burst_smoothness       = 1;
-+u8   __read_mostly sched_burst_penalty_offset   = 27;
++u8   __read_mostly sched_burst_penalty_offset   = 20;
 +uint __read_mostly sched_burst_penalty_scale    = 1024;
 +uint __read_mostly sched_burst_cache_lifetime   = 75000000;
 +uint __read_mostly sched_credit_cap_us          = 16000;
