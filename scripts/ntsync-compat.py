@@ -26,7 +26,10 @@ NEW = "#elif 1 /* sapphire: real tree is 5.15, LINUX_VERSION_CODE is spoofed to 
 
 text = p.read_text()
 got = text.count(OLD)
-if got != 1:
+if got == 1:
+    p.write_text(text.replace(OLD, NEW))
+    print("ntsync-compat: drivers/misc/ntsync.c: patched 1")
+elif text.count(NEW) >= 1:
+    print("ntsync-compat: drivers/misc/ntsync.c: already patched")
+else:
     sys.exit(f"ntsync-compat: expected 1 match of {OLD.strip()!r}, found {got}")
-p.write_text(text.replace(OLD, NEW))
-print("ntsync-compat: drivers/misc/ntsync.c: patched 1")
