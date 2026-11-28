@@ -173,7 +173,7 @@ EOF
 fi
 
 # GKI and GKI-compat configs
-if [ "$SOURCE_TYPE" = "gki" ] || [ "$SOURCE_TYPE" = "gki-compat" ]; then
+if [ "$SOURCE_TYPE" = "gki" ] || [ "$SOURCE_TYPE" = "gki-compat" ] || [ "$SOURCE_TYPE" = "seiran" ]; then
 cat >> "$CF" << 'EOF'
 CONFIG_FAIR_GROUP_SCHED=y
 CONFIG_CFS_BANDWIDTH=y
@@ -181,7 +181,7 @@ EOF
 fi
 
 # Backport configs for source types that include the matching patches
-if [ "$SOURCE_TYPE" = "gki" ] || [ "$SOURCE_TYPE" = "gki-compat" ]; then
+if [ "$SOURCE_TYPE" = "gki" ] || [ "$SOURCE_TYPE" = "gki-compat" ] || [ "$SOURCE_TYPE" = "seiran" ]; then
 cat >> "$CF" << 'EOF'
 CONFIG_ZRAM_DEF_COMP_ZSTDN_O=y
 CONFIG_ZRAM_DEF_COMP="zstdn_o"

@@ -7,7 +7,7 @@ set -e
 : "${KERNEL_SRC:?}"
 : "${SOURCE_TYPE:?}"
 
-if [[ "$SOURCE_TYPE" == gki* ]]; then
+if [[ "$SOURCE_TYPE" == gki* || "$SOURCE_TYPE" == "seiran" ]]; then
   CLANG_VER="06092026"
   CLANG_URL="https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/${CLANG_VER}/neutron-clang-${CLANG_VER}.tar.zst"
 else
